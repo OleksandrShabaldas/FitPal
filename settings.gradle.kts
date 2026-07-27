@@ -1,0 +1,28 @@
+pluginManagement {
+    repositories {
+        google {
+            content {
+                includeGroupByRegex("com\\.android.*")
+                includeGroupByRegex("com\\.google.*")
+                includeGroupByRegex("androidx.*")
+            }
+        }
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.name = "FitPal"
+include(":app")
+// Wire contract (paths + StatsSnapshot + DataMap mappers) shared by phone + watch.
+include(":shared")
+// Wear OS companion app (Galaxy Watch 5 Pro).
+include(":wear")

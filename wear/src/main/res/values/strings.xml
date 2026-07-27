@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">FitPal</string>
+    <string name="water_tile_label">FitPal water</string>
+    <string name="water_tile_description">Quick-add water to FitPal</string>
+    <string name="water_complication_label">Water</string>
+    <string name="calories_complication_label">Calories left</string>
+</resources>

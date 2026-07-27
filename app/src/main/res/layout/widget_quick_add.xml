@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/widget_bg"
+    android:padding="14dp">
+
+    <TextView
+        android:id="@+id/widget_title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/widget_title"
+        android:textColor="#F5ECE0"
+        android:textSize="14sp"
+        android:paddingBottom="10dp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/widget_snap"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginEnd="8dp"
+            android:background="@drawable/widget_btn_primary"
+            android:text="@string/widget_snap"
+            android:textColor="#3A2406"
+            android:textSize="13sp"
+            android:gravity="center"
+            android:paddingTop="11dp"
+            android:paddingBottom="11dp" />
+
+        <TextView
+            android:id="@+id/widget_add"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="@drawable/widget_btn_secondary"
+            android:text="@string/widget_add"
+            android:textColor="#F5ECE0"
+            android:textSize="13sp"
+            android:gravity="center"
+            android:paddingTop="11dp"
+            android:paddingBottom="11dp" />
+    </LinearLayout>
+</LinearLayout>

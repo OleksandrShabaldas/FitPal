@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Advertised over the Data Layer so the watch can resolve which connected node runs the
+         FitPal phone app (see WearContract.CAPABILITY_PHONE_APP). -->
+    <string-array name="android_wear_capabilities">
+        <item>fitpal_phone_app</item>
+    </string-array>
+</resources>

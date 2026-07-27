@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">FitPal</string>
+    <string name="nav_home">Home</string>
+    <string name="nav_gallery">Gallery</string>
+    <string name="camera_permission_rationale">FitPal needs camera access to photograph your food</string>
+    <string name="grant_permission">Grant Permission</string>
+    <string name="take_photo">Take Photo</string>
+    <string name="analyzing">Analyzing your food…</string>
+    <string name="save_to_gallery">Save to Gallery</string>
+    <string name="log_meal">Log Meal</string>
+    <string name="calories">Calories</string>
+    <string name="protein">Protein</string>
+    <string name="fat">Fat</string>
+    <string name="carbs">Carbs</string>
+    <string name="grams_unit">g</string>
+    <string name="kcal_unit">kcal</string>
+    <string name="today">Today</string>
+    <string name="no_meals_yet">No meals logged yet today</string>
+    <string name="gallery_empty">Your food gallery is empty.\nSave foods after scanning to build it up.</string>
+    <string name="widget_title">FitPal</string>
+    <string name="widget_snap">Snap a meal</string>
+    <string name="widget_add">Add food</string>
+    <string name="widget_description">Quickly snap or add a meal</string>
+</resources>

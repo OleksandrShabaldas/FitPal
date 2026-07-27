@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Base theme for the watch activity; Compose draws the actual UI. Black window background
+         matches the app's dark-only design and looks right on the watch's OLED. -->
+    <style name="FitPalWearTheme" parent="@android:style/Theme.DeviceDefault">
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:colorBackground">@android:color/black</item>
+    </style>
+
+    <!-- No-UI activity launched by the water tile: fully transparent, no animation/flash. -->
+    <style name="FitPalInvisibleTheme" parent="@android:style/Theme.Translucent.NoTitleBar">
+        <item name="android:windowNoDisplay">true</item>
+    </style>
+</resources>
