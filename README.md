@@ -19,6 +19,7 @@ recognition, a cloud model, and Wear OS sync are opt-in extras layered on top of
 - [Installing on your watch](#installing-on-your-watch-optional)
 - [First run](#first-run)
 - [Connecting AI (optional)](#connecting-ai-optional)
+- [Updating](#updating)
 - [Settings, explained](#settings-explained)
 - [Data & privacy](#data--privacy)
 - [Building from source](#building-from-source)
@@ -140,6 +141,26 @@ Separate from the AI model, and all optional:
 
 ---
 
+## Updating
+
+Since FitPal isn't on the Play Store, it watches its own GitHub releases instead. Once a day (on
+app start) it checks for a newer release and, if it finds one, shows a prompt with the release
+notes and an **Update** button — it downloads the APK and opens the installer for you.
+
+**Android always asks you to confirm the install.** No app can install silently without root or
+device-owner privileges, so "Download automatically" (in **Settings → Data & about → App updates**)
+only skips the in-app tap — you'll still get the system's confirm screen. The first time, Android
+may also ask you to allow FitPal to *install unknown apps*.
+
+**Your watch updates from your phone.** The watch usually has no reliable internet of its own, so
+the phone downloads the watch APK and streams it over the Bluetooth link you've already got. The
+watch then shows a notification — tap it to install. If your watch refuses to open an installer
+(some builds lock this down), the
+[ADB sideload steps](#installing-on-your-watch-optional) above still work.
+
+If you're on **1.0.0**, that build predates this feature — install 1.1.0 by hand once, and updates
+after that are automatic.
+
 ## Settings, explained
 
 Settings are grouped Android-style, each its own focused screen:
@@ -151,7 +172,7 @@ Settings are grouped Android-style, each its own focused screen:
 | **Quick-add & meal times** | The tap-to-add portion-size chips shown when logging food and drinks (edit, add, or remove your own); the time windows that decide whether something you log counts as breakfast/lunch/dinner/snack. |
 | **AI** | Online Gemini key + model id (with a "test connection" button) and the on-device model download — see [Connecting AI](#connecting-ai-optional); an optional free-text **personal context** field (e.g. "vegetarian," "eat lunch at school," "tight budget") that AI overviews take into account so advice actually fits your life. |
 | **Personalize** | Reorder or hide the cards on Home/Analytics; turn on/off the daily reminder, per-meal reminders, weigh-in reminders, and automatic daily/weekly AI overviews (with their own times); a Home display toggle for collapsing empty meal panels. |
-| **Data & about** | Export your data to a JSON file / import it back (a manual backup — the downloaded food databases aren't included since they can just be re-downloaded); clear all data; app version and current AI mode. |
+| **Data & about** | **App updates** — check GitHub for a new release now, toggle the daily auto-check and auto-download, and push an update to your watch (see [Updating](#updating)); export your data to a JSON file / import it back (a manual backup — the downloaded food databases aren't included since they can just be re-downloaded); clear all data; app version and current AI mode. |
 
 A few things worth knowing about how the app behaves:
 - **Calorie ring color** reflects your day's overall balance (calories + macros + micronutrients),

@@ -22,6 +22,7 @@ class FitPalApplication : Application() {
         fun foregroundState(): AppForegroundState
         fun reminderManager(): ReminderManager
         fun watchLink(): com.fitpal.app.wear.WatchLink
+        fun updateManager(): com.fitpal.app.update.UpdateManager
     }
 
     override fun onCreate() {
@@ -37,6 +38,10 @@ class FitPalApplication : Application() {
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
             runCatching { entryPoint.watchLink().pushIfConnected() }
         }
+
+        // Once-a-day look for a newer GitHub release (this build is sideloaded, so there's no
+        // store to do it). No-op if the user turned auto-check off or it already ran today.
+        runCatching { entryPoint.updateManager().checkOnStartIfDue() }
 
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
             override fun onActivityStarted(activity: Activity) = foreground.onActivityStarted()

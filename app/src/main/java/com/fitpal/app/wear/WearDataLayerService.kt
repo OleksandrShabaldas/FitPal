@@ -34,6 +34,7 @@ class WearDataLayerService : WearableListenerService() {
     @Inject lateinit var stepRepository: StepRepository
     @Inject lateinit var weightRepository: WeightRepository
     @Inject lateinit var statsPublisher: WearStatsPublisher
+    @Inject lateinit var updateManager: com.fitpal.app.update.UpdateManager
 
     override fun onMessageReceived(event: MessageEvent) {
         when (event.path) {
@@ -60,6 +61,13 @@ class WearDataLayerService : WearableListenerService() {
 
             WearContract.PATH_REQUEST_STATS -> {
                 runCatching { runBlocking { statsPublisher.publishNow() } }
+            }
+
+            WearContract.PATH_WATCH_VERSION -> {
+                // The watch answering "what version are you on?" — drives the update card's
+                // "your watch is on 1.0.0" line.
+                val version = String(event.data).trim()
+                if (version.isNotEmpty()) updateManager.onWatchVersionReported(version)
             }
 
             WearContract.PATH_LOG_STEPS -> {

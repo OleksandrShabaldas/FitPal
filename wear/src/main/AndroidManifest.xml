@@ -5,6 +5,10 @@
 
     <!-- Read the watch's own step count via Health Services (granted by the user in the watch app) -->
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+    <!-- Show the "update ready" notification after the phone streams over a new APK -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Install that APK (the watch app is sideloaded too; the system still asks the user) -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <application
         android:allowBackup="true"
@@ -33,15 +37,36 @@
             </intent-filter>
         </activity>
 
-        <!-- Receives the /stats DataItem the phone pushes, to refresh the tile + complications. -->
+        <!-- Receives the /stats DataItem the phone pushes (refreshes tile + complications), the
+             phone's version query, and the APK channel when an update is pushed over. -->
         <service
             android:name=".WearListenerService"
             android:exported="true">
             <intent-filter>
                 <action android:name="com.google.android.gms.wearable.DATA_CHANGED" />
+                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
+                <action android:name="com.google.android.gms.wearable.CHANNEL_EVENT" />
                 <data android:scheme="wear" android:host="*" android:pathPrefix="/fitpal" />
             </intent-filter>
         </service>
+
+        <!-- Hands a received update APK to the watch's package installer. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <activity
+            android:name=".InstallUpdateActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/FitPalInvisibleTheme" />
 
         <!-- Health Services delivers the watch's daily step count here (passive, batched);
              each update is forwarded to the phone so its step total can never miss watch steps. -->

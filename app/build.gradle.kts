@@ -14,8 +14,10 @@ android {
         applicationId = "com.fitpal.app"
         minSdk = 28
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        // versionCode MUST increase every release — Android refuses to install an APK whose
+        // versionCode isn't higher than the installed one, which would silently break updating.
+        versionCode = 2
+        versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

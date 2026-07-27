@@ -38,6 +38,27 @@ object WearContract {
     /** DataItem path carrying the current-day [StatsSnapshot] as a DataMap. */
     const val PATH_STATS = "/fitpal/stats"
 
+    // ---- App updates (sideloaded builds check GitHub Releases; the phone drives it) ----
+
+    /** Phone -> watch: "tell me your installed versionName". No payload. */
+    const val PATH_REQUEST_WATCH_VERSION = "/fitpal/request_version"
+
+    /** Watch -> phone: its installed versionName as ASCII (e.g. "1.0.0"). */
+    const val PATH_WATCH_VERSION = "/fitpal/version"
+
+    /**
+     * Phone -> watch **channel** carrying the new watch APK's bytes. The phone downloads the APK
+     * (it has the good internet connection) and streams it over the already-paired Data Layer
+     * link; the watch saves it and asks the user to install.
+     */
+    const val PATH_APK_CHANNEL = "/fitpal/apk"
+
+    /**
+     * Phone -> watch: the version being sent over [PATH_APK_CHANNEL], as ASCII. Sent just before
+     * the channel opens so the watch can name the prompt ("Update to 1.1.0?").
+     */
+    const val PATH_APK_INCOMING = "/fitpal/apk_incoming"
+
     /**
      * Capability the phone app advertises (declared in its wearable config) so the watch can
      * resolve which connected node hosts FitPal. Optional — the watch also falls back to sending

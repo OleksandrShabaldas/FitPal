@@ -30,8 +30,22 @@ class SettingsViewModel @Inject constructor(
     private val geminiClient: GeminiClient,
     private val networkMonitor: NetworkMonitor,
     private val reminderManager: com.fitpal.app.reminder.ReminderManager,
-    private val watchLink: com.fitpal.app.wear.WatchLink
+    private val watchLink: com.fitpal.app.wear.WatchLink,
+    private val updateManager: com.fitpal.app.update.UpdateManager
 ) : ViewModel() {
+
+    // ---- App updates (GitHub releases; this build is sideloaded) ----
+    val updateState: StateFlow<com.fitpal.app.update.UpdateUiState> = updateManager.state
+    val autoCheckUpdates: StateFlow<Boolean> = settingsRepository.autoCheckUpdates
+    val autoInstallUpdates: StateFlow<Boolean> = settingsRepository.autoInstallUpdates
+
+    fun checkForUpdates() = updateManager.check(userInitiated = true)
+    fun downloadAndInstallUpdate() = updateManager.downloadAndInstallPhone()
+    fun installDownloadedUpdate() = updateManager.installDownloadedPhoneApk()
+    fun updateWatchApp() = updateManager.updateWatch()
+    fun dismissUpdate() = updateManager.dismiss()
+    fun setAutoCheckUpdates(enabled: Boolean) = settingsRepository.setAutoCheckUpdates(enabled)
+    fun setAutoInstallUpdates(enabled: Boolean) = settingsRepository.setAutoInstallUpdates(enabled)
 
     // ---- Daily reminder ----
     val reminderEnabled: StateFlow<Boolean> = settingsRepository.reminderEnabled

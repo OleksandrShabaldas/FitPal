@@ -108,6 +108,47 @@ class SettingsRepository @Inject constructor(
         _onlineAiEnabled.value = enabled
     }
 
+    // --- App updates (sideloaded builds check GitHub Releases) ---
+
+    private val _autoCheckUpdates = MutableStateFlow(prefs.getBoolean(KEY_AUTO_CHECK_UPDATES, true))
+    /** Look for a newer release once a day on app start. On by default. */
+    val autoCheckUpdates: StateFlow<Boolean> = _autoCheckUpdates
+
+    fun setAutoCheckUpdates(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_AUTO_CHECK_UPDATES, enabled).apply()
+        _autoCheckUpdates.value = enabled
+    }
+
+    private val _autoInstallUpdates = MutableStateFlow(prefs.getBoolean(KEY_AUTO_INSTALL_UPDATES, false))
+    /**
+     * Download a found update immediately and open the system installer, instead of waiting for
+     * the user to tap Download. Android still shows its own confirm screen — nothing installs
+     * silently — so this only removes the extra in-app tap.
+     */
+    val autoInstallUpdates: StateFlow<Boolean> = _autoInstallUpdates
+
+    fun setAutoInstallUpdates(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_AUTO_INSTALL_UPDATES, enabled).apply()
+        _autoInstallUpdates.value = enabled
+    }
+
+    private val _lastUpdateCheck = MutableStateFlow(prefs.getLong(KEY_LAST_UPDATE_CHECK, 0L))
+    val lastUpdateCheck: StateFlow<Long> = _lastUpdateCheck
+
+    fun setLastUpdateCheck(timestamp: Long) {
+        prefs.edit().putLong(KEY_LAST_UPDATE_CHECK, timestamp).apply()
+        _lastUpdateCheck.value = timestamp
+    }
+
+    private val _skippedUpdateVersion = MutableStateFlow(prefs.getString(KEY_SKIPPED_UPDATE, "") ?: "")
+    /** A version the user chose to skip — don't nag about this one again. */
+    val skippedUpdateVersion: StateFlow<String> = _skippedUpdateVersion
+
+    fun setSkippedUpdateVersion(version: String) {
+        prefs.edit().putString(KEY_SKIPPED_UPDATE, version).apply()
+        _skippedUpdateVersion.value = version
+    }
+
     // --- Personal context / limitations the AI overview should respect (free text) ---
     // e.g. "living with parents", "lunches at school", "vegetarian", "on a tight budget".
 
@@ -525,6 +566,10 @@ class SettingsRepository @Inject constructor(
         private const val KEY_PERSONAL_CONTEXT = "personal_context"
         private const val KEY_HABIT_SUMMARY = "habit_summary"
         private const val KEY_WATCH_STEPS = "watch_steps_by_date"
+        private const val KEY_AUTO_CHECK_UPDATES = "auto_check_updates"
+        private const val KEY_AUTO_INSTALL_UPDATES = "auto_install_updates"
+        private const val KEY_LAST_UPDATE_CHECK = "last_update_check"
+        private const val KEY_SKIPPED_UPDATE = "skipped_update_version"
         private const val KEY_COMPACT_EMPTY_MEALS = "compact_empty_meals"
         private const val KEY_WATER_GOAL = "water_goal_ml"
         private const val KEY_ONBOARDED = "has_onboarded"

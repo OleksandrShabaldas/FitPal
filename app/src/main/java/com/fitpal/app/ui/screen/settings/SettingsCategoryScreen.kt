@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -132,6 +133,7 @@ fun SettingsCategoryScreen(
                     HomeDisplaySection(viewModel)
                 }
                 "data" -> {
+                    UpdatesSection(viewModel)
                     DataSection(viewModel)
                     AboutSection(viewModel)
                 }
@@ -936,6 +938,165 @@ private fun HomeDisplaySection(viewModel: SettingsViewModel) {
                 Spacer(Modifier.width(12.dp))
                 Switch(checked = compactEmptyMeals, onCheckedChange = { viewModel.setCompactEmptyMeals(it) })
             }
+        }
+    }
+}
+
+/**
+ * Update check for this sideloaded build. FitPal isn't on the Play Store, so it watches its own
+ * GitHub releases. Android never allows a silent install, so even "auto update" ends at the
+ * system's own confirm screen — the toggle just removes the in-app tap before it.
+ */
+@Composable
+private fun UpdatesSection(viewModel: SettingsViewModel) {
+    val state by viewModel.updateState.collectAsStateWithLifecycle()
+    val autoCheck by viewModel.autoCheckUpdates.collectAsStateWithLifecycle()
+    val autoInstall by viewModel.autoInstallUpdates.collectAsStateWithLifecycle()
+    val busy = state.phase == com.fitpal.app.update.UpdatePhase.CHECKING ||
+        state.phase == com.fitpal.app.update.UpdatePhase.DOWNLOADING_PHONE ||
+        state.phase == com.fitpal.app.update.UpdatePhase.DOWNLOADING_WATCH ||
+        state.phase == com.fitpal.app.update.UpdatePhase.SENDING_WATCH
+
+    Box(modifier = Modifier.fillMaxWidth().glass()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("App updates", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(
+                "You're on ${state.currentVersion}" +
+                    (state.watchVersion?.let { " · watch on $it" } ?: ""),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(Modifier.height(12.dp))
+            when (state.phase) {
+                com.fitpal.app.update.UpdatePhase.CHECKING ->
+                    UpdateProgressRow("Checking GitHub…", null)
+
+                com.fitpal.app.update.UpdatePhase.DOWNLOADING_PHONE ->
+                    UpdateProgressRow("Downloading update…", state.progress)
+
+                com.fitpal.app.update.UpdatePhase.DOWNLOADING_WATCH ->
+                    UpdateProgressRow("Downloading watch update…", state.progress)
+
+                com.fitpal.app.update.UpdatePhase.SENDING_WATCH ->
+                    UpdateProgressRow("Sending to your watch…", state.progress)
+
+                com.fitpal.app.update.UpdatePhase.UP_TO_DATE -> Text(
+                    "You're on the latest version ✓",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+
+                com.fitpal.app.update.UpdatePhase.WATCH_SENT -> Text(
+                    "Sent to your watch — tap the notification on the watch to install it.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+
+                com.fitpal.app.update.UpdatePhase.READY_PHONE -> Text(
+                    "Downloaded — finish in the installer Android opened. If you dismissed it, tap Install again.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+
+                com.fitpal.app.update.UpdatePhase.FAILED -> Text(
+                    state.message ?: "Something went wrong.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error
+                )
+
+                else -> state.available?.let { u ->
+                    Text(
+                        "FitPal ${u.version} is available.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+
+            state.available?.let { u ->
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (u.phoneApkUrl != null) {
+                        OutlinedButton(
+                            onClick = {
+                                if (state.phase == com.fitpal.app.update.UpdatePhase.READY_PHONE) {
+                                    viewModel.installDownloadedUpdate()
+                                } else viewModel.downloadAndInstallUpdate()
+                            },
+                            enabled = !busy,
+                            modifier = Modifier.weight(1f)
+                        ) { Text("Install ${u.version}") }
+                    }
+                    if (state.watchNeedsUpdate) {
+                        OutlinedButton(
+                            onClick = { viewModel.updateWatchApp() },
+                            enabled = !busy && state.watchConnected,
+                            modifier = Modifier.weight(1f)
+                        ) { Text("Update watch") }
+                    }
+                }
+                if (u.releaseNotes.isNotBlank()) {
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        u.releaseNotes.lineSequence().take(6).joinToString("\n").trim(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+            OutlinedButton(onClick = { viewModel.checkForUpdates() }, enabled = !busy) {
+                Text(if (state.phase == com.fitpal.app.update.UpdatePhase.CHECKING) "Checking…" else "Check for updates")
+            }
+
+            Spacer(Modifier.height(4.dp))
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Check automatically", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "Look for a new version once a day.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(checked = autoCheck, onCheckedChange = { viewModel.setAutoCheckUpdates(it) })
+            }
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Download automatically", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "Fetch the update as soon as it's found and jump straight to the installer. " +
+                            "Android still asks you to confirm — nothing installs on its own.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = autoInstall,
+                    enabled = autoCheck,
+                    onCheckedChange = { viewModel.setAutoInstallUpdates(it) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun UpdateProgressRow(label: String, progress: Float?) {
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+            Spacer(Modifier.width(10.dp))
+            Text(label, style = MaterialTheme.typography.bodyMedium)
+        }
+        if (progress != null) {
+            Spacer(Modifier.height(8.dp))
+            LinearProgressIndicator(
+                progress = { progress.coerceIn(0f, 1f) },
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }

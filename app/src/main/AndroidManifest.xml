@@ -22,6 +22,9 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <!-- Optional: let the user exempt FitPal from battery optimisation so background overviews run -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- Self-update: FitPal is sideloaded (no Play Store), so it offers new GitHub releases and
+         hands the APK to the system installer. Android still asks the user to confirm. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- So we can detect / open the Health Connect app -->
     <queries>
@@ -59,6 +62,18 @@
                 <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
             </intent-filter>
         </activity>
+
+        <!-- Hands the downloaded update APK to the system installer (a file:// URI would throw
+             on Android 7+, so the installer gets a content:// URI through this provider). -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
         <!-- Runs meal analysis in the background so it survives leaving the app -->
         <service

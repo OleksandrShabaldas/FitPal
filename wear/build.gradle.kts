@@ -15,8 +15,9 @@ android {
         // Wear OS 3+ (Galaxy Watch 5 Pro ships with Wear OS 3.5+).
         minSdk = 30
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        // Must increase every release, same as the phone app — see :app's build file.
+        versionCode = 2
+        versionName = "1.1.0"
     }
 
     buildTypes {
