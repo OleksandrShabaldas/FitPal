@@ -1001,7 +1001,7 @@ private fun AboutSection(viewModel: SettingsViewModel) {
             Spacer(Modifier.height(8.dp))
             SettingRow(label = "App", value = "FitPal")
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-            SettingRow(label = "Version", value = "0.2.0")
+            SettingRow(label = "Version", value = com.fitpal.app.BuildConfig.VERSION_NAME)
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
             SettingRow(
                 label = "Mode",
