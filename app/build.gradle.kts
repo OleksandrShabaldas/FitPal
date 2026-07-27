@@ -29,6 +29,13 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // Sign with the debug key, not a separate release key. Two reasons this ISN'T
+            // optional: (1) the watch app shares this signing key so the Wearable Data Layer can
+            // pair with it — a different key breaks that; (2) Android will only install an update
+            // "in place" (keeping local data — meals, weights, settings) over an APK signed with
+            // the SAME key as what's already installed. A different key would force every
+            // existing install to uninstall-then-reinstall, wiping the on-device database first.
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 
