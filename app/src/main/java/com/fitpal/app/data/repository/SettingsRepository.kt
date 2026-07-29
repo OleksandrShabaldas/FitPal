@@ -532,6 +532,33 @@ class SettingsRepository @Inject constructor(
         _analyticsSpotlight.value = set
     }
 
+    /**
+     * Analytics cards the user switched to their "Lifetime" view (weight / macros / micros).
+     * Persisted so the choice survives leaving the tab and a full restart.
+     */
+    private val _analyticsLifetime = MutableStateFlow(
+        prefs.getStringSet(KEY_ANALYTICS_LIFETIME, emptySet())?.toSet() ?: emptySet()
+    )
+    val analyticsLifetime: StateFlow<Set<String>> = _analyticsLifetime
+
+    fun setAnalyticsLifetime(set: Set<String>) {
+        prefs.edit().putStringSet(KEY_ANALYTICS_LIFETIME, set).apply()
+        _analyticsLifetime.value = set
+    }
+
+    // --- Collection: which category / subcategory sections are collapsed ---
+    // Persisted so collapsing a category actually sticks across app restarts.
+
+    private val _collectionCollapsed = MutableStateFlow(
+        prefs.getStringSet(KEY_COLLECTION_COLLAPSED, emptySet())?.toSet() ?: emptySet()
+    )
+    val collectionCollapsed: StateFlow<Set<String>> = _collectionCollapsed
+
+    fun setCollectionCollapsed(set: Set<String>) {
+        prefs.edit().putStringSet(KEY_COLLECTION_COLLAPSED, set).apply()
+        _collectionCollapsed.value = set
+    }
+
     private val _analyticsViews = MutableStateFlow(loadViews())
     val analyticsViews: StateFlow<Map<String, Int>> = _analyticsViews
 
@@ -612,6 +639,8 @@ class SettingsRepository @Inject constructor(
 
         private const val KEY_ANALYTICS_SPOTLIGHT = "analytics_spotlight"
         private const val KEY_ANALYTICS_VIEWS = "analytics_views"
+        private const val KEY_ANALYTICS_LIFETIME = "analytics_lifetime"
+        private const val KEY_COLLECTION_COLLAPSED = "collection_collapsed"
         private const val KEY_WIDGET_LAYOUTS = "widget_layouts"
 
         private val DEFAULT_MEAL_PRESETS = listOf(

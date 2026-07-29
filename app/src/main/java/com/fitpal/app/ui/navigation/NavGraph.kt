@@ -48,6 +48,7 @@ import com.fitpal.app.ui.screen.addfood.AddFoodScreen
 import com.fitpal.app.ui.screen.aireview.AiReviewScreen
 import com.fitpal.app.ui.screen.analysis.AnalysisScreen
 import com.fitpal.app.ui.screen.analytics.AnalyticsScreen
+import com.fitpal.app.ui.screen.caloriedetail.CalorieDetailScreen
 import com.fitpal.app.ui.screen.barcode.BarcodeScreen
 import com.fitpal.app.ui.screen.camera.CameraScreen
 import com.fitpal.app.ui.screen.collection.CollectionScreen
@@ -176,6 +177,22 @@ fun FitPalNavHost(
                     },
                     onSwipeToHome = { navTo(Screen.Home.route) },
                     onSwipeToCollection = { navTo(Screen.Collection.route) },
+                    onOpenDay = { navTo(Screen.Home.route) },
+                    onOpenCalorieDetail = { range, anchor ->
+                        navController.navigate(Screen.CalorieDetail.buildRoute(range, anchor))
+                    }
+                )
+            }
+
+            composable(
+                route = Screen.CalorieDetail.route,
+                arguments = listOf(
+                    navArgument(Screen.CalorieDetail.ARG_RANGE) { type = NavType.StringType },
+                    navArgument(Screen.CalorieDetail.ARG_ANCHOR) { type = NavType.StringType }
+                )
+            ) {
+                CalorieDetailScreen(
+                    onBack = safeBack,
                     onOpenDay = { navTo(Screen.Home.route) }
                 )
             }

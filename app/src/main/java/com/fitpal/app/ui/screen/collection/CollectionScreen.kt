@@ -51,7 +51,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -101,8 +100,9 @@ fun CollectionScreen(
     var showManageCategories by remember { mutableStateOf(false) }
 
     // Which category / subcategory sections are collapsed (default: expanded). Keyed by a string so
-    // top categories ("cat_<id>"), subcategories ("sub_<id>") and "unsorted" never collide.
-    val collapsed = remember { mutableStateMapOf<String, Boolean>() }
+    // top categories ("cat_<id>"), subcategories ("sub_<id>") and "unsorted" never collide. The set
+    // is persisted in settings, so folding a category shut survives an app restart.
+    val collapsed by viewModel.collapsedSections.collectAsStateWithLifecycle()
 
     // Confirm a saved-workout log with a toast (item: clearer "it was logged" feedback).
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -211,28 +211,28 @@ fun CollectionScreen(
                                 // "All" — nest everything under collapsible category → subcategory headers.
                                 view.groups.forEach { group ->
                                     val topKey = group.category?.let { "cat_${it.id}" } ?: "unsorted"
-                                    val topCollapsed = collapsed[topKey] == true
+                                    val topCollapsed = topKey in collapsed
                                     val total = group.directFoods.size + group.sections.sumOf { it.foods.size }
                                     item(key = "grp_$topKey") {
                                         CategoryGroupHeader(
                                             name = group.category?.name ?: "Unsorted",
                                             count = total,
                                             collapsed = topCollapsed,
-                                            onToggle = { collapsed[topKey] = !topCollapsed }
+                                            onToggle = { viewModel.toggleCollapsed(topKey) }
                                         )
                                     }
                                     if (!topCollapsed) {
                                         items(group.directFoods, key = { "gd_${it.id}" }) { food -> foodCard(food) }
                                         group.sections.forEach { section ->
                                             val subKey = "sub_${section.subcategory.id}"
-                                            val subCollapsed = collapsed[subKey] == true
+                                            val subCollapsed = subKey in collapsed
                                             item(key = "gsec_$subKey") {
                                                 SubcategoryHeader(
                                                     name = section.subcategory.name,
                                                     count = section.foods.size,
                                                     collapsed = subCollapsed,
                                                     indent = true,
-                                                    onToggle = { collapsed[subKey] = !subCollapsed }
+                                                    onToggle = { viewModel.toggleCollapsed(subKey) }
                                                 )
                                             }
                                             if (!subCollapsed) {
@@ -246,13 +246,13 @@ fun CollectionScreen(
                                 items(view.directFoods, key = { it.id }) { food -> foodCard(food) }
                                 view.sections.forEach { section ->
                                     val subKey = "sub_${section.subcategory.id}"
-                                    val subCollapsed = collapsed[subKey] == true
+                                    val subCollapsed = subKey in collapsed
                                     item(key = "sec_$subKey") {
                                         SubcategoryHeader(
                                             name = section.subcategory.name,
                                             count = section.foods.size,
                                             collapsed = subCollapsed,
-                                            onToggle = { collapsed[subKey] = !subCollapsed }
+                                            onToggle = { viewModel.toggleCollapsed(subKey) }
                                         )
                                     }
                                     if (!subCollapsed) {

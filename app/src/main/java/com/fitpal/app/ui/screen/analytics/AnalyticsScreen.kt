@@ -3,6 +3,8 @@
 package com.fitpal.app.ui.screen.analytics
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -29,6 +31,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AllInclusive
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
@@ -49,11 +52,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
@@ -105,6 +110,7 @@ fun AnalyticsScreen(
     onSwipeToHome: () -> Unit = {},
     onSwipeToCollection: () -> Unit = {},
     onOpenDay: () -> Unit = {},
+    onOpenCalorieDetail: (range: String, anchor: String) -> Unit = { _, _ -> },
     viewModel: AnalyticsViewModel = hiltViewModel()
 ) {
     val range by viewModel.range.collectAsStateWithLifecycle()
@@ -131,13 +137,28 @@ fun AnalyticsScreen(
     val impliedMaintenance by viewModel.impliedMaintenance.collectAsStateWithLifecycle()
     val spotlight by viewModel.spotlight.collectAsStateWithLifecycle()
     val analyticsViews by viewModel.analyticsViews.collectAsStateWithLifecycle()
+    // Which cards are flipped to "Lifetime", plus the all-time data they draw from.
+    val lifetime by viewModel.lifetime.collectAsStateWithLifecycle()
+    val lifetimeRows by viewModel.lifetimeRows.collectAsStateWithLifecycle()
+    val lifetimeMicros by viewModel.lifetimeMicros.collectAsStateWithLifecycle()
     val widgetLayout by viewModel.widgetLayout.collectAsStateWithLifecycle()
     var showWeightDialog by remember { mutableStateOf(false) }
     var selectedDay by remember { mutableStateOf<LocalDate?>(null) }
+    // The day square you last tapped stays ringed while its dialog is open and for a moment
+    // after it closes, so it's obvious which day you just looked at.
+    var flashedDay by remember { mutableStateOf<LocalDate?>(null) }
+    LaunchedEffect(selectedDay, flashedDay) {
+        if (selectedDay == null && flashedDay != null) {
+            delay(1400)
+            flashedDay = null
+        }
+    }
+    val tapDay: (LocalDate) -> Unit = { d -> selectedDay = d; flashedDay = d }
 
     val today = LocalDate.now()
     val iso = DateTimeFormatter.ISO_LOCAL_DATE
     val dayMonth = DateTimeFormatter.ofPattern("d MMM")
+    val dayMonthYear = DateTimeFormatter.ofPattern("d MMM yyyy")
     val dailyKey = today.format(iso)
     // AI weekly/monthly reviews follow the period you're actually viewing.
     val weekStartKey = anchor.minusDays((anchor.dayOfWeek.value - 1).toLong()).format(iso)
@@ -205,8 +226,13 @@ fun AnalyticsScreen(
     val rollingRows = rows.filter { it.date in rollingKeys }
     val weekRows = rows.filter { it.date in weekKeys }
 
+    // Every day ever logged, oldest → newest (the DAO already sorts) — the x-axis for Lifetime views.
+    val lifetimeDates = lifetimeRows.mapNotNull { runCatching { LocalDate.parse(it.date) }.getOrNull() }
+
     // Tapping a bar only navigates for days that actually have data — future/empty days do nothing (#2).
-    val openDayIfLogged: (LocalDate) -> Unit = { d -> if (scoreByDate[d.format(iso)] != null) openDay(d) }
+    // Lifetime views reach outside the viewed window, so the all-time rows count as logged too.
+    val loggedKeys = (rows + lifetimeRows).filter { it.calories > 0f || it.protein > 0f }.map { it.date }.toSet()
+    val openDayIfLogged: (LocalDate) -> Unit = { d -> if (d.format(iso) in loggedKeys) openDay(d) }
 
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -327,7 +353,8 @@ fun AnalyticsScreen(
                                     avgScore = avgScore,
                                     spotlight = spotlight,
                                     onToggleSpotlight = viewModel::toggleSpotlight,
-                                    onDayClick = { selectedDay = it }
+                                    selected = flashedDay,
+                                    onDayClick = tapDay
                                 )
                             }
                         }
@@ -343,11 +370,17 @@ fun AnalyticsScreen(
                         Column(
                             modifier = Modifier.fillMaxWidth()
                                 .cardSurface("balance" in spotlight)
-                                .combinedClickable(onClick = {}, onLongClick = { viewModel.toggleSpotlight("balance") })
+                                .combinedClickable(
+                                    onClick = { onOpenCalorieDetail(range.name, anchor.format(iso)) },
+                                    onLongClick = { viewModel.toggleSpotlight("balance") }
+                                )
                                 .padding(16.dp)
                         ) {
-                            Text("Calorie balance", style = MaterialTheme.typography.titleMedium, color = Cream)
-                            Text("Net vs your goal after steps & exercise, $periodWord", style = MaterialTheme.typography.bodySmall, color = CreamMuted)
+                            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                Text("Calorie balance", style = MaterialTheme.typography.titleMedium, color = Cream, modifier = Modifier.weight(1f))
+                                Text("›", style = MaterialTheme.typography.titleLarge, color = CreamMuted)
+                            }
+                            Text("Net vs your goal after steps & exercise, $periodWord · tap for the full breakdown", style = MaterialTheme.typography.bodySmall, color = CreamMuted)
                             Spacer(Modifier.height(10.dp))
                             Text(
                                 text = (if (over) "+" else "") + "$net kcal",
@@ -378,7 +411,8 @@ fun AnalyticsScreen(
                                 LoggedHeatmap(
                                     dates = weekDates,
                                     colorFor = { d -> scoreByDate[d.format(iso)]?.let { loggedDayColor(it) } },
-                                    onDayClick = { selectedDay = it }
+                                    selected = flashedDay,
+                                    onDayClick = tapDay
                                 )
                             } else {
                                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -447,24 +481,33 @@ fun AnalyticsScreen(
 
                     // ---- Macro balance ----
                     "macros" -> item {
-                        SwitchableChartCard("Macro balance", listOf("Average", "Over time"), viewState = analyticsViews, onSetView = viewModel::setView, spotlight = spotlight, onToggleSpotlight = viewModel::toggleSpotlight) { v ->
+                        // "Lifetime" swaps the viewed week/month for every day ever logged.
+                        val allTime = "macros" in lifetime
+                        val macroRows = if (allTime) lifetimeRows else weekRows
+                        val macroDates = if (allTime) lifetimeDates else weekDates
+                        SwitchableChartCard(
+                            "Macro balance", listOf("Average", "Over time"),
+                            viewState = analyticsViews, onSetView = viewModel::setView,
+                            spotlight = spotlight, onToggleSpotlight = viewModel::toggleSpotlight,
+                            trailing = { LifetimePill(allTime) { viewModel.toggleLifetime("macros") } }
+                        ) { v ->
                             when {
-                                weekRows.isEmpty() -> NotEnough()
+                                macroRows.isEmpty() -> NotEnough()
                                 v == 0 -> {
-                                    val n = weekRows.size
+                                    val n = macroRows.size
                                     MacroBar(
-                                        protein = (weekRows.sumOf { it.protein.toDouble() } / n).toFloat(),
-                                        fat = (weekRows.sumOf { it.fat.toDouble() } / n).toFloat(),
-                                        carbs = (weekRows.sumOf { it.carbs.toDouble() } / n).toFloat(),
-                                        fiber = (weekRows.sumOf { it.fiber.toDouble() } / n).toFloat()
+                                        protein = (macroRows.sumOf { it.protein.toDouble() } / n).toFloat(),
+                                        fat = (macroRows.sumOf { it.fat.toDouble() } / n).toFloat(),
+                                        carbs = (macroRows.sumOf { it.carbs.toDouble() } / n).toFloat(),
+                                        fiber = (macroRows.sumOf { it.fiber.toDouble() } / n).toFloat()
                                     )
                                 }
                                 else -> {
                                     MacroCompositionChart(
-                                        weekRows, weekDates,
-                                        labels = weekDates.map { it.dayOfMonth.toString() },
-                                        highlightIndex = weekDates.indexOfFirst { it == today }.takeIf { it >= 0 },
-                                        onBarClick = { i -> weekDates.getOrNull(i)?.let(openDayIfLogged) }
+                                        macroRows, macroDates,
+                                        labels = macroDates.map { it.dayOfMonth.toString() },
+                                        highlightIndex = macroDates.indexOfFirst { it == today }.takeIf { it >= 0 },
+                                        onBarClick = { i -> macroDates.getOrNull(i)?.let(openDayIfLogged) }
                                     )
                                     Spacer(Modifier.height(8.dp))
                                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -475,13 +518,26 @@ fun AnalyticsScreen(
                                     }
                                 }
                             }
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                if (allTime) "Averaged over all ${macroRows.size} days you've ever logged"
+                                else "Averaged over ${macroRows.size} logged days in this period",
+                                style = MaterialTheme.typography.labelSmall, color = CreamFaint
+                            )
                         }
                     }
 
                     // ---- Vitamins & minerals (deficiency / proficiency) ----
                     "micros" -> item {
-                        ChartCard("Vitamins & minerals", "Daily average vs target", spotlight = spotlight, onToggleSpotlight = viewModel::toggleSpotlight) {
-                            MicronutrientAnalysis(microsTotals, rollingRows.size)
+                        val allTime = "micros" in lifetime
+                        ChartCard(
+                            "Vitamins & minerals",
+                            if (allTime) "All-time daily average" else "Daily average vs target",
+                            spotlight = spotlight, onToggleSpotlight = viewModel::toggleSpotlight,
+                            trailing = { LifetimePill(allTime) { viewModel.toggleLifetime("micros") } }
+                        ) {
+                            if (allTime) MicronutrientAnalysis(lifetimeMicros, lifetimeRows.size)
+                            else MicronutrientAnalysis(microsTotals, rollingRows.size)
                         }
                     }
 
@@ -569,14 +625,46 @@ fun AnalyticsScreen(
                                     color = if (rate < 0f) ScoreFair else GoldLight
                                 )
                             }
-                            val wSeries = seriesOf(rollingKeys, weights.associate { it.date to it.weightKg })
+
+                            // "Lifetime" redraws the trend from the very first weight you logged.
+                            val allTime = "weight" in lifetime
+                            val byDate = weights.associate { it.date to it.weightKg }
+                            val firstWeighIn = weights.minByOrNull { it.date }
+                                ?.let { runCatching { LocalDate.parse(it.date) }.getOrNull() }
+                            val wSeries: List<Float?> = if (allTime && firstWeighIn != null) {
+                                generateSequence(firstWeighIn) { it.plusDays(1) }
+                                    .takeWhile { !it.isAfter(today) }
+                                    .map { byDate[it.format(iso)] }
+                                    .toList()
+                            } else {
+                                seriesOf(rollingKeys, byDate)
+                            }
+
+                            Spacer(Modifier.height(12.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = if (allTime && firstWeighIn != null) {
+                                        "Since ${firstWeighIn.format(dayMonthYear)} · ${weights.size} weigh-ins"
+                                    } else "$startLbl – $endLbl",
+                                    style = MaterialTheme.typography.labelSmall, color = CreamFaint
+                                )
+                                LifetimePill(allTime) { viewModel.toggleLifetime("weight") }
+                            }
                             if (enough(wSeries)) {
-                                Spacer(Modifier.height(12.dp))
+                                Spacer(Modifier.height(8.dp))
                                 TrendChart(
                                     values = wSeries, accent = GoldLight,
-                                    startLabel = startLbl, endLabel = endLbl,
+                                    startLabel = if (allTime && firstWeighIn != null) firstWeighIn.format(dayMonth) else startLbl,
+                                    endLabel = if (allTime && firstWeighIn != null) "now" else endLbl,
                                     valueFormatter = { "%.1f".format(it) }
                                 )
+                            } else {
+                                Spacer(Modifier.height(8.dp))
+                                NotEnough()
                             }
                         }
                     }
@@ -693,6 +781,8 @@ private fun ChartCard(
     highlight: Boolean = false,
     spotlight: Set<String> = emptySet(),
     onToggleSpotlight: (String) -> Unit = {},
+    /** Optional control parked at the end of the header row (e.g. the Lifetime pill). */
+    trailing: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit
 ) {
     Column(
@@ -707,13 +797,47 @@ private fun ChartCard(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.Bottom
         ) {
-            Text(title, style = MaterialTheme.typography.titleMedium, color = Cream)
+            Text(title, style = MaterialTheme.typography.titleMedium, color = Cream, modifier = Modifier.weight(1f, fill = false))
             if (subtitle.isNotEmpty()) {
                 Text(subtitle, style = MaterialTheme.typography.bodySmall, color = CreamMuted, modifier = Modifier.padding(start = 12.dp))
+            }
+            if (trailing != null) {
+                Spacer(Modifier.width(10.dp))
+                trailing()
             }
         }
         Spacer(Modifier.height(10.dp))
         content()
+    }
+}
+
+/**
+ * The "Lifetime" switch on the weight / macro / micronutrient cards: off = the period you're
+ * viewing, on = everything since your very first entry. It swallows the tap so it doesn't also
+ * flip the card's view or trigger the card's own click.
+ */
+@Composable
+private fun LifetimePill(active: Boolean, onToggle: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(if (active) AccentTrends.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.07f))
+            .clickable(onClick = onToggle)
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Icon(
+            Icons.Default.AllInclusive,
+            contentDescription = if (active) "Show the viewed period" else "Show all time",
+            tint = if (active) AccentTrends else CreamMuted,
+            modifier = Modifier.size(13.dp)
+        )
+        Text(
+            "Lifetime",
+            style = MaterialTheme.typography.labelSmall,
+            color = if (active) AccentTrends else CreamMuted
+        )
     }
 }
 
@@ -727,6 +851,8 @@ private fun SwitchableChartCard(
     highlight: Boolean = false,
     spotlight: Set<String> = emptySet(),
     onToggleSpotlight: (String) -> Unit = {},
+    /** Optional control parked before the view switcher (e.g. the Lifetime pill). */
+    trailing: (@Composable () -> Unit)? = null,
     content: @Composable (Int) -> Unit
 ) {
     val view = (viewState[title] ?: 0).coerceIn(0, views.size - 1)
@@ -741,10 +867,13 @@ private fun SwitchableChartCard(
             .padding(16.dp)
     ) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text(title, style = MaterialTheme.typography.titleMedium, color = Cream)
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(views[view], style = MaterialTheme.typography.labelMedium, color = AccentTrends)
-                Icon(Icons.Default.SwapHoriz, contentDescription = "Switch view", tint = AccentTrends, modifier = Modifier.size(16.dp))
+            Text(title, style = MaterialTheme.typography.titleMedium, color = Cream, modifier = Modifier.weight(1f, fill = false))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                trailing?.invoke()
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(views[view], style = MaterialTheme.typography.labelMedium, color = AccentTrends)
+                    Icon(Icons.Default.SwapHoriz, contentDescription = "Switch view", tint = AccentTrends, modifier = Modifier.size(16.dp))
+                }
             }
         }
         Spacer(Modifier.height(10.dp))
@@ -972,6 +1101,7 @@ private fun LoggedScoreTile(
     avgScore: Int?,
     spotlight: Set<String>,
     onToggleSpotlight: (String) -> Unit,
+    selected: LocalDate? = null,
     onDayClick: (LocalDate) -> Unit
 ) {
     Column(
@@ -994,6 +1124,7 @@ private fun LoggedScoreTile(
             modifier = Modifier.fillMaxWidth().height(40.dp),
             dates = dates,
             colorFor = colorFor,
+            selected = selected,
             onDayClick = onDayClick
         )
     }
@@ -1024,10 +1155,22 @@ private fun MiniHeatmap(
     modifier: Modifier,
     dates: List<LocalDate>,
     colorFor: (LocalDate) -> Color?,
+    selected: LocalDate? = null,
     onDayClick: (LocalDate) -> Unit
 ) {
     val empty = Color.White.copy(alpha = 0.06f)
     val gap = 4f
+    // The tapped square gets a ring that springs open, matching the big heatmap's pop.
+    val selectedIndex = dates.indexOfFirst { it == selected }.takeIf { it >= 0 }
+    val ring = remember { Animatable(0f) }
+    LaunchedEffect(selectedIndex) {
+        if (selectedIndex != null) {
+            ring.snapTo(0f)
+            ring.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium))
+        } else {
+            ring.animateTo(0f, tween(200))
+        }
+    }
     Canvas(
         modifier = modifier.pointerInput(dates.size) {
             detectTapGestures { offset ->
@@ -1048,6 +1191,20 @@ private fun MiniHeatmap(
             val y = g.offsetY + (i / g.cols) * (g.cell + gap)
             drawRoundRect(colorFor(d) ?: empty, topLeft = Offset(x, y), size = Size(g.cell, g.cell), cornerRadius = r)
         }
+        val lift = ring.value
+        if (selectedIndex != null && lift > 0.01f) {
+            val x = g.offsetX + (selectedIndex % g.cols) * (g.cell + gap)
+            val y = g.offsetY + (selectedIndex / g.cols) * (g.cell + gap)
+            val grow = g.cell * 0.35f * lift
+            val side = g.cell + grow
+            drawRoundRect(
+                color = Cream.copy(alpha = lift.coerceIn(0f, 1f)),
+                topLeft = Offset(x - grow / 2f, y - grow / 2f),
+                size = Size(side, side),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(side / 4f, side / 4f),
+                style = Stroke(width = 2.5f)
+            )
+        }
     }
 }
 
@@ -1056,6 +1213,7 @@ private fun MiniHeatmap(
 private fun LoggedHeatmap(
     dates: List<LocalDate>,
     colorFor: (LocalDate) -> Color?,
+    selected: LocalDate? = null,
     onDayClick: (LocalDate) -> Unit
 ) {
     if (dates.isEmpty()) return
@@ -1070,9 +1228,13 @@ private fun LoggedHeatmap(
         ) {
             dates.forEach { d ->
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    HeatCell(cell, colorFor(d)) { onDayClick(d) }
+                    HeatCell(cell, colorFor(d), selected = d == selected) { onDayClick(d) }
                     Spacer(Modifier.height(3.dp))
-                    Text(d.dayOfMonth.toString(), style = MaterialTheme.typography.labelSmall, color = CreamFaint)
+                    Text(
+                        d.dayOfMonth.toString(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (d == selected) Cream else CreamFaint
+                    )
                 }
             }
         }
@@ -1091,7 +1253,7 @@ private fun LoggedHeatmap(
                 Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                     week.forEach { d ->
                         if (d == null) Box(Modifier.size(cell))
-                        else HeatCell(cell, colorFor(d)) { onDayClick(d) }
+                        else HeatCell(cell, colorFor(d), selected = d == selected) { onDayClick(d) }
                     }
                 }
             }
@@ -1099,11 +1261,35 @@ private fun LoggedHeatmap(
     }
 }
 
+/**
+ * One day square. When it's the day you just tapped it springs out and takes a bright ring —
+ * so the details that pop up are visibly tied to the square you actually touched.
+ */
 @Composable
-private fun HeatCell(size: androidx.compose.ui.unit.Dp, color: Color?, onClick: () -> Unit) {
+private fun HeatCell(
+    size: androidx.compose.ui.unit.Dp,
+    color: Color?,
+    selected: Boolean = false,
+    onClick: () -> Unit
+) {
+    val pop = remember { Animatable(0f) }
+    LaunchedEffect(selected) {
+        if (selected) {
+            pop.snapTo(0f)
+            pop.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium))
+        } else {
+            pop.animateTo(0f, tween(200))
+        }
+    }
+    val shape = RoundedCornerShape(8.dp)
+    val lift = pop.value
     Box(
-        Modifier.size(size).clip(RoundedCornerShape(8.dp))
+        Modifier
+            .size(size)
+            .scale(1f + 0.18f * lift)
+            .clip(shape)
             .background(color ?: Color.White.copy(alpha = 0.05f))
+            .then(if (lift > 0.01f) Modifier.border(2.dp, Cream.copy(alpha = lift.coerceIn(0f, 1f)), shape) else Modifier)
             .clickable(onClick = onClick)
     )
 }

@@ -158,8 +158,8 @@ watch then shows a notification — tap it to install. If your watch refuses to 
 (some builds lock this down), the
 [ADB sideload steps](#installing-on-your-watch-optional) above still work.
 
-If you're on **1.0.0**, that build predates this feature — install 1.1.0 by hand once, and updates
-after that are automatic.
+If you're on **1.0.0**, that build predates this feature — install the latest release by hand once,
+and updates after that are automatic.
 
 ## Settings, explained
 

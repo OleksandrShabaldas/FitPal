@@ -11,6 +11,7 @@ import com.fitpal.app.data.local.entity.SavedWorkoutEntity
 import com.fitpal.app.data.repository.ExerciseRepository
 import com.fitpal.app.data.repository.GalleryRepository
 import com.fitpal.app.data.repository.MealRepository
+import com.fitpal.app.data.repository.SettingsRepository
 import com.fitpal.app.data.repository.WeightRepository
 import com.fitpal.app.domain.HealthScorer
 import com.fitpal.app.domain.model.HealthSwap
@@ -43,6 +44,7 @@ class CollectionViewModel @Inject constructor(
     private val mealRepository: MealRepository,
     private val exerciseRepository: ExerciseRepository,
     private val weightRepository: WeightRepository,
+    private val settingsRepository: SettingsRepository,
     private val pipeline: FoodAnalysisPipeline,
     private val modelManager: ModelManager
 ) : ViewModel() {
@@ -128,6 +130,21 @@ class CollectionViewModel @Inject constructor(
                 CollectionView(selected, direct, sections, emptyList())
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), CollectionView(null, emptyList(), emptyList(), emptyList()))
+
+    // ---------- Collapsed sections ----------
+
+    /**
+     * Which category / subcategory headers the user collapsed. Keys are the screen's stable
+     * strings ("cat_<id>", "sub_<id>", "unsorted"). Persisted, so a collapsed category stays
+     * collapsed after the app is restarted.
+     */
+    val collapsedSections: StateFlow<Set<String>> = settingsRepository.collectionCollapsed
+
+    /** Fold a section open/closed. */
+    fun toggleCollapsed(key: String) {
+        val next = collapsedSections.value.toMutableSet().apply { if (!add(key)) remove(key) }
+        settingsRepository.setCollectionCollapsed(next)
+    }
 
     /** Subcategories of a given top category (for the assign-to-category picker). */
     fun subcategoriesOf(parentId: Long): List<GalleryCategoryEntity> =

@@ -51,6 +51,17 @@ sealed class Screen(val route: String) {
         fun buildRoute(date: String): String = "water_detail/$date"
     }
 
+    /**
+     * Calories in vs. out for a period, opened from the Analytics "Calorie balance" card.
+     * range = WEEK/MONTH, anchor = the ISO date the period is built around (so it opens on
+     * exactly the week/30 days Analytics was showing).
+     */
+    data object CalorieDetail : Screen("calorie_detail/{range}/{anchor}") {
+        const val ARG_RANGE = "range"
+        const val ARG_ANCHOR = "anchor"
+        fun buildRoute(range: String, anchor: String): String = "calorie_detail/$range/$anchor"
+    }
+
     /** Full detail of a saved (gallery) food — image, ingredients, AI analysis — with log/delete. */
     data object GalleryFoodDetail : Screen("gallery_food/{foodId}") {
         const val ARG_FOOD_ID = "foodId"

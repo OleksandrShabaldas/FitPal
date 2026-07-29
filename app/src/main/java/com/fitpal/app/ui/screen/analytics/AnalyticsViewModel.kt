@@ -194,6 +194,26 @@ class AnalyticsViewModel @Inject constructor(
         flow
     }
 
+    // ---- "Lifetime" view: every logged day ever, for the weight / macro / micro cards ----
+    // The window widgets normally use is the viewed week/month; these two flows ignore it entirely
+    // so a card can show the whole history since the user's very first entry.
+
+    val lifetimeRows: StateFlow<List<DailyNutritionRow>> =
+        mealRepository.getDailyNutritionRange(LIFETIME_FROM, LIFETIME_TO)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val lifetimeMicros: StateFlow<DailyMicros?> =
+        mealRepository.getMicrosForRange(LIFETIME_FROM, LIFETIME_TO)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    /** Which cards the user flipped to their lifetime view. Persisted, like the spotlight set. */
+    val lifetime: StateFlow<Set<String>> = settingsRepository.analyticsLifetime
+
+    fun toggleLifetime(key: String) {
+        val next = lifetime.value.toMutableSet().apply { if (!add(key)) remove(key) }
+        settingsRepository.setAnalyticsLifetime(next)
+    }
+
     // ---- Long-press "spotlight" set: widgets the user pinned as highlighted ----
     // Persisted, so it survives leaving the tab AND a full app restart.
     val spotlight: StateFlow<Set<String>> = settingsRepository.analyticsSpotlight
@@ -272,5 +292,11 @@ class AnalyticsViewModel @Inject constructor(
 
     fun logWeight(kg: Float) {
         viewModelScope.launch { weightRepository.logWeight(kg) }
+    }
+
+    private companion object {
+        // Dates are stored as ISO text and compared as text, so these bracket every real date.
+        const val LIFETIME_FROM = "0000-01-01"
+        const val LIFETIME_TO = "9999-12-31"
     }
 }
