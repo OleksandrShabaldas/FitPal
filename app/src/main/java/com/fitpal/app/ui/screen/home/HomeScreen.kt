@@ -123,7 +123,7 @@ fun HomeScreen(
     onEntryClick: (Long) -> Unit = {},
     onGroupClick: (Long) -> Unit = {},
     onOpenReview: (period: String, key: String) -> Unit = { _, _ -> },
-    onOpenGarden: () -> Unit = {},
+    onOpenTrail: () -> Unit = {},
     onLogExercise: () -> Unit = {},
     onExerciseClick: (Long) -> Unit = {},
     onOpenWater: (String) -> Unit = {},
@@ -141,6 +141,7 @@ fun HomeScreen(
     val syncedSteps by viewModel.syncedSteps.collectAsStateWithLifecycle()
     val stepSources by viewModel.stepSources.collectAsStateWithLifecycle()
     val dailyStreak by viewModel.dailyStreak.collectAsStateWithLifecycle()
+    val trailPending by viewModel.trailPending.collectAsStateWithLifecycle()
     val exerciseCalories by viewModel.exerciseCalories.collectAsStateWithLifecycle()
     val exerciseEntries by viewModel.exerciseEntries.collectAsStateWithLifecycle()
     val latestWeight by viewModel.latestWeight.collectAsStateWithLifecycle()
@@ -245,7 +246,8 @@ fun HomeScreen(
                         onToday = viewModel::goToday,
                         onPrevDay = viewModel::goPrevDay,
                         onNextDay = viewModel::goNextDay,
-                        onOpenGarden = onOpenGarden
+                        onOpenTrail = onOpenTrail,
+                        trailPending = trailPending
                     )
                 }
 
@@ -403,7 +405,8 @@ private fun HomeHeader(
     onToday: () -> Unit,
     onPrevDay: () -> Unit,
     onNextDay: () -> Unit,
-    onOpenGarden: () -> Unit
+    onOpenTrail: () -> Unit,
+    trailPending: Boolean = false
 ) {
     val isToday = date == LocalDate.now()
     val dateLabel = if (isToday) "Today" else date.format(DateTimeFormatter.ofPattern("EEE, d MMM"))
@@ -456,7 +459,7 @@ private fun HomeHeader(
             HeaderGreeting(status)
         }
 
-        GlassCapsule(onClick = onOpenGarden) {
+        GlassCapsule(onClick = onOpenTrail) {
             Icon(
                 Icons.Default.LocalFireDepartment,
                 contentDescription = null,
@@ -469,6 +472,16 @@ private fun HomeHeader(
                 fontWeight = FontWeight.Bold,
                 color = if (streak > 0) Cream else CreamMuted
             )
+            // The trail has growth waiting — this chip is its only entry point.
+            if (trailPending) {
+                Spacer(Modifier.width(4.dp))
+                Box(
+                    modifier = Modifier
+                        .size(7.dp)
+                        .clip(CircleShape)
+                        .background(AccentGarden)
+                )
+            }
         }
     }
 }

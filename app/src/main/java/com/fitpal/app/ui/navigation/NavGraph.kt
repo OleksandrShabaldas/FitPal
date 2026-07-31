@@ -60,7 +60,7 @@ import com.fitpal.app.ui.screen.exercise.DescribeExerciseScreen
 import com.fitpal.app.ui.screen.exercise.ExerciseDetailScreen
 import com.fitpal.app.ui.screen.gallery.GalleryFoodDetailScreen
 import com.fitpal.app.ui.screen.gallery.GalleryScreen
-import com.fitpal.app.ui.screen.garden.GardenScreen
+import com.fitpal.app.ui.screen.trail.TrailScreen
 import com.fitpal.app.ui.screen.home.HomeScreen
 import com.fitpal.app.ui.screen.manual.ManualEntryScreen
 import com.fitpal.app.ui.screen.mealgroup.MealGroupScreen
@@ -162,7 +162,7 @@ fun FitPalNavHost(
                     onOpenReview = { period, key ->
                         navController.navigate(Screen.AiReview.buildRoute(period, key))
                     },
-                    onOpenGarden = { navController.navigate(Screen.Garden.route) },
+                    onOpenTrail = { navController.navigate(Screen.Trail.route) },
                     onLogExercise = { navController.navigate(Screen.LogExercise.route) },
                     onExerciseClick = { id -> navController.navigate(Screen.ExerciseDetail.buildRoute(id)) },
                     onOpenWater = { date -> navController.navigate(Screen.WaterDetail.buildRoute(date)) },
@@ -384,8 +384,8 @@ fun FitPalNavHost(
                 AiReviewScreen(onBack = safeBack)
             }
 
-            composable(Screen.Garden.route) {
-                GardenScreen(onBack = safeBack)
+            composable(Screen.Trail.route) {
+                TrailScreen(onBack = safeBack)
             }
 
             composable(Screen.LogExercise.route) {

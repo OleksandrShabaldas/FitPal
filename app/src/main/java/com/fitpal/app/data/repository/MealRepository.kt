@@ -84,7 +84,7 @@ class MealRepository @Inject constructor(
     fun getDailyWaterSplitRange(from: String, to: String): Flow<List<DailyWaterSplit>> =
         mealLogDao.getDailyWaterSplitRange(from, to)
 
-    /** Days (newest first) the user logged real food — for the streak / garden. */
+    /** Days (newest first) the user logged real food — for the streak / Trail. */
     fun getLoggedDatesDesc(): Flow<List<String>> = mealLogDao.getLoggedDatesDesc()
 
     /** Recently logged distinct foods (newest first) — the Add screen's one-tap "Your usuals" row. */

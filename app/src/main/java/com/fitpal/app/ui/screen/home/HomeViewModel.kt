@@ -8,10 +8,12 @@ import com.fitpal.app.data.local.dao.MealLogItemWithType
 import com.fitpal.app.data.local.entity.ExerciseEntryEntity
 import com.fitpal.app.data.local.entity.MealLogItemEntity
 import com.fitpal.app.data.local.entity.WeightEntryEntity
+import com.fitpal.app.data.repository.ChallengeRepository
 import com.fitpal.app.data.repository.ExerciseRepository
 import com.fitpal.app.data.repository.MealRepository
 import com.fitpal.app.data.repository.SettingsRepository
 import com.fitpal.app.data.repository.StepRepository
+import com.fitpal.app.data.repository.TrailRepository
 import com.fitpal.app.data.repository.WeightRepository
 import com.fitpal.app.domain.BmrCalculator
 import com.fitpal.app.domain.DailyTargets
@@ -57,6 +59,8 @@ class HomeViewModel @Inject constructor(
     private val mealLogContext: MealLogContext,
     private val settingsRepository: SettingsRepository,
     private val exerciseRepository: ExerciseRepository,
+    private val trailRepository: TrailRepository,
+    private val challengeRepository: ChallengeRepository,
     private val focusedDate: FocusedDate
 ) : ViewModel() {
 
@@ -150,6 +154,13 @@ class HomeViewModel @Inject constructor(
             Streaks.current(set)
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    /** True when the trail has growth waiting, an unfolded day, or a challenge to claim. */
+    val trailPending: StateFlow<Boolean> = combine(
+        trailRepository.hasPending(),
+        challengeRepository.claimableCount()
+    ) { pending, claimable -> pending || claimable > 0 }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     /** Editable quick-add water amounts (ml) for the Water widget. */
     val waterPresets: StateFlow<List<Int>> = settingsRepository.waterPresets

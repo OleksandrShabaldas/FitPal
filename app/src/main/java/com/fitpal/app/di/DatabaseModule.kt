@@ -4,12 +4,13 @@ import android.content.Context
 import androidx.room.Room
 import com.fitpal.app.data.local.FitPalDatabase
 import com.fitpal.app.data.local.dao.AiReviewDao
+import com.fitpal.app.data.local.dao.ChallengeDao
 import com.fitpal.app.data.local.dao.ExerciseDao
 import com.fitpal.app.data.local.dao.GalleryDao
-import com.fitpal.app.data.local.dao.GardenDao
 import com.fitpal.app.data.local.dao.MealLogDao
 import com.fitpal.app.data.local.dao.NutritionDao
 import com.fitpal.app.data.local.dao.StepDao
+import com.fitpal.app.data.local.dao.TrailDao
 import com.fitpal.app.data.local.dao.WeightDao
 import dagger.Module
 import dagger.Provides
@@ -46,7 +47,11 @@ object DatabaseModule {
                 FitPalDatabase.MIGRATION_13_14,
                 FitPalDatabase.MIGRATION_14_15,
                 FitPalDatabase.MIGRATION_15_16,
-                FitPalDatabase.MIGRATION_16_17
+                FitPalDatabase.MIGRATION_16_17,
+                FitPalDatabase.MIGRATION_17_18,
+                FitPalDatabase.MIGRATION_18_19,
+                FitPalDatabase.MIGRATION_19_20,
+                FitPalDatabase.MIGRATION_20_21
             )
             .build()
         // TODO: When USDA database is ready, use .createFromAsset("usda_foods.db")
@@ -57,10 +62,10 @@ object DatabaseModule {
     fun provideAiReviewDao(db: FitPalDatabase): AiReviewDao = db.aiReviewDao()
 
     @Provides
-    fun provideGalleryDao(db: FitPalDatabase): GalleryDao = db.galleryDao()
+    fun provideChallengeDao(db: FitPalDatabase): ChallengeDao = db.challengeDao()
 
     @Provides
-    fun provideGardenDao(db: FitPalDatabase): GardenDao = db.gardenDao()
+    fun provideGalleryDao(db: FitPalDatabase): GalleryDao = db.galleryDao()
 
     @Provides
     fun provideExerciseDao(db: FitPalDatabase): ExerciseDao = db.exerciseDao()
@@ -73,6 +78,9 @@ object DatabaseModule {
 
     @Provides
     fun provideStepDao(db: FitPalDatabase): StepDao = db.stepDao()
+
+    @Provides
+    fun provideTrailDao(db: FitPalDatabase): TrailDao = db.trailDao()
 
     @Provides
     fun provideWeightDao(db: FitPalDatabase): WeightDao = db.weightDao()

@@ -1117,7 +1117,7 @@ private fun DataSection(viewModel: SettingsViewModel) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text("Your data", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Text(
-                "Back up your meals, weights, steps, exercises and garden, or restore from a backup. The downloaded food database isn't included.",
+                "Back up your meals, weights, steps, exercises and trail progress, or restore from a backup. The downloaded food database isn't included.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -1141,7 +1141,7 @@ private fun DataSection(viewModel: SettingsViewModel) {
         AlertDialog(
             onDismissRequest = { showClearConfirm = false },
             title = { Text("Clear all data?") },
-            text = { Text("This permanently deletes all your logged meals, weights, steps, exercises, garden and saved foods. Your downloaded food database stays. This can't be undone.") },
+            text = { Text("This permanently deletes all your logged meals, weights, steps, exercises, trail progress and saved foods. Your downloaded food database stays. This can't be undone.") },
             confirmButton = {
                 TextButton(onClick = { showClearConfirm = false; viewModel.clearData() }) {
                     Text("Delete everything", color = MaterialTheme.colorScheme.error)

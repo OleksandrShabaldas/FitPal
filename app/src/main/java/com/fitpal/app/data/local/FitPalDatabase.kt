@@ -5,54 +5,60 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.fitpal.app.data.local.dao.AiReviewDao
+import com.fitpal.app.data.local.dao.ChallengeDao
 import com.fitpal.app.data.local.dao.ExerciseDao
 import com.fitpal.app.data.local.dao.GalleryDao
-import com.fitpal.app.data.local.dao.GardenDao
 import com.fitpal.app.data.local.dao.MealLogDao
 import com.fitpal.app.data.local.dao.NutritionDao
 import com.fitpal.app.data.local.dao.StepDao
+import com.fitpal.app.data.local.dao.TrailDao
 import com.fitpal.app.data.local.dao.WeightDao
 import com.fitpal.app.data.local.entity.AiReviewEntity
-import com.fitpal.app.data.local.entity.CollectedPlantEntity
+import com.fitpal.app.data.local.entity.ChallengeEntity
 import com.fitpal.app.data.local.entity.ExerciseEntryEntity
 import com.fitpal.app.data.local.entity.GalleryCategoryEntity
 import com.fitpal.app.data.local.entity.GalleryFoodEntity
 import com.fitpal.app.data.local.entity.GalleryIngredientEntity
-import com.fitpal.app.data.local.entity.GardenStateEntity
 import com.fitpal.app.data.local.entity.MealLogEntity
 import com.fitpal.app.data.local.entity.MealLogItemEntity
 import com.fitpal.app.data.local.entity.SavedWorkoutEntity
 import com.fitpal.app.data.local.entity.StepEntryEntity
+import com.fitpal.app.data.local.entity.TrailProjectEntity
+import com.fitpal.app.data.local.entity.TrailStateEntity
+import com.fitpal.app.data.local.entity.TrailUnlockEntity
 import com.fitpal.app.data.local.entity.UsdaFoodEntity
 import com.fitpal.app.data.local.entity.WeightEntryEntity
 
 @Database(
     entities = [
         AiReviewEntity::class,
-        CollectedPlantEntity::class,
+        ChallengeEntity::class,
         ExerciseEntryEntity::class,
         GalleryCategoryEntity::class,
         GalleryFoodEntity::class,
         GalleryIngredientEntity::class,
-        GardenStateEntity::class,
         MealLogEntity::class,
         MealLogItemEntity::class,
         SavedWorkoutEntity::class,
         StepEntryEntity::class,
+        TrailProjectEntity::class,
+        TrailStateEntity::class,
+        TrailUnlockEntity::class,
         UsdaFoodEntity::class,
         WeightEntryEntity::class
     ],
-    version = 17,
+    version = 21,
     exportSchema = true
 )
 abstract class FitPalDatabase : RoomDatabase() {
     abstract fun aiReviewDao(): AiReviewDao
+    abstract fun challengeDao(): ChallengeDao
     abstract fun exerciseDao(): ExerciseDao
     abstract fun galleryDao(): GalleryDao
-    abstract fun gardenDao(): GardenDao
     abstract fun mealLogDao(): MealLogDao
     abstract fun nutritionDao(): NutritionDao
     abstract fun stepDao(): StepDao
+    abstract fun trailDao(): TrailDao
     abstract fun weightDao(): WeightDao
 
     companion object {
@@ -286,6 +292,83 @@ abstract class FitPalDatabase : RoomDatabase() {
                         lastUsed INTEGER NOT NULL
                     )
                 """)
+            }
+        }
+
+        /** v17 -> v18: "The Trail" game — one state row + the projects you've built. */
+        val MIGRATION_17_18 = object : Migration(17, 18) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS trail_state (
+                        id INTEGER PRIMARY KEY NOT NULL,
+                        siteIndex INTEGER NOT NULL DEFAULT 0,
+                        growth INTEGER NOT NULL DEFAULT 0,
+                        bankedGrowth INTEGER NOT NULL DEFAULT 0,
+                        water INTEGER NOT NULL DEFAULT 3,
+                        points INTEGER NOT NULL DEFAULT 0,
+                        vitality REAL NOT NULL DEFAULT 1.0,
+                        lastEvaluatedDate TEXT,
+                        lastTickDate TEXT,
+                        legacyMultiplier REAL NOT NULL DEFAULT 1.0
+                    )
+                """)
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS trail_projects (
+                        projectId TEXT PRIMARY KEY NOT NULL,
+                        builtAt INTEGER NOT NULL
+                    )
+                """)
+            }
+        }
+
+        /** v18 -> v19: trail challenges (the only source of ⭐). */
+        val MIGRATION_18_19 = object : Migration(18, 19) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS challenges (
+                        periodKey TEXT NOT NULL,
+                        slot TEXT NOT NULL,
+                        period TEXT NOT NULL,
+                        kind TEXT NOT NULL,
+                        typeName TEXT,
+                        threshold REAL NOT NULL DEFAULT 0,
+                        text TEXT NOT NULL,
+                        rewardPoints INTEGER NOT NULL,
+                        completedAt INTEGER NOT NULL DEFAULT 0,
+                        claimedAt INTEGER NOT NULL DEFAULT 0,
+                        verdictNote TEXT,
+                        PRIMARY KEY(periodKey, slot)
+                    )
+                """)
+            }
+        }
+
+        /** v19 -> v20: trail shop — owned themes/curios + the equipped theme. */
+        val MIGRATION_19_20 = object : Migration(19, 20) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS trail_unlocks (
+                        id TEXT PRIMARY KEY NOT NULL,
+                        kind TEXT NOT NULL,
+                        count INTEGER NOT NULL DEFAULT 1,
+                        unlockedAt INTEGER NOT NULL
+                    )
+                """)
+                db.execSQL("ALTER TABLE trail_state ADD COLUMN activeTheme TEXT NOT NULL DEFAULT 'meadow'")
+            }
+        }
+
+        /**
+         * v20 -> v21: the old garden is retired — the Trail replaced it entirely.
+         *
+         * Nothing is dropped. Room ignores tables it doesn't know about, so `garden_state`
+         * and `collected_plants` simply sit there unused rather than taking the user's old
+         * bloom history with them. This migration exists only because removing entities
+         * changes Room's schema hash, which needs a version bump to acknowledge.
+         */
+        val MIGRATION_20_21 = object : Migration(20, 21) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Intentionally empty — see above.
             }
         }
     }

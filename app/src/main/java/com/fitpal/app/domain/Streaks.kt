@@ -3,7 +3,7 @@ package com.fitpal.app.domain
 import java.time.LocalDate
 
 /**
- * Logging-streak maths, shared by the Home streak chip and (later) the garden.
+ * Logging-streak maths, shared by the Home streak chip and the Trail.
  */
 object Streaks {
 

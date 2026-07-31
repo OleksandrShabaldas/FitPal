@@ -17,7 +17,7 @@ import javax.inject.Singleton
 
 /**
  * Backup / restore / wipe of the user's own data — meals, weights, steps,
- * exercises, garden and saved foods. Deliberately EXCLUDES the bundled USDA food
+ * exercises, trail progress and saved foods. Deliberately EXCLUDES the bundled USDA food
  * database (`usda_foods`), which can be hundreds of MB and is re-downloadable.
  *
  * Export/import use a generic cursor↔JSON dump so they don't need per-table code.
@@ -30,7 +30,8 @@ class DataManager @Inject constructor(
     private val userTables = listOf(
         "meal_logs", "meal_log_items", "weight_entries", "step_entries",
         "exercise_entries", "gallery_foods", "gallery_ingredients",
-        "garden_state", "collected_plants", "ai_reviews"
+        "gallery_categories", "saved_workouts",
+        "trail_state", "trail_projects", "trail_unlocks", "challenges", "ai_reviews"
     )
 
     /** Write all user data as JSON to [uri]. Returns true on success. */
@@ -91,7 +92,7 @@ class DataManager @Inject constructor(
 
     /**
      * Delete all user data (keeps the downloaded food database). Goes through the
-     * Room DAOs so every observing screen (Home, Analytics, Garden…) refreshes at once.
+     * Room DAOs so every observing screen (Home, Analytics, Trail…) refreshes at once.
      */
     suspend fun clearUserData() = withContext(Dispatchers.IO) {
         database.mealLogDao().clearAllMealItems()
@@ -99,10 +100,14 @@ class DataManager @Inject constructor(
         database.weightDao().clearAll()
         database.stepDao().clearAll()
         database.exerciseDao().clearAll()
+        database.exerciseDao().clearAllSavedWorkouts()
         database.galleryDao().clearAllIngredients()
         database.galleryDao().clearAllFoods()
-        database.gardenDao().clearState()
-        database.gardenDao().clearCollected()
+        database.galleryDao().clearAllCategories()
+        database.trailDao().clearState()
+        database.trailDao().clearProjects()
+        database.trailDao().clearUnlocks()
+        database.challengeDao().clearAll()
         database.aiReviewDao().clearAll()
     }
 

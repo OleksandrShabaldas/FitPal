@@ -23,7 +23,8 @@ sealed class Screen(val route: String) {
     data object Barcode : Screen("barcode")
     data object Analytics : Screen("analytics")
     data object Collection : Screen("collection")
-    data object Garden : Screen("garden")
+    /** "The Trail" — the motivation game (see GAME_DESIGN.md). Replaced the old garden. */
+    data object Trail : Screen("trail")
     data object Settings : Screen("settings")
     data object ModelSetup : Screen("model_setup")
 

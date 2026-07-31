@@ -21,6 +21,9 @@ interface GalleryDao {
     @Query("DELETE FROM gallery_ingredients")
     suspend fun clearAllIngredients()
 
+    @Query("DELETE FROM gallery_categories")
+    suspend fun clearAllCategories()
+
     // --- Gallery foods ---
 
     @Query("SELECT * FROM gallery_foods ORDER BY lastUsedAt DESC")

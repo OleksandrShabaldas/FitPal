@@ -43,7 +43,7 @@ interface ExerciseDao {
     """)
     fun getDailyBurnRange(from: String, to: String): Flow<List<DailyBurnRow>>
 
-    /** Non-reactive total for a date — used by the garden's catch-up evaluation. */
+    /** Non-reactive total for a date — used by the Trail's catch-up evaluation. */
     @Query("SELECT COALESCE(SUM(caloriesBurned), 0) FROM exercise_entries WHERE date = :date")
     suspend fun totalBurnedForDateOnce(date: String): Float
 
@@ -67,6 +67,9 @@ interface ExerciseDao {
 
     @Query("UPDATE saved_workouts SET lastUsed = :ts WHERE id = :id")
     suspend fun markSavedWorkoutUsed(id: Long, ts: Long)
+
+    @Query("DELETE FROM saved_workouts")
+    suspend fun clearAllSavedWorkouts()
 
     @Query("DELETE FROM saved_workouts WHERE id = :id")
     suspend fun deleteSavedWorkout(id: Long)
