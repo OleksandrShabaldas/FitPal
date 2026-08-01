@@ -1,5 +1,6 @@
 package com.fitpal.app.data.repository
 
+import com.fitpal.app.data.local.dao.ChallengeDao
 import com.fitpal.app.data.local.dao.TrailDao
 import com.fitpal.app.data.local.entity.TrailProjectEntity
 import com.fitpal.app.data.local.entity.TrailStateEntity
@@ -16,8 +17,10 @@ import com.fitpal.app.domain.Streaks
 import com.fitpal.app.domain.ThemeCatalog
 import com.fitpal.app.domain.TrailCatalog
 import com.fitpal.app.domain.TrailDisplay
+import com.fitpal.app.domain.TrailProgression
 import com.fitpal.app.domain.TrailProject
 import com.fitpal.app.domain.TrailRules
+import com.fitpal.app.domain.TutorialStep
 import com.fitpal.app.domain.model.FitnessGoal
 import kotlin.random.Random
 import kotlinx.coroutines.flow.Flow
@@ -39,6 +42,7 @@ import javax.inject.Singleton
 @Singleton
 class TrailRepository @Inject constructor(
     private val trailDao: TrailDao,
+    private val challengeDao: ChallengeDao,
     private val mealRepository: MealRepository,
     private val settingsRepository: SettingsRepository,
     private val weightRepository: WeightRepository,
@@ -101,17 +105,17 @@ class TrailRepository @Inject constructor(
         val today = LocalDate.now()
         val state = trailDao.getState() ?: TrailStateEntity().also { trailDao.upsertState(it) }
 
+        // First ever run: start the clock at yesterday so days before the trail existed can't
+        // penalise you — but don't stop there. If today is already logged we still want it to
+        // tick, so a brand-new player has something to collect immediately rather than an
+        // empty site until tomorrow.
         val lastEvaluated = state.lastEvaluatedDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
-        if (lastEvaluated == null) {
-            // First ever run: no retroactive penalty for days before the trail existed.
-            trailDao.upsertState(state.copy(lastEvaluatedDate = today.minusDays(1).format(fmt)))
-            return
-        }
+            ?: today.minusDays(1)
 
         val production = productionOf(trailDao.builtIds(), state.siteIndex)
         val ctx = goalContext()
         val loggedDates = mealRepository.getLoggedDatesDesc().first().toSet()
-        var s = state
+        var s = state.copy(lastEvaluatedDate = lastEvaluated.format(fmt))
 
         // ---- completed days ----
         val lastCompleted = today.minusDays(1)
@@ -175,6 +179,12 @@ class TrailRepository @Inject constructor(
     }
 
     // ---------------- Actions ----------------
+
+    /** Remember that a coach-mark has been shown, so it never appears twice. */
+    suspend fun markTutorialSeen(step: TutorialStep) {
+        val s = trailDao.getState() ?: return
+        trailDao.upsertState(s.copy(tutorialSeen = s.tutorialSeen or step.bit))
+    }
 
     /** Collect the banked pile. Doing it by hand is what pays ⭐. Returns what was collected. */
     suspend fun collect(): Long {
@@ -330,11 +340,12 @@ class TrailRepository @Inject constructor(
         val today = LocalDate.now()
         val todayIso = today.format(fmt)
 
-        // Bundle goal context + today's burn so the top-level combine stays within 5 flows.
+        // Bundle goal context + today's burn + claim count so the top-level combine stays at 5.
         val todayContext = combine(
             goalContextFlow(),
-            exerciseRepository.getTotalBurnedForDate(todayIso)
-        ) { ctx, burn -> ctx to burn }
+            exerciseRepository.getTotalBurnedForDate(todayIso),
+            challengeDao.observeClaimedCount()
+        ) { ctx, burn, claims -> Triple(ctx, burn, claims) }
 
         return combine(
             trailDao.observeState(),
@@ -342,7 +353,7 @@ class TrailRepository @Inject constructor(
             mealRepository.getDailyNutrition(todayIso),
             mealRepository.getLoggedDatesDesc(),
             todayContext
-        ) { stateOrNull, projectRows, todayNutrition, loggedDates, (ctx, burn) ->
+        ) { stateOrNull, projectRows, todayNutrition, loggedDates, (ctx, burn, claims) ->
             val s = stateOrNull ?: TrailStateEntity()
             val builtIds = projectRows.map { it.projectId }.toSet()
             val site = TrailCatalog.siteAt(s.siteIndex)
@@ -380,7 +391,12 @@ class TrailRepository @Inject constructor(
                 loggedToday = loggedToday,
                 onGoalToday = onGoalToday,
                 tickedToday = s.lastTickDate == todayIso,
-                themeId = s.activeTheme
+                themeId = s.activeTheme,
+                progression = TrailProgression(
+                    projectsBuilt = builtIds.size,
+                    challengesClaimed = claims,
+                    seenMask = s.tutorialSeen
+                )
             )
         }
     }

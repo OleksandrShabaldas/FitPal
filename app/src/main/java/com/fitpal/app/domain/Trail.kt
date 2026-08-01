@@ -297,7 +297,9 @@ data class TrailDisplay(
     val onGoalToday: Boolean,
     val tickedToday: Boolean,
     /** Equipped scene theme (see ThemeCatalog) — drives the diorama palette. */
-    val themeId: String = ThemeCatalog.DEFAULT_ID
+    val themeId: String = ThemeCatalog.DEFAULT_ID,
+    /** What's unlocked so far, and which coach-marks have been shown. */
+    val progression: TrailProgression = TrailProgression(0, 0, 0)
 ) {
     val builtCount: Int get() = projects.count { it.built }
     val totalCount: Int get() = projects.size

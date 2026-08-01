@@ -52,11 +52,17 @@ import com.fitpal.app.domain.SceneTheme
 import com.fitpal.app.domain.ShopState
 import com.fitpal.app.domain.ThemeCatalog
 import com.fitpal.app.domain.TrailDisplay
+import com.fitpal.app.domain.TrailFeature
 import com.fitpal.app.domain.TrailRules
+import com.fitpal.app.domain.TutorialText
+import com.fitpal.app.domain.nextTutorialStep
 import com.fitpal.app.ui.component.BackdropTheme
 import com.fitpal.app.ui.component.GlassTopBar
 import com.fitpal.app.ui.component.GradientBackdrop
 import com.fitpal.app.ui.component.SegmentedPills
+import com.fitpal.app.ui.component.SpotlightOverlay
+import com.fitpal.app.ui.component.rememberSpotlightState
+import com.fitpal.app.ui.component.spotlightTarget
 import com.fitpal.app.ui.theme.AccentGarden
 import com.fitpal.app.ui.theme.Cream
 import com.fitpal.app.ui.theme.CreamFaint
@@ -77,6 +83,8 @@ fun TrailScreen(
     val shop by viewModel.shop.collectAsStateWithLifecycle()
     val reward by viewModel.lastReward.collectAsStateWithLifecycle()
     var tab by rememberSaveable { mutableIntStateOf(0) }
+    val spotlight = rememberSpotlightState()
+    val step = display?.let { nextTutorialStep(it) }
 
     GradientBackdrop(theme = BackdropTheme.GARDEN) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -94,35 +102,55 @@ fun TrailScreen(
                         .padding(horizontal = 20.dp, vertical = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    val p = d.progression
                     val claimable = challenges.count { it.canClaim }
-                    SegmentedPills(
-                        labels = listOf(
-                            "Site",
-                            if (claimable > 0) "Tasks ($claimable)" else "Tasks",
-                            "Shop"
-                        ),
-                        selectedIndex = tab,
-                        accent = AccentGarden,
-                        onSelect = { tab = it }
-                    )
 
-                    when (tab) {
-                        0 -> {
+                    // Tabs appear one at a time as the game opens up.
+                    val tabs = buildList {
+                        add("Site")
+                        if (p.has(TrailFeature.TASKS)) {
+                            add(if (claimable > 0) "Tasks ($claimable)" else "Tasks")
+                        }
+                        if (p.has(TrailFeature.SHOP)) add("Shop")
+                    }
+                    val safeTab = tab.coerceAtMost(tabs.lastIndex)
+                    if (tabs.size > 1) {
+                        SegmentedPills(
+                            labels = tabs,
+                            selectedIndex = safeTab,
+                            accent = AccentGarden,
+                            onSelect = { tab = it },
+                            modifier = Modifier.spotlightTarget(spotlight, TutorialText.TARGET_TABS)
+                        )
+                    }
+
+                    when (tabs.getOrNull(safeTab)) {
+                        "Site" -> {
+                            if (p.has(TrailFeature.MAP)) {
+                                TrailMapCard(
+                                    d,
+                                    modifier = Modifier.spotlightTarget(spotlight, TutorialText.TARGET_MAP)
+                                )
+                            }
                             SiteCard(d)
-                            CollectCard(d, onCollect = viewModel::collect)
-                            ResourceRow(d)
-                            ProjectsCard(d, onBuild = { viewModel.build(it) }, onAdvance = viewModel::advanceSite)
-                        }
-                        1 -> {
-                            ResourceRow(d)
-                            ChallengesSection(
-                                challenges = challenges,
-                                checkingSlot = checking,
-                                onClaim = viewModel::claim,
-                                onCheck = viewModel::checkCreative
+                            CollectCard(
+                                d,
+                                onCollect = viewModel::collect,
+                                modifier = Modifier.spotlightTarget(spotlight, TutorialText.TARGET_COLLECT)
                             )
+                            ResourceRow(
+                                d,
+                                modifier = Modifier.spotlightTarget(spotlight, TutorialText.TARGET_VITALITY)
+                            )
+                            ProjectsCard(
+                                d,
+                                onBuild = { viewModel.build(it) },
+                                onAdvance = viewModel::advanceSite,
+                                modifier = Modifier.spotlightTarget(spotlight, TutorialText.TARGET_PROJECTS)
+                            )
+                            NextUnlockHint(p)
                         }
-                        else -> {
+                        else -> if (tabs.getOrNull(safeTab) == "Shop") {
                             ResourceRow(d)
                             shop?.let {
                                 ShopSection(
@@ -132,6 +160,14 @@ fun TrailScreen(
                                     onEquipTheme = viewModel::equipTheme
                                 )
                             }
+                        } else {
+                            ResourceRow(d)
+                            ChallengesSection(
+                                challenges = challenges,
+                                checkingSlot = checking,
+                                onClaim = viewModel::claim,
+                                onCheck = viewModel::checkCreative
+                            )
                         }
                     }
                     Spacer(Modifier.height(24.dp))
@@ -140,7 +176,40 @@ fun TrailScreen(
         }
     }
 
+    // Teach one thing at a time, only once each, and only when it becomes relevant.
+    // Held back while a reward dialog is up so two overlays never stack.
+    if (step != null && reward == null) {
+        val copy = TutorialText.of(step)
+        SpotlightOverlay(
+            state = spotlight,
+            targetId = copy.targetId,
+            title = copy.title,
+            body = copy.body,
+            onDismiss = { viewModel.dismissTutorial(step) }
+        )
+    }
+
     reward?.let { RewardDialog(it, onDismiss = viewModel::dismissReward) }
+}
+
+/** A quiet nudge toward whatever opens up next. */
+@Composable
+private fun NextUnlockHint(progression: com.fitpal.app.domain.TrailProgression) {
+    val label = progression.nextUnlockLabel() ?: return
+    val remaining = progression.projectsUntilNextUnlock()
+    val text = if (remaining > 0) {
+        "Restore $remaining more ${if (remaining == 1) "thing" else "things"} to open $label."
+    } else {
+        "Claim a challenge to open $label."
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth().glassSoft().padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text("🔒", fontSize = 14.sp)
+        Spacer(Modifier.width(10.dp))
+        Text(text, style = MaterialTheme.typography.bodySmall, color = CreamMuted)
+    }
 }
 
 // ======================== SITE + SCENE ========================
@@ -189,7 +258,7 @@ private fun SiteCard(d: TrailDisplay) {
 // ======================== COLLECT ========================
 
 @Composable
-private fun CollectCard(d: TrailDisplay, onCollect: () -> Unit) {
+private fun CollectCard(d: TrailDisplay, onCollect: () -> Unit, modifier: Modifier = Modifier) {
     val banked by animateFloatAsState(
         targetValue = d.bankedGrowth.toFloat(),
         animationSpec = tween(600),
@@ -198,7 +267,7 @@ private fun CollectCard(d: TrailDisplay, onCollect: () -> Unit) {
     val canCollect = d.canCollect
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .glass()
             .then(if (canCollect) Modifier.clickable(onClick = onCollect) else Modifier)
@@ -253,8 +322,8 @@ private fun CollectCard(d: TrailDisplay, onCollect: () -> Unit) {
 // ======================== RESOURCES ========================
 
 @Composable
-private fun ResourceRow(d: TrailDisplay) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+private fun ResourceRow(d: TrailDisplay, modifier: Modifier = Modifier) {
+    Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Stat(Modifier.weight(1f), "🌿", d.growth.toString(), "growth")
         Stat(Modifier.weight(1f), "💧", d.water.toString(), "water")
         Stat(Modifier.weight(1f), "⭐", d.points.toString(), "points")
@@ -615,9 +684,14 @@ private fun ChallengeCard(
 private fun ProjectsCard(
     d: TrailDisplay,
     onBuild: (com.fitpal.app.domain.TrailProject) -> Unit,
-    onAdvance: () -> Unit
+    onAdvance: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    Column(modifier = Modifier.fillMaxWidth().glass().padding(16.dp)) {
+    // Keystones cost ⭐, so they stay out of sight until challenges can actually supply it.
+    val showKeystones = d.progression.has(TrailFeature.KEYSTONES)
+    val visible = d.projects.filter { showKeystones || !it.project.isKeystone }
+
+    Column(modifier = modifier.fillMaxWidth().glass().padding(16.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -632,7 +706,7 @@ private fun ProjectsCard(
         }
         Spacer(Modifier.height(10.dp))
 
-        d.projects.forEach { pv ->
+        visible.forEach { pv ->
             ProjectRow(pv, onBuild)
             Spacer(Modifier.height(8.dp))
         }

@@ -11,6 +11,7 @@ import com.fitpal.app.domain.SceneTheme
 import com.fitpal.app.domain.ShopState
 import com.fitpal.app.domain.TrailDisplay
 import com.fitpal.app.domain.TrailProject
+import com.fitpal.app.domain.TutorialStep
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -103,4 +104,9 @@ class TrailViewModel @Inject constructor(
     }
 
     fun dismissReward() { _lastReward.value = null }
+
+    /** Mark a coach-mark as shown so it never appears again. */
+    fun dismissTutorial(step: TutorialStep) {
+        viewModelScope.launch { repository.markTutorialSeen(step) }
+    }
 }

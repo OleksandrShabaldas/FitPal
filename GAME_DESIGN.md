@@ -183,6 +183,40 @@ palettes — that's what keeps this bounded.
 
 All four phases built. The loop is closed: log → tick → collect → build → challenges → ⭐ → shop.
 
+- **E — map, gating & tutorial** ✅: trail map, one-mechanic-at-a-time unlocks, coach-marks.
+
+### Phase E notes
+
+**Nothing is available at the start any more.** Features unlock from real progress
+(`TrailProgression`), not a separate counter, so the state can't drift from what was actually
+done:
+
+| Feature | Unlocks at |
+|---|---|
+| Collect, projects | from the start |
+| **Map** | 1 project built |
+| **Tasks** | 3 projects built |
+| **Keystones** | with Tasks (they cost ⭐, which only challenges supply — showing them sooner is noise) |
+| **Shop** | 1 challenge claimed |
+
+Tabs literally don't exist until their feature unlocks, and a `NextUnlockHint` says what's coming.
+
+**Coach-marks** (`ui/component/Spotlight.kt`) dim the screen, punch a rounded hole around one
+element (`BlendMode.Clear` on an offscreen layer), ring it with a pulse and explain it. Elements
+opt in with `Modifier.spotlightTarget(state, id)`. Steps are ordered and shown once each, tracked
+by a bitmask in `trail_state.tutorialSeen` (**DB v22**) — and each fires only when it's *relevant*
+(collecting when there's something to collect; vitality the first time it actually drops), never
+as an upfront wall of text.
+
+**The map** (`TrailMap.kt`) is a winding road with a node per site: filled and haloed behind you,
+a pulsing gold node with a completion arc where you are, unlit markers ahead, and the walked
+section of road drawn brighter.
+
+**First-run bug found and fixed while wiring this:** `evaluate()` used to return early on the very
+first run, so today never ticked — a new player saw the welcome and then an empty site with
+nothing to collect until the next day. It now sets the clock to yesterday *and* continues, so an
+already-logged today pays out immediately.
+
 ### Phase A notes
 
 - **Region 1 is authored** — 6 sites, 64 projects, each with 2 ⭐-gated keystones. Costs are

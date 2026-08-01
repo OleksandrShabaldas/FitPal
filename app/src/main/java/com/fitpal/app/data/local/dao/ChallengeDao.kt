@@ -27,6 +27,10 @@ interface ChallengeDao {
     @Query("DELETE FROM challenges WHERE periodKey NOT IN (:keepKeys) AND claimedAt = 0 AND completedAt = 0")
     suspend fun pruneStale(keepKeys: List<String>)
 
+    /** How many challenges have ever been claimed — gates the shop unlock. */
+    @Query("SELECT COUNT(*) FROM challenges WHERE claimedAt > 0")
+    fun observeClaimedCount(): Flow<Int>
+
     @Query("DELETE FROM challenges")
     suspend fun clearAll()
 }

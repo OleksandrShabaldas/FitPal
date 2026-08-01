@@ -30,5 +30,7 @@ data class TrailStateEntity(
     /** Permanent multiplier carried across regions. */
     val legacyMultiplier: Float = 1.0f,
     /** Equipped scene theme id (see ThemeCatalog). */
-    val activeTheme: String = "meadow"
+    val activeTheme: String = "meadow",
+    /** Bitmask of tutorial coach-marks already shown (see TutorialStep). */
+    val tutorialSeen: Int = 0
 )
