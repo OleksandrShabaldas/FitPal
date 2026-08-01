@@ -32,6 +32,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fitpal.app.ui.component.AiSourceBadge
 import com.fitpal.app.ui.component.BackdropTheme
 import com.fitpal.app.ui.component.GlassTopBar
+import com.fitpal.app.ui.component.MarkdownText
 import com.fitpal.app.ui.component.GradientBackdrop
 import com.fitpal.app.ui.theme.Cream
 import com.fitpal.app.ui.theme.CreamMuted
@@ -97,7 +98,12 @@ fun AiReviewScreen(
                         }
                         Spacer(Modifier.height(12.dp))
                         Column(modifier = Modifier.fillMaxWidth().glass().padding(16.dp)) {
-                            Text(state.review!!, style = MaterialTheme.typography.bodyMedium, color = Cream)
+                            // The model writes Markdown — headings, bold, bullets. Render it.
+                            MarkdownText(
+                                markdown = state.review!!,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Cream
+                            )
                         }
                     }
 

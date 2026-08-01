@@ -54,10 +54,11 @@ fun UpdatePromptDialog(
                 )
                 if (update.releaseNotes.isNotBlank()) {
                     Spacer(Modifier.height(10.dp))
-                    Text(
-                        update.releaseNotes.lineSequence().take(10).joinToString("\n").trim(),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    // Release notes come from GitHub as Markdown — render it rather than
+                    // showing raw ** and ## to the user.
+                    MarkdownText(
+                        markdown = update.releaseNotes.lineSequence().take(14).joinToString("\n").trim(),
+                        style = MaterialTheme.typography.bodySmall
                     )
                 }
                 Spacer(Modifier.height(12.dp))

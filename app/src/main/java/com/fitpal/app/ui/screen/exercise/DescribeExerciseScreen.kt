@@ -43,6 +43,7 @@ import com.fitpal.app.ui.component.AiSourceBadge
 import com.fitpal.app.ui.component.BackdropTheme
 import com.fitpal.app.ui.component.GlassTopBar
 import com.fitpal.app.ui.component.GradientBackdrop
+import com.fitpal.app.ui.component.MarkdownText
 import com.fitpal.app.ui.theme.AccentGarden
 import com.fitpal.app.ui.theme.AccentTrends
 import com.fitpal.app.ui.theme.CalorieColor
@@ -194,7 +195,12 @@ fun DescribeExerciseScreen(
                             Text("Tips", style = MaterialTheme.typography.titleSmall, color = Cream)
                             Spacer(Modifier.height(4.dp))
                             est.suggestions.forEach { tip ->
-                                Text("• $tip", style = MaterialTheme.typography.bodySmall, color = CreamMuted, modifier = Modifier.padding(vertical = 2.dp))
+                                MarkdownText(
+                                    "• $tip",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = CreamMuted,
+                                    bulletColor = CreamMuted
+                                )
                             }
                         }
                     }

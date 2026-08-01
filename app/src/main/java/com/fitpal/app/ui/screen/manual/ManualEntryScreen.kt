@@ -48,10 +48,12 @@ import com.fitpal.app.ui.component.GradientBackdrop
 import com.fitpal.app.ui.component.MealTotalRow
 import com.fitpal.app.ui.component.MealTypeSelector
 import com.fitpal.app.ui.component.logDateLabel
+import androidx.compose.ui.text.font.FontWeight
 import com.fitpal.app.ui.theme.Cream
 import com.fitpal.app.ui.theme.CreamFaint
 import com.fitpal.app.ui.theme.CreamMuted
 import com.fitpal.app.ui.theme.GoldLight
+import com.fitpal.app.ui.theme.glassSoft
 
 @Composable
 fun ManualEntryScreen(
@@ -92,11 +94,36 @@ fun ManualEntryScreen(
                 singleLine = true
             )
 
+            // Search stays open while you add, so keep the meal-so-far visible and offer a
+            // way back to it.
+            if (state.searchResults.isNotEmpty() && state.draft.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 4.dp)
+                        .glassSoft()
+                        .clickable { viewModel.clearSearch() }
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "${state.draft.size} in your meal · ${state.totalCalories.toInt()} kcal",
+                        style = MaterialTheme.typography.labelLarge, color = Cream
+                    )
+                    Text("Done", style = MaterialTheme.typography.labelLarge, color = GoldLight)
+                }
+            }
+
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 when {
                     state.searchResults.isNotEmpty() -> LazyColumn(modifier = Modifier.fillMaxWidth()) {
                         items(state.searchResults, key = { it.fdcId }) { food ->
-                            SearchResultRow(food = food, onClick = { viewModel.addFood(food) })
+                            SearchResultRow(
+                                food = food,
+                                addedCount = state.draft.count { it.name == food.description },
+                                onClick = { viewModel.addFood(food) }
+                            )
                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                         }
                     }
@@ -166,7 +193,7 @@ fun ManualEntryScreen(
 }
 
 @Composable
-private fun SearchResultRow(food: UsdaFoodEntity, onClick: () -> Unit) {
+private fun SearchResultRow(food: UsdaFoodEntity, addedCount: Int, onClick: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -176,6 +203,16 @@ private fun SearchResultRow(food: UsdaFoodEntity, onClick: () -> Unit) {
             Text(
                 text = "${food.caloriesPer100g.toInt()} kcal / 100g" + (food.foodCategory?.let { " · $it" } ?: ""),
                 style = MaterialTheme.typography.labelMedium, color = CreamMuted
+            )
+        }
+        // Tapping again adds another helping — show how many are already in the meal.
+        if (addedCount > 0) {
+            Text(
+                "×$addedCount",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = GoldLight,
+                modifier = Modifier.padding(end = 10.dp)
             )
         }
         Icon(Icons.Default.Add, contentDescription = "Add ${food.description}", tint = GoldLight)

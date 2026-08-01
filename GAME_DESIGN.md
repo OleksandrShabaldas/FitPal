@@ -3,10 +3,12 @@
 The motivation layer. A small **restoration/journey game** (Gardenscapes-style *structure*,
 not its art) whose engine is powered by **real logging**, not by the clock.
 
-Status: **Phase A (engine) built.** B/C/D pending. Follow [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md) for all UI.
+Status: **Phases A–F built.** Follow [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md) for all UI.
 
-Code: `domain/Trail.kt` · `data/repository/TrailRepository.kt` · `data/local/{entity,dao}/Trail*`
-· `ui/screen/trail/` · DB **v18** (`MIGRATION_17_18`). Entry: the Home streak chip.
+Code: `domain/{Trail,TrailProgression,Challenges,TrailShop}.kt` ·
+`data/repository/{Trail,Challenge}Repository.kt` · `data/local/{entity,dao}/{Trail,Challenge}*` ·
+`ui/screen/trail/` · `ui/component/Spotlight.kt` · DB **v23** (`MIGRATION_17_18` … `22_23`).
+Entry: the Home streak chip.
 
 ---
 
@@ -184,6 +186,33 @@ palettes — that's what keeps this bounded.
 All four phases built. The loop is closed: log → tick → collect → build → challenges → ⭐ → shop.
 
 - **E — map, gating & tutorial** ✅: trail map, one-mechanic-at-a-time unlocks, coach-marks.
+- **F — build styles & a scene you can touch** ✅: three chosen designs per project, tap-to-find.
+
+### Phase F notes
+
+**Every build is a choice, and the choice is visible.** Each `PropKind` has **three named
+variants** (`PropVariants` in `domain/Trail.kt`) — e.g. a well is Fieldstone / Timber frame /
+Whitewashed. Tapping an affordable project opens `BuildDialog`, which draws all three with the
+real `drawProp` code (same function the diorama uses, so the preview can never lie), and the pick
+is persisted in `trail_projects.variantIndex` (**DB v23**). It's permanent on purpose: a choice
+you can undo isn't a choice.
+
+A variant changes **material tint *and* one structural feature** — the roof, the canopy, the rail.
+Recolours alone read as a skin; a different silhouette reads as a different build.
+
+**Finding the thing you fixed.** The old complaint was "I can't see the well being fixed", and it
+was fair: the scene was 200dp of small shapes with no way to connect a list row to a prop. Now:
+
+- the diorama is **260dp** and **tappable** — tap near a prop and it's ringed, named on the canvas,
+  and the rest of the scene dims to 35% so the eye lands on the right thing
+- **tapping a built row** does the same from the other direction, and the caption under the scene
+  names the style and its blurb
+- built rows carry a **thumbnail** drawn with the same `drawProp`, so the list stops being text
+- building something **auto-highlights it** — you close the dialog and immediately watch your
+  choice grow into the place it now lives
+
+`propPaletteFor(themeId, keystone)` is the single source of prop colours, shared by the scene, the
+previews and the thumbnails, so a bought theme changes all three at once.
 
 ### Phase E notes
 

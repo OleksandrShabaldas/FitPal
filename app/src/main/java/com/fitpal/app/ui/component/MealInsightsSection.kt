@@ -126,7 +126,12 @@ fun MealInsightsSection(insights: MealInsights, breakdown: List<HealthScorer.Dim
                         Column {
                             Text(swap.suggestion, style = MaterialTheme.typography.bodyMedium, color = ScoreGreen, fontWeight = FontWeight.SemiBold)
                             if (swap.benefit.isNotEmpty()) {
-                                Text(swap.benefit, style = MaterialTheme.typography.bodySmall, color = CreamMuted)
+                                // Models sometimes emphasise with **stars** — render it, don't show it.
+                                MarkdownText(
+                                    swap.benefit,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = CreamMuted
+                                )
                             }
                         }
                     }
@@ -151,7 +156,12 @@ fun MealInsightsSection(insights: MealInsights, breakdown: List<HealthScorer.Dim
                 Text("Goes well with", style = MaterialTheme.typography.titleSmall, color = Cream)
                 Spacer(Modifier.height(8.dp))
                 insights.pairingRecommendations.forEach { suggestion ->
-                    Text("•  $suggestion", style = MaterialTheme.typography.bodyMedium, color = CreamMuted, modifier = Modifier.padding(vertical = 2.dp))
+                    MarkdownText(
+                        "• $suggestion",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = CreamMuted,
+                        bulletColor = CreamMuted
+                    )
                 }
             }
         }
@@ -187,7 +197,7 @@ private fun ImpactMeter(label: String, score: Int, text: String) {
     }
     if (text.isNotBlank()) {
         Spacer(Modifier.height(6.dp))
-        Text(text, style = MaterialTheme.typography.bodyMedium, color = CreamMuted)
+        MarkdownText(text, style = MaterialTheme.typography.bodyMedium, color = CreamMuted)
     }
 }
 

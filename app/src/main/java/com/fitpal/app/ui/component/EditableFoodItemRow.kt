@@ -10,10 +10,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -119,15 +122,32 @@ fun EditableFoodItemRow(
                 )
             }
 
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(4.dp))
+
+            // Step the amount without opening the keyboard — the common case is nudging,
+            // not typing an exact number.
+            val step = if (unit == "ml") 25f else 10f
+            StepButton(
+                icon = Icons.Default.Remove,
+                description = "Less ${ingredient.name}",
+                enabled = ingredient.grams > 0f,
+                onClick = { onGramsChanged((ingredient.grams - step).coerceAtLeast(0f)) }
+            )
 
             // Editable grams — clears to empty (not "0"), commits live.
             GramsField(
                 grams = ingredient.grams,
                 onGramsChanged = onGramsChanged,
-                modifier = Modifier.width(96.dp),
+                modifier = Modifier.width(88.dp),
                 unit = unit,
                 commitZero = true
+            )
+
+            StepButton(
+                icon = Icons.Default.Add,
+                description = "More ${ingredient.name}",
+                enabled = true,
+                onClick = { onGramsChanged(ingredient.grams + step) }
             )
 
             if (onSave != null) {
@@ -160,6 +180,24 @@ fun EditableFoodItemRow(
                 }
             }
         }
+    }
+}
+
+/** A small round +/− next to the amount field. */
+@Composable
+private fun StepButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    description: String,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(34.dp)) {
+        Icon(
+            icon,
+            contentDescription = description,
+            modifier = Modifier.size(18.dp),
+            tint = if (enabled) GoldLight else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+        )
     }
 }
 

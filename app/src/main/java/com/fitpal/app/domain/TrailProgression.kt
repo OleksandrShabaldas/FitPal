@@ -129,8 +129,9 @@ object TutorialText {
         )
         TutorialStep.BUILD -> TutorialCopy(
             "Now fix something",
-            "Spend growth to restore this place, one job at a time. Everything you build keeps " +
-                "producing forever, so the next one comes faster.",
+            "Spend growth to restore this place, one job at a time — you pick how each one is " +
+                "built, and it stands there for good. Everything you build keeps producing " +
+                "forever, so the next one comes faster.",
             TARGET_PROJECTS
         )
         TutorialStep.MAP_UNLOCKED -> TutorialCopy(

@@ -9,6 +9,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
@@ -21,6 +22,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import com.fitpal.app.domain.TrailDisplay
 import com.fitpal.app.ui.theme.AccentGarden
@@ -68,10 +71,19 @@ private fun slotFor(index: Int, total: Int): Slot {
     )
 }
 
+/**
+ * @param highlightId project to single out — its prop gets a ring and a name label, and the
+ *   rest of the scene steps back. This is how tapping a row in the list answers "which one
+ *   is the well I just fixed?".
+ * @param onPropTap fired with a built project's id when you tap near its prop, so the scene
+ *   is something you can poke at rather than only look at.
+ */
 @Composable
 fun TrailScene(
     display: TrailDisplay,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    highlightId: String? = null,
+    onPropTap: (String) -> Unit = {}
 ) {
     val projects = display.projects
     val overgrowth = display.overgrowth
@@ -112,7 +124,31 @@ fun TrailScene(
         stone = Cream.copy(alpha = 0.40f)
     )
 
-    Canvas(modifier = modifier.fillMaxWidth().height(200.dp)) {
+    val tappable = modifier
+        .fillMaxWidth()
+        .height(260.dp)
+        .pointerInput(projects.size) {
+            detectTapGestures { tap ->
+                val w = size.width.toFloat()
+                val h = size.height.toFloat()
+                var bestId: String? = null
+                var bestDistance = Float.MAX_VALUE
+                projects.forEachIndexed { i, pv ->
+                    if (!pv.built) return@forEachIndexed
+                    val slot = slotFor(i, projects.size)
+                    val u = h * 0.13f * slot.depth
+                    val centre = Offset(w * slot.x, h * slot.y - u * 0.5f)
+                    val d = (centre - tap).getDistance()
+                    if (d < bestDistance) {
+                        bestDistance = d
+                        bestId = pv.project.id
+                    }
+                }
+                bestId?.let { if (bestDistance < h * 0.22f) onPropTap(it) }
+            }
+        }
+
+    Canvas(modifier = tappable) {
         val w = size.width
         val h = size.height
 
@@ -121,6 +157,7 @@ fun TrailScene(
 
         // Back-to-front so nearer props overlap the far ones.
         val order = projects.indices.sortedBy { slotFor(it, projects.size).y }
+        val highlighting = highlightId != null && projects.any { it.project.id == highlightId && it.built }
 
         order.forEach { i ->
             val pv = projects[i]
@@ -135,11 +172,14 @@ fun TrailScene(
             val ground = Offset(w * slot.x + drift, h * slot.y)
 
             val keystone = pv.project.isKeystone
+            val picked = pv.project.id == highlightId
             val propPalette = if (keystone)
                 palette.copy(glow = lerpColor(theme.keystone, Color(0xFF7A6A45), overgrowth * 0.8f))
             else palette
-            // Depth haze: things further back read fainter.
-            val depthAlpha = (0.55f + 0.45f * slot.depth) * lifeFade * a
+            // Depth haze: things further back read fainter. When one prop is picked out,
+            // everything else steps back so the eye lands on the right thing.
+            var depthAlpha = (0.55f + 0.45f * slot.depth) * lifeFade * a
+            if (highlighting && !picked) depthAlpha *= 0.35f
 
             if (keystone) {
                 drawCircle(
@@ -148,11 +188,40 @@ fun TrailScene(
                     center = Offset(ground.x, ground.y - u * 0.7f)
                 )
             }
-            drawProp(pv.project.prop, ground, u, depthAlpha, propPalette)
+            if (picked) {
+                drawCircle(
+                    color = theme.glow.copy(alpha = 0.13f * pulse),
+                    radius = u * 1.7f,
+                    center = Offset(ground.x, ground.y - u * 0.6f)
+                )
+                drawCircle(
+                    color = theme.glow.copy(alpha = 0.55f),
+                    radius = u * 1.45f * pulse,
+                    center = Offset(ground.x, ground.y - u * 0.6f),
+                    style = Stroke(width = h * 0.006f)
+                )
+            }
+            drawProp(pv.project.prop, ground, u, depthAlpha, propPalette, pv.variantIndex)
+
+            if (picked) drawPropLabel(pv.project.name, ground, u, h)
         }
 
         if (overgrowth > 0.02f) drawOvergrowth(w, h, overgrowth)
     }
+}
+
+/** Names the highlighted prop right under it, so the list row and the scene line up. */
+private fun DrawScope.drawPropLabel(name: String, ground: Offset, u: Float, h: Float) {
+    val paint = android.graphics.Paint().apply {
+        textSize = h * 0.052f
+        textAlign = android.graphics.Paint.Align.CENTER
+        isAntiAlias = true
+        color = android.graphics.Color.WHITE
+        alpha = 225
+        setShadowLayer(h * 0.02f, 0f, 0f, android.graphics.Color.BLACK)
+    }
+    val short = if (name.length > 22) name.take(21) + "…" else name
+    drawContext.canvas.nativeCanvas.drawText(short, ground.x, ground.y + h * 0.07f, paint)
 }
 
 /** Faint marker for a project not yet built — a place waiting for something. */
@@ -247,6 +316,20 @@ data class ScenePalette(
     val keystone: Color,
     val path: Color
 )
+
+/**
+ * The prop colours for a theme at full health. The scene dims these as vitality drops;
+ * the build previews use them straight, so you see what you're choosing at its best.
+ */
+fun propPaletteFor(themeId: String, keystone: Boolean = false): PropPalette {
+    val t = themePalette(themeId)
+    return PropPalette(
+        leaf = t.leaf,
+        structure = Cream.copy(alpha = 0.55f),
+        glow = if (keystone) t.keystone else t.glow,
+        stone = Cream.copy(alpha = 0.40f)
+    )
+}
 
 fun themePalette(themeId: String): ScenePalette = when (themeId) {
     "dusk" -> ScenePalette(

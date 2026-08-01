@@ -97,13 +97,15 @@ class ManualEntryViewModel @Inject constructor(
             waterMlPer100g = if (drink) com.fitpal.app.domain.Drinks.estimateWaterPer100(food.carbsPer100g, food.proteinPer100g, food.fatPer100g) else 0f,
             isDrink = drink
         )
-        _uiState.update {
-            it.copy(
-                draft = it.draft + ingredient,
-                query = "",
-                searchResults = emptyList()
-            )
-        }
+        // Keep the query and results so the same food can be tapped again for a second
+        // helping — clearing them forced a re-search for every extra portion.
+        _uiState.update { it.copy(draft = it.draft + ingredient) }
+    }
+
+    /** Dismiss the search results to get back to the meal you're building. */
+    fun clearSearch() {
+        searchJob?.cancel()
+        _uiState.update { it.copy(query = "", searchResults = emptyList()) }
     }
 
     fun updateGrams(index: Int, newGrams: Float) {

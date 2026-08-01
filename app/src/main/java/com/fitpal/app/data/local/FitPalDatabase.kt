@@ -47,7 +47,7 @@ import com.fitpal.app.data.local.entity.WeightEntryEntity
         UsdaFoodEntity::class,
         WeightEntryEntity::class
     ],
-    version = 22,
+    version = 23,
     exportSchema = true
 )
 abstract class FitPalDatabase : RoomDatabase() {
@@ -376,6 +376,13 @@ abstract class FitPalDatabase : RoomDatabase() {
         val MIGRATION_21_22 = object : Migration(21, 22) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE trail_state ADD COLUMN tutorialSeen INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        /** v22 -> v23: which style the player chose for each restoration project. */
+        val MIGRATION_22_23 = object : Migration(22, 23) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE trail_projects ADD COLUMN variantIndex INTEGER NOT NULL DEFAULT 0")
             }
         }
     }

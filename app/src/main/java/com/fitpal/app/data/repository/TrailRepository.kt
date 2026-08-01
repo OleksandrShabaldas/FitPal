@@ -201,8 +201,8 @@ class TrailRepository @Inject constructor(
         return amount
     }
 
-    /** Build a project if it's affordable and not already built. */
-    suspend fun build(project: TrailProject): Boolean {
+    /** Build a project in the chosen style, if it's affordable and not already built. */
+    suspend fun build(project: TrailProject, variantIndex: Int = 0): Boolean {
         val s = trailDao.getState() ?: return false
         if (trailDao.builtIds().contains(project.id)) return false
         if (s.growth < project.cost) return false
@@ -210,7 +210,7 @@ class TrailRepository @Inject constructor(
         trailDao.upsertState(
             s.copy(growth = s.growth - project.cost, points = s.points - project.pointCost)
         )
-        trailDao.addProject(TrailProjectEntity(project.id))
+        trailDao.addProject(TrailProjectEntity(project.id, variantIndex = variantIndex.coerceIn(0, 2)))
         return true
     }
 
@@ -356,6 +356,7 @@ class TrailRepository @Inject constructor(
         ) { stateOrNull, projectRows, todayNutrition, loggedDates, (ctx, burn, claims) ->
             val s = stateOrNull ?: TrailStateEntity()
             val builtIds = projectRows.map { it.projectId }.toSet()
+            val variantById = projectRows.associate { it.projectId to it.variantIndex }
             val site = TrailCatalog.siteAt(s.siteIndex)
             val production = productionOf(builtIds, s.siteIndex)
 
@@ -374,7 +375,8 @@ class TrailRepository @Inject constructor(
                     ProjectView(
                         project = p,
                         built = builtIds.contains(p.id),
-                        affordable = s.growth >= p.cost && s.points >= p.pointCost
+                        affordable = s.growth >= p.cost && s.points >= p.pointCost,
+                        variantIndex = variantById[p.id] ?: 0
                     )
                 },
                 growth = s.growth,

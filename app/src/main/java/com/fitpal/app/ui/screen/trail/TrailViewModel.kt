@@ -79,8 +79,8 @@ class TrailViewModel @Inject constructor(
 
     fun dismissCollected() { _justCollected.value = 0L }
 
-    fun build(project: TrailProject) {
-        viewModelScope.launch { repository.build(project) }
+    fun build(project: TrailProject, variantIndex: Int = 0) {
+        viewModelScope.launch { repository.build(project, variantIndex) }
     }
 
     fun advanceSite() {

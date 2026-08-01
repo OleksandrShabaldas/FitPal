@@ -25,6 +25,120 @@ enum class PropKind {
     POND, BRIDGE, ARCH, BENCH
 }
 
+/**
+ * Every project is built in one of three styles, chosen by the player. The choice is purely
+ * cosmetic — it never affects production — but it's what turns "tap to spend growth" into
+ * "this is *my* well", which is the whole point of a place you're restoring.
+ *
+ * Variant 0/1/2 changes both the material palette and one structural feature of the drawing
+ * (see `TrailProps.kt`), so the three read as genuinely different builds rather than recolours.
+ */
+data class PropVariant(val name: String, val blurb: String)
+
+object PropVariants {
+    /** Three named styles per prop kind. Index matches `TrailProjectEntity.variantIndex`. */
+    fun of(kind: PropKind): List<PropVariant> = when (kind) {
+        PropKind.WELL -> listOf(
+            PropVariant("Fieldstone", "Rough local stone, mossy at the base"),
+            PropVariant("Timber frame", "Oak posts and a shingled cap"),
+            PropVariant("Whitewashed", "Lime-washed and tidy")
+        )
+        PropKind.SHED -> listOf(
+            PropVariant("Weatherboard", "Plain planks, steep roof"),
+            PropVariant("Stone bothy", "Thick walls, low and solid"),
+            PropVariant("Lean-to", "Simple slanted roof against the hill")
+        )
+        PropKind.GREENHOUSE -> listOf(
+            PropVariant("Victorian", "Tall peak, fine glazing bars"),
+            PropVariant("Cold frame", "Low, wide and practical"),
+            PropVariant("Iron & glass", "Dark frame, big panes")
+        )
+        PropKind.TREE -> listOf(
+            PropVariant("Orchard apple", "Broad and low, made for picking"),
+            PropVariant("Wild cherry", "Slender, blossom-heavy"),
+            PropVariant("Old oak", "Wide crown, been here longest")
+        )
+        PropKind.FENCE -> listOf(
+            PropVariant("Picket", "Painted uprights, neat"),
+            PropVariant("Post & rail", "Two long rails, farm-style"),
+            PropVariant("Drystone", "No mortar, just patience")
+        )
+        PropKind.LANTERN -> listOf(
+            PropVariant("Iron hook", "A single lamp on a shepherd's crook"),
+            PropVariant("Glass globe", "Round and warm"),
+            PropVariant("Paper lamp", "Soft, wide, festival-ish")
+        )
+        PropKind.BENCH -> listOf(
+            PropVariant("Plank bench", "Two boards and four legs"),
+            PropVariant("Carved", "Backrest with a pattern cut in"),
+            PropVariant("Stone seat", "Cool, heavy, permanent")
+        )
+        PropKind.POND -> listOf(
+            PropVariant("Natural pool", "Soft edges, reeds"),
+            PropVariant("Stone basin", "Cut rim, still water"),
+            PropVariant("Rill", "A narrow channel running through")
+        )
+        PropKind.ARCH -> listOf(
+            PropVariant("Stone arch", "Heavy keystone"),
+            PropVariant("Iron hoop", "Thin, for climbing roses"),
+            PropVariant("Timber gate", "Squared posts and a lintel")
+        )
+        PropKind.BRIDGE -> listOf(
+            PropVariant("Humpback", "A high stone curve"),
+            PropVariant("Plank crossing", "Flat boards and a rope rail"),
+            PropVariant("Clapper", "Slabs laid straight across")
+        )
+        PropKind.HIVE -> listOf(
+            PropVariant("National", "Square boxes, stacked"),
+            PropVariant("Skep", "Woven straw dome"),
+            PropVariant("Top-bar", "Long and low")
+        )
+        PropKind.FLOWERS -> listOf(
+            PropVariant("Cottage mix", "Whatever seeds were in the tin"),
+            PropVariant("Wildflower", "Loose and meadowy"),
+            PropVariant("Formal beds", "Planted in rows")
+        )
+        PropKind.HERBS -> listOf(
+            PropVariant("Kitchen herbs", "Thyme, sage, the useful ones"),
+            PropVariant("Lavender", "Silver-grey and humming"),
+            PropVariant("Climbing vine", "Trained up whatever's nearest")
+        )
+        PropKind.SPROUTS -> listOf(
+            PropVariant("Seed rows", "Straight drills, labelled"),
+            PropVariant("Broadcast", "Scattered by hand"),
+            PropVariant("Raised bed", "Boxed in and mounded")
+        )
+        PropKind.SOIL -> listOf(
+            PropVariant("Turned over", "Fresh dark furrows"),
+            PropVariant("Mulched", "Covered and resting"),
+            PropVariant("Terraced", "Stepped into the slope")
+        )
+        PropKind.PATH -> listOf(
+            PropVariant("Stepping stones", "Set into the grass"),
+            PropVariant("Gravel", "Crunches underfoot"),
+            PropVariant("Brick", "Laid in a herringbone")
+        )
+        PropKind.STONE -> listOf(
+            PropVariant("Cairn", "Stacked, marking the way"),
+            PropVariant("Cleared pile", "Hauled aside and left"),
+            PropVariant("Standing stone", "One upright, deliberate")
+        )
+        PropKind.POST -> listOf(
+            PropVariant("Waymarker", "Painted top, points onward"),
+            PropVariant("Bird table", "A little roof and a ledge"),
+            PropVariant("Signpost", "Two arms, no writing left")
+        )
+        PropKind.BIN -> listOf(
+            PropVariant("Slatted", "Air gets through"),
+            PropVariant("Barrel", "Round, lidded"),
+            PropVariant("Woven", "Hazel, made on site")
+        )
+    }
+
+    fun nameOf(kind: PropKind, index: Int): String =
+        of(kind).getOrNull(index)?.name ?: of(kind).first().name
+}
+
 /** One restoration job at a Site. Keystones cost ⭐ and pay triple production. */
 data class TrailProject(
     val id: String,
@@ -275,8 +389,12 @@ object TrailCatalog {
 data class ProjectView(
     val project: TrailProject,
     val built: Boolean,
-    val affordable: Boolean
-)
+    val affordable: Boolean,
+    /** The style chosen when it was built (0 until then). */
+    val variantIndex: Int = 0
+) {
+    val variantName: String get() = PropVariants.nameOf(project.prop, variantIndex)
+}
 
 /** Everything the Trail screen renders. */
 data class TrailDisplay(

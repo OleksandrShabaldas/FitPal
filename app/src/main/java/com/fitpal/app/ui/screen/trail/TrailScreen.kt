@@ -28,16 +28,20 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fitpal.app.domain.CaseCatalog
@@ -48,11 +52,13 @@ import com.fitpal.app.domain.Curio
 import com.fitpal.app.domain.CurioCatalog
 import com.fitpal.app.domain.CurioRarity
 import com.fitpal.app.domain.ProjectView
+import com.fitpal.app.domain.PropVariants
 import com.fitpal.app.domain.SceneTheme
 import com.fitpal.app.domain.ShopState
 import com.fitpal.app.domain.ThemeCatalog
 import com.fitpal.app.domain.TrailDisplay
 import com.fitpal.app.domain.TrailFeature
+import com.fitpal.app.domain.TrailProject
 import com.fitpal.app.domain.TrailRules
 import com.fitpal.app.domain.TutorialText
 import com.fitpal.app.domain.nextTutorialStep
@@ -85,6 +91,10 @@ fun TrailScreen(
     var tab by rememberSaveable { mutableIntStateOf(0) }
     val spotlight = rememberSpotlightState()
     val step = display?.let { nextTutorialStep(it) }
+
+    // Which prop the scene should point at, and which build we're choosing a style for.
+    var highlightId by rememberSaveable { mutableStateOf<String?>(null) }
+    var choosing by remember { mutableStateOf<TrailProject?>(null) }
 
     GradientBackdrop(theme = BackdropTheme.GARDEN) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -132,7 +142,11 @@ fun TrailScreen(
                                     modifier = Modifier.spotlightTarget(spotlight, TutorialText.TARGET_MAP)
                                 )
                             }
-                            SiteCard(d)
+                            SiteCard(
+                                d = d,
+                                highlightId = highlightId,
+                                onPropTap = { id -> highlightId = if (highlightId == id) null else id }
+                            )
                             CollectCard(
                                 d,
                                 onCollect = viewModel::collect,
@@ -144,8 +158,13 @@ fun TrailScreen(
                             )
                             ProjectsCard(
                                 d,
-                                onBuild = { viewModel.build(it) },
-                                onAdvance = viewModel::advanceSite,
+                                highlightId = highlightId,
+                                onChoose = { choosing = it },
+                                onShow = { id -> highlightId = if (highlightId == id) null else id },
+                                onAdvance = {
+                                    highlightId = null
+                                    viewModel.advanceSite()
+                                },
                                 modifier = Modifier.spotlightTarget(spotlight, TutorialText.TARGET_PROJECTS)
                             )
                             NextUnlockHint(p)
@@ -176,9 +195,23 @@ fun TrailScreen(
         }
     }
 
+    // Picking the style is the moment the build becomes yours, so it gets the screen.
+    choosing?.let { project ->
+        BuildDialog(
+            project = project,
+            themeId = display?.themeId ?: "",
+            onDismiss = { choosing = null },
+            onBuild = { variant ->
+                viewModel.build(project, variant)
+                highlightId = project.id   // show them the thing they just made
+                choosing = null
+            }
+        )
+    }
+
     // Teach one thing at a time, only once each, and only when it becomes relevant.
     // Held back while a reward dialog is up so two overlays never stack.
-    if (step != null && reward == null) {
+    if (step != null && reward == null && choosing == null) {
         val copy = TutorialText.of(step)
         SpotlightOverlay(
             state = spotlight,
@@ -214,12 +247,9 @@ private fun NextUnlockHint(progression: com.fitpal.app.domain.TrailProgression) 
 
 // ======================== SITE + SCENE ========================
 
-/**
- * Phase-A scene: a simple lit strip — a horizon, and one slot per project that fills
- * in as you build. Phase B replaces this with the full diorama.
- */
+/** The site itself: name, health, and the diorama of everything standing there. */
 @Composable
-private fun SiteCard(d: TrailDisplay) {
+private fun SiteCard(d: TrailDisplay, highlightId: String?, onPropTap: (String) -> Unit) {
     Column(modifier = Modifier.fillMaxWidth().glass().padding(16.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -243,15 +273,31 @@ private fun SiteCard(d: TrailDisplay) {
         Text(d.site.blurb, style = MaterialTheme.typography.bodySmall, color = CreamMuted)
 
         Spacer(Modifier.height(14.dp))
-        TrailScene(d)
+        TrailScene(d, highlightId = highlightId, onPropTap = onPropTap)
         Spacer(Modifier.height(10.dp))
 
-        Text(
-            text = "${d.builtCount} of ${d.totalCount} restored" +
-                if (d.requiredRemaining > 0) " · ${d.requiredRemaining} to move on" else " · ready to move on",
-            style = MaterialTheme.typography.bodySmall,
-            color = CreamMuted
-        )
+        // Tap anything standing here and it tells you what it is.
+        val shown = d.projects.firstOrNull { it.project.id == highlightId && it.built }
+        if (shown != null) {
+            Text(
+                text = "${shown.project.name} · ${shown.variantName.lowercase()}",
+                style = MaterialTheme.typography.bodySmall,
+                color = Cream
+            )
+            Text(
+                text = PropVariants.of(shown.project.prop)
+                    .getOrNull(shown.variantIndex)?.blurb.orEmpty(),
+                style = MaterialTheme.typography.labelSmall,
+                color = CreamFaint
+            )
+        } else {
+            Text(
+                text = "${d.builtCount} of ${d.totalCount} restored" +
+                    if (d.requiredRemaining > 0) " · ${d.requiredRemaining} to move on" else " · ready to move on",
+                style = MaterialTheme.typography.bodySmall,
+                color = CreamMuted
+            )
+        }
     }
 }
 
@@ -683,7 +729,9 @@ private fun ChallengeCard(
 @Composable
 private fun ProjectsCard(
     d: TrailDisplay,
-    onBuild: (com.fitpal.app.domain.TrailProject) -> Unit,
+    highlightId: String?,
+    onChoose: (TrailProject) -> Unit,
+    onShow: (String) -> Unit,
     onAdvance: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -707,7 +755,13 @@ private fun ProjectsCard(
         Spacer(Modifier.height(10.dp))
 
         visible.forEach { pv ->
-            ProjectRow(pv, onBuild)
+            ProjectRow(
+                pv = pv,
+                themeId = d.themeId,
+                highlighted = pv.project.id == highlightId,
+                onChoose = onChoose,
+                onShow = onShow
+            )
             Spacer(Modifier.height(8.dp))
         }
 
@@ -733,7 +787,13 @@ private fun ProjectsCard(
 }
 
 @Composable
-private fun ProjectRow(pv: ProjectView, onBuild: (com.fitpal.app.domain.TrailProject) -> Unit) {
+private fun ProjectRow(
+    pv: ProjectView,
+    themeId: String,
+    highlighted: Boolean,
+    onChoose: (TrailProject) -> Unit,
+    onShow: (String) -> Unit
+) {
     val p = pv.project
     val keystone = p.isKeystone
     val accent = if (keystone) Gold else AccentGarden
@@ -742,20 +802,29 @@ private fun ProjectRow(pv: ProjectView, onBuild: (com.fitpal.app.domain.TrailPro
         modifier = Modifier
             .fillMaxWidth()
             .glassSoft()
-            .then(if (!pv.built && pv.affordable) Modifier.clickable { onBuild(p) } else Modifier)
+            .then(
+                when {
+                    // Built: tap to find it in the scene above.
+                    pv.built -> Modifier.clickable { onShow(p.id) }
+                    pv.affordable -> Modifier.clickable { onChoose(p) }
+                    else -> Modifier
+                }
+            )
             .padding(horizontal = 14.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier.size(8.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Canvas(Modifier.size(8.dp)) {
-                if (pv.built) drawCircle(accent)
-                else drawCircle(Color.White.copy(alpha = 0.22f), style = Stroke(width = 1.5f))
+        // Built things show a small drawing of the exact style you chose; unbuilt ones
+        // are still just an empty marker.
+        if (pv.built) {
+            PropThumb(pv, themeId, size = 30.dp)
+        } else {
+            Box(modifier = Modifier.size(30.dp), contentAlignment = Alignment.Center) {
+                Canvas(Modifier.size(9.dp)) {
+                    drawCircle(Color.White.copy(alpha = 0.22f), style = Stroke(width = 1.5f))
+                }
             }
         }
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(10.dp))
 
         Column(modifier = Modifier.weight(1f)) {
             Text(
@@ -763,15 +832,29 @@ private fun ProjectRow(pv: ProjectView, onBuild: (com.fitpal.app.domain.TrailPro
                 style = MaterialTheme.typography.bodyMedium,
                 color = if (pv.built) CreamMuted else Cream
             )
-            if (keystone && !pv.built) {
-                Text("Keystone", style = MaterialTheme.typography.labelSmall, color = Gold)
+            when {
+                pv.built -> Text(
+                    pv.variantName,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (highlighted) accent else CreamFaint
+                )
+                keystone -> Text("Keystone", style = MaterialTheme.typography.labelSmall, color = Gold)
+                pv.affordable -> Text(
+                    "Choose a style",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = AccentGarden
+                )
             }
         }
 
         Spacer(Modifier.width(10.dp))
 
         if (pv.built) {
-            Text("Restored", style = MaterialTheme.typography.labelMedium, color = accent)
+            Text(
+                text = if (highlighted) "Showing" else "Restored",
+                style = MaterialTheme.typography.labelMedium,
+                color = if (highlighted) accent else CreamFaint
+            )
         } else {
             Column(horizontalAlignment = Alignment.End) {
                 Text(
@@ -786,6 +869,160 @@ private fun ProjectRow(pv: ProjectView, onBuild: (com.fitpal.app.domain.TrailPro
                         style = MaterialTheme.typography.labelSmall,
                         color = if (pv.affordable) Gold else CreamFaint
                     )
+                }
+            }
+        }
+    }
+}
+
+/** A tiny portrait of one prop, drawn the same way the diorama draws it. */
+@Composable
+private fun PropThumb(pv: ProjectView, themeId: String, size: androidx.compose.ui.unit.Dp) {
+    val palette = propPaletteFor(themeId, pv.project.isKeystone)
+    Canvas(Modifier.size(size)) {
+        drawProp(
+            kind = pv.project.prop,
+            ground = Offset(this.size.width / 2f, this.size.height * 0.88f),
+            u = this.size.height * 0.42f,
+            alpha = 1f,
+            palette = palette,
+            variant = pv.variantIndex
+        )
+    }
+}
+
+// ======================== BUILD CHOOSER ========================
+
+/**
+ * Choosing how a thing gets built. Three drawn options, and the one you pick is the one
+ * that stands in the scene from then on — the point is that your site ends up looking
+ * like *yours*, not like everyone else's.
+ */
+@Composable
+private fun BuildDialog(
+    project: TrailProject,
+    themeId: String,
+    onDismiss: () -> Unit,
+    onBuild: (Int) -> Unit
+) {
+    var picked by remember { mutableIntStateOf(0) }
+    val variants = PropVariants.of(project.prop)
+    val palette = propPaletteFor(themeId, project.isKeystone)
+    val accent = if (project.isKeystone) Gold else AccentGarden
+
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .glass()
+                .padding(20.dp)
+        ) {
+            Text(
+                text = "BUILD",
+                style = MaterialTheme.typography.labelSmall,
+                color = CreamFaint
+            )
+            Text(project.name, style = MaterialTheme.typography.headlineSmall, color = Cream)
+            Text(
+                "Pick how it's made. You can't change it later.",
+                style = MaterialTheme.typography.bodySmall,
+                color = CreamMuted
+            )
+
+            Spacer(Modifier.height(14.dp))
+
+            variants.forEachIndexed { index, variant ->
+                val selected = index == picked
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .glassSoft()
+                        .clickable { picked = index }
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier.size(56.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Canvas(Modifier.size(56.dp)) {
+                            if (selected) {
+                                drawCircle(
+                                    color = accent.copy(alpha = 0.12f),
+                                    radius = size.minDimension * 0.46f
+                                )
+                            }
+                            drawProp(
+                                kind = project.prop,
+                                ground = Offset(size.width / 2f, size.height * 0.86f),
+                                u = size.height * 0.40f,
+                                alpha = if (selected) 1f else 0.6f,
+                                palette = palette,
+                                variant = index
+                            )
+                        }
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            variant.name,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                            color = if (selected) Cream else CreamMuted
+                        )
+                        Text(
+                            variant.blurb,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = CreamFaint
+                        )
+                    }
+                    if (selected) {
+                        Spacer(Modifier.width(8.dp))
+                        Text("✓", color = accent, fontSize = 15.sp)
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+            }
+
+            Spacer(Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        "${project.cost} 🌿",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Cream
+                    )
+                    if (project.isKeystone) {
+                        Text(
+                            "${project.pointCost} ⭐",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Gold
+                        )
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = onDismiss) {
+                        Text("Not yet", color = CreamMuted)
+                    }
+                    Spacer(Modifier.width(4.dp))
+                    Box(
+                        modifier = Modifier
+                            .glassSoft(RoundedCornerShape(50))
+                            .clickable { onBuild(picked) }
+                            .padding(horizontal = 22.dp, vertical = 11.dp)
+                    ) {
+                        Text(
+                            "Build it",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = accent
+                        )
+                    }
                 }
             }
         }

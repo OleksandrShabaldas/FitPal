@@ -71,6 +71,7 @@ import com.fitpal.app.domain.model.Sex
 import com.fitpal.app.ui.component.BackdropTheme
 import com.fitpal.app.ui.component.GlassTopBar
 import com.fitpal.app.ui.component.GradientBackdrop
+import com.fitpal.app.ui.component.MarkdownText
 import com.fitpal.app.ui.theme.glass
 import kotlin.math.roundToInt
 
@@ -1038,10 +1039,9 @@ private fun UpdatesSection(viewModel: SettingsViewModel) {
                 }
                 if (u.releaseNotes.isNotBlank()) {
                     Spacer(Modifier.height(10.dp))
-                    Text(
-                        u.releaseNotes.lineSequence().take(6).joinToString("\n").trim(),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    MarkdownText(
+                        markdown = u.releaseNotes.lineSequence().take(10).joinToString("\n").trim(),
+                        style = MaterialTheme.typography.bodySmall
                     )
                 }
             }
