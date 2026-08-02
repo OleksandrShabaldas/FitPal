@@ -174,6 +174,10 @@ interface MealLogDao {
     @Query("UPDATE meal_log_items SET insightsJson = :insightsJson, insightsGeneratedAt = :generatedAt WHERE id = :id")
     suspend fun updateInsights(id: Long, insightsJson: String?, generatedAt: Long)
 
+    /** Rename a logged item — "Edit with AI" can decide it was actually a different dish. */
+    @Query("UPDATE meal_log_items SET name = :name WHERE id = :id")
+    suspend fun updateItemName(id: Long, name: String)
+
     /**
      * Update an item's ingredient list and all the totals derived from it.
      * Used by the meal-detail editor when the user changes/removes/adds ingredients.

@@ -3,8 +3,10 @@ package com.fitpal.app.ui.screen.trail
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,6 +40,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -53,6 +57,8 @@ import com.fitpal.app.domain.CurioCatalog
 import com.fitpal.app.domain.CurioRarity
 import com.fitpal.app.domain.ProjectView
 import com.fitpal.app.domain.PropVariants
+import com.fitpal.app.domain.ResourceHelp
+import com.fitpal.app.domain.ResourceHelpText
 import com.fitpal.app.domain.SceneTheme
 import com.fitpal.app.domain.ShopState
 import com.fitpal.app.domain.ThemeCatalog
@@ -76,6 +82,7 @@ import com.fitpal.app.ui.theme.CreamMuted
 import com.fitpal.app.ui.theme.Gold
 import com.fitpal.app.ui.theme.GoldLight
 import com.fitpal.app.ui.theme.glass
+import com.fitpal.app.ui.theme.glassOverlay
 import com.fitpal.app.ui.theme.glassSoft
 
 @Composable
@@ -369,22 +376,56 @@ private fun CollectCard(d: TrailDisplay, onCollect: () -> Unit, modifier: Modifi
 
 @Composable
 private fun ResourceRow(d: TrailDisplay, modifier: Modifier = Modifier) {
+    // Press and hold any of these to find out what it actually is — the game invents four
+    // currencies, and nowhere else explains them.
+    var explaining by remember { mutableStateOf<ResourceHelp?>(null) }
+
     Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Stat(Modifier.weight(1f), "🌿", d.growth.toString(), "growth")
-        Stat(Modifier.weight(1f), "💧", d.water.toString(), "water")
-        Stat(Modifier.weight(1f), "⭐", d.points.toString(), "points")
-        Stat(Modifier.weight(1f), "✦", "${"%.1f".format(d.vitality)}×", "vitality")
+        Stat(Modifier.weight(1f), d.growth.toString(), "growth", ResourceHelpText.GROWTH) {
+            explaining = it
+        }
+        Stat(Modifier.weight(1f), d.water.toString(), "water", ResourceHelpText.WATER) {
+            explaining = it
+        }
+        Stat(Modifier.weight(1f), d.points.toString(), "points", ResourceHelpText.POINTS) {
+            explaining = it
+        }
+        Stat(
+            Modifier.weight(1f), "${"%.1f".format(d.vitality)}×", "vitality",
+            ResourceHelpText.VITALITY
+        ) { explaining = it }
     }
     Spacer(Modifier.height(2.dp))
+
+    explaining?.let { help ->
+        ResourceHelpDialog(help, onDismiss = { explaining = null })
+    }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun Stat(modifier: Modifier, icon: String, value: String, label: String) {
+private fun Stat(
+    modifier: Modifier,
+    value: String,
+    label: String,
+    help: ResourceHelp,
+    onExplain: (ResourceHelp) -> Unit
+) {
+    val haptics = LocalHapticFeedback.current
     Column(
-        modifier = modifier.glassSoft().padding(vertical = 12.dp),
+        modifier = modifier
+            .glassSoft()
+            .combinedClickable(
+                onClick = { onExplain(help) },
+                onLongClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onExplain(help)
+                }
+            )
+            .padding(vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(icon, fontSize = 13.sp)
+        Text(help.icon, fontSize = 13.sp)
         Text(
             value,
             style = MaterialTheme.typography.titleMedium,
@@ -392,6 +433,60 @@ private fun Stat(modifier: Modifier, icon: String, value: String, label: String)
             color = Cream
         )
         Text(label, style = MaterialTheme.typography.labelSmall, color = CreamMuted)
+    }
+}
+
+/** What a resource is, where it comes from, and what it's for. */
+@Composable
+private fun ResourceHelpDialog(help: ResourceHelp, onDismiss: () -> Unit) {
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .glassOverlay()
+                .padding(20.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(help.icon, fontSize = 24.sp)
+                Spacer(Modifier.width(10.dp))
+                Text(help.title, style = MaterialTheme.typography.headlineSmall, color = Cream)
+            }
+            Spacer(Modifier.height(12.dp))
+            Text(help.what, style = MaterialTheme.typography.bodyMedium, color = CreamMuted)
+
+            Spacer(Modifier.height(14.dp))
+            HelpLine("How you get it", help.earn)
+            Spacer(Modifier.height(10.dp))
+            HelpLine("What it's for", help.spend)
+
+            Spacer(Modifier.height(16.dp))
+            Box(
+                modifier = Modifier
+                    .align(Alignment.End)
+                    .clickable(onClick = onDismiss)
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
+            ) {
+                Text(
+                    "Got it",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Gold
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HelpLine(caption: String, body: String) {
+    Column {
+        Text(
+            caption.uppercase(),
+            style = MaterialTheme.typography.labelSmall,
+            color = CreamFaint
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(body, style = MaterialTheme.typography.bodySmall, color = CreamMuted)
     }
 }
 
@@ -914,7 +1009,7 @@ private fun BuildDialog(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .glass()
+                .glassOverlay()
                 .padding(20.dp)
         ) {
             Text(

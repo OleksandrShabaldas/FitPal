@@ -66,6 +66,7 @@ import com.fitpal.app.ml.AiSource
 import com.fitpal.app.ui.component.AddIngredientDialog
 import com.fitpal.app.ui.component.AiSourceBadge
 import com.fitpal.app.ui.component.BackdropTheme
+import com.fitpal.app.ui.component.EditWithAiDialog
 import com.fitpal.app.ui.component.GlassTopBar
 import com.fitpal.app.ui.component.GradientBackdrop
 import com.fitpal.app.ui.component.MealInsightsSection
@@ -96,6 +97,18 @@ fun EntryDetailScreen(
     var showAddDialog by remember { mutableStateOf(false) }
     var replacingIndex by remember { mutableStateOf<Int?>(null) }
     var showCopyPicker by remember { mutableStateOf(false) }
+    var showEditWithAi by remember { mutableStateOf(false) }
+
+    // Close the AI-edit dialog once the re-check lands (or report that it came back empty).
+    LaunchedEffect(state.isRefiningWithAi) {
+        if (!state.isRefiningWithAi) showEditWithAi = false
+    }
+    LaunchedEffect(state.refineError) {
+        state.refineError?.let {
+            android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_LONG).show()
+            viewModel.clearRefineError()
+        }
+    }
 
     // One-shot toast after "copy to another date".
     LaunchedEffect(state.copyConfirmation) {
@@ -205,7 +218,8 @@ fun EntryDetailScreen(
                                     onGramsChanged = viewModel::updateIngredientGrams,
                                     onRemove = viewModel::removeIngredient,
                                     onReplace = { index -> viewModel.clearSearch(); replacingIndex = index },
-                                    onAdd = { showAddDialog = true }
+                                    onAdd = { showAddDialog = true },
+                                    onEditWithAi = { showEditWithAi = true }
                                 )
                             }
                             item { MacroCard(item) }
@@ -225,6 +239,15 @@ fun EntryDetailScreen(
                 }
             }
         }
+    }
+
+    if (showEditWithAi) {
+        EditWithAiDialog(
+            foodLabel = state.item?.name.orEmpty(),
+            loading = state.isRefiningWithAi,
+            onSubmit = { viewModel.refineWithAi(it) },
+            onDismiss = { showEditWithAi = false }
+        )
     }
 
     if (showDeleteDialog) {
@@ -339,7 +362,8 @@ private fun IngredientsCard(
     onGramsChanged: (index: Int, newGrams: Float) -> Unit,
     onRemove: (index: Int) -> Unit,
     onReplace: (index: Int) -> Unit,
-    onAdd: () -> Unit
+    onAdd: () -> Unit,
+    onEditWithAi: () -> Unit
 ) {
     val unit = if (isDrink) "ml" else "g"
     Column(modifier = Modifier.fillMaxWidth().glass().padding(16.dp)) {
@@ -385,13 +409,25 @@ private fun IngredientsCard(
             }
         }
         Spacer(Modifier.height(8.dp))
-        Row(
-            modifier = Modifier.glassSoft(CircleShape).clickable(onClick = onAdd).padding(horizontal = 14.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(Icons.Default.Add, contentDescription = null, tint = GoldLight, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(6.dp))
-            Text("Add ingredient", style = MaterialTheme.typography.labelLarge, color = Cream)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier.glassSoft(CircleShape).clickable(onClick = onAdd).padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.Add, contentDescription = null, tint = GoldLight, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Add ingredient", style = MaterialTheme.typography.labelLarge, color = Cream)
+            }
+            // The same whole-dish correction the pre-log screen offers — a mistake shouldn't
+            // become permanent just because the meal was already saved.
+            Row(
+                modifier = Modifier.glassSoft(CircleShape).clickable(onClick = onEditWithAi).padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = GoldLight, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Edit with AI", style = MaterialTheme.typography.labelLarge, color = Cream)
+            }
         }
     }
 }

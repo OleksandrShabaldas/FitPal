@@ -46,7 +46,7 @@ import com.fitpal.app.ui.theme.Cream
 import com.fitpal.app.ui.theme.CreamMuted
 import com.fitpal.app.ui.theme.Gold
 import com.fitpal.app.ui.theme.GoldLight
-import com.fitpal.app.ui.theme.glass
+import com.fitpal.app.ui.theme.glassOverlay
 
 /**
  * A coach-mark: dims the screen, cuts a hole around one element, rings it, and explains it.
@@ -148,7 +148,9 @@ fun SpotlightOverlay(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .glass(RoundedCornerShape(26.dp))
+                    // Opaque: the caption can land over the un-dimmed cut-out, and plain
+                    // glass there is unreadable.
+                    .glassOverlay(RoundedCornerShape(26.dp))
                     .padding(20.dp)
             ) {
                 Text(title, style = MaterialTheme.typography.headlineSmall, color = Cream)

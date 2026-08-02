@@ -200,6 +200,70 @@ object TrailRules {
     }
 }
 
+/**
+ * Plain-language explanation of one resource, shown when you press and hold it on the Trail.
+ * Kept next to [TrailRules] so the numbers quoted here can't drift from the numbers that
+ * actually run the game.
+ */
+data class ResourceHelp(
+    val icon: String,
+    val title: String,
+    val what: String,
+    val earn: String,
+    val spend: String
+)
+
+object ResourceHelpText {
+    val GROWTH = ResourceHelp(
+        icon = "🌿",
+        title = "Growth",
+        what = "The stuff you rebuild with. Everything you've already restored keeps quietly " +
+            "making more of it, so the place pays you back for the work you've put in.",
+        earn = "Each day you log a meal, the site produces one day's worth and it waits for " +
+            "you to collect it. Hitting your calorie goal that day is worth " +
+            "${((TrailRules.ON_GOAL_MULTIPLIER - 1f) * 100).toInt()}% more.",
+        spend = "On projects — paths, trees, wells, greenhouses. Every one you finish raises " +
+            "production for good, so the next thing arrives faster."
+    )
+
+    val WATER = ResourceHelp(
+        icon = "💧",
+        title = "Water",
+        what = "What a day of growth costs. One drop is spent for each day the site grows, " +
+            "so it's your buffer against a quiet week.",
+        earn = "+${TrailRules.WATER_PER_LOG} for logging a meal, and " +
+            "+${TrailRules.WATER_ON_GOAL_BONUS} more on a day you hit your calorie goal. " +
+            "It fills up to ${TrailRules.WATER_CAP}.",
+        spend = "Automatically. Run dry and the site stops growing until you log again — " +
+            "nothing you've built is lost, it just stops paying."
+    )
+
+    val POINTS = ResourceHelp(
+        icon = "⭐",
+        title = "Points",
+        what = "The reward for turning up. Points are the only thing challenges pay out, " +
+            "and they never arrive on their own — you have to come here and claim them.",
+        earn = "+${TrailRules.COLLECT_POINTS} every time you collect by hand, plus whatever " +
+            "each challenge is worth when you claim it.",
+        spend = "On keystone projects — the gold centrepieces that pay triple — and in the " +
+            "shop on cases and new looks for the place."
+    )
+
+    val VITALITY = ResourceHelp(
+        icon = "✦",
+        title = "Vitality",
+        what = "How alive the place is. It multiplies everything the site produces, and you " +
+            "can see it: a thriving site glows, a neglected one gets overgrown.",
+        earn = "+${TrailRules.VITALITY_GAIN} for every day you log, up to " +
+            "${TrailRules.VITALITY_MAX}× — double production.",
+        spend = "Nothing spends it, but a missed day costs ${TrailRules.VITALITY_LOSS}, down " +
+            "to a floor of ${TrailRules.VITALITY_MIN}×. Neglect slows the place down; it " +
+            "never destroys anything you built."
+    )
+
+    val ALL = listOf(GROWTH, WATER, POINTS, VITALITY)
+}
+
 object TrailCatalog {
 
     /** Region 1 — handcrafted. Beyond this the trail continues procedurally. */

@@ -14,10 +14,10 @@ import com.fitpal.app.data.repository.MealRepository
 import com.fitpal.app.data.repository.SettingsRepository
 import com.fitpal.app.data.repository.WeightRepository
 import com.fitpal.app.domain.HealthScorer
-import com.fitpal.app.domain.model.HealthSwap
 import com.fitpal.app.domain.model.MealInsights
 import com.fitpal.app.ml.AiSource
 import com.fitpal.app.ml.FoodAnalysisPipeline
+import com.fitpal.app.ml.FoodJsonParser
 import com.fitpal.app.ml.FoodPrompts
 import com.fitpal.app.ml.ModelManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -242,19 +242,23 @@ class CollectionViewModel @Inject constructor(
                 isDrink = food.isDrink
             )
             try {
+                // Give the model the real ingredients — without them it invents a plausible
+                // recipe and suggests swapping things this food never contained.
+                val parts = getIngredients(food.id).map { it.name }
+                val unit = if (food.isDrink) "ml" else "g"
                 val prompt = FoodPrompts.itemInsights(
                     name = food.name,
-                    amountLabel = "${food.defaultPortionGrams.toInt()}${if (food.isDrink) "ml" else "g"}",
+                    amountLabel = "${food.defaultPortionGrams.toInt()}$unit",
                     kcal = food.totalCalories.toInt(),
                     protein = food.totalProtein.toInt(),
                     fat = food.totalFat.toInt(),
                     carbs = food.totalCarbs.toInt(),
-                    fiber = food.totalFiber.toInt()
+                    fiber = food.totalFiber.toInt(),
+                    ingredients = parts.joinToString(", ")
                 )
                 val (response, source) = pipeline.generateRawTextWithSource(prompt)
 
-                val swaps = Regex("SWAP:\\s*(.+?)\\s*->\\s*(.+?)\\s*\\|\\s*(.+)").findAll(response)
-                    .map { HealthSwap(it.groupValues[1].trim(), it.groupValues[2].trim(), it.groupValues[3].trim()) }.toList()
+                val swaps = FoodJsonParser.parseItemSwaps(response, listOf(food.name) + parts)
                 val energy = Regex("ENERGY:\\s*(.+)").find(response)?.groupValues?.get(1)?.trim() ?: ""
                 val mood = Regex("MOOD:\\s*(.+)").find(response)?.groupValues?.get(1)?.trim() ?: ""
                 val energyScore = Regex("ENERGY_SCORE:\\s*(\\d+)").find(response)?.groupValues?.get(1)?.toIntOrNull()?.coerceIn(0, 5) ?: 0

@@ -18,6 +18,20 @@ fun Modifier.glass(shape: Shape = RoundedCornerShape(26.dp)): Modifier =
 fun Modifier.glassSoft(shape: Shape = RoundedCornerShape(18.dp)): Modifier =
     this.clip(shape).background(GlassFillSoft).border(1.dp, GlassBorderSoft, shape)
 
+/**
+ * Glass for panels that float *over* other content — dialogs, coach-marks, popups.
+ *
+ * Same look as [glass], but laid on an opaque surface first. Ordinary cards sit on the
+ * screen's own dark backdrop, so a 10% white film is plenty; an overlay has whatever
+ * happens to be underneath it, and that makes text hard to read. The opaque base keeps
+ * the frosted look while guaranteeing legibility.
+ */
+fun Modifier.glassOverlay(shape: Shape = RoundedCornerShape(26.dp)): Modifier =
+    this.clip(shape)
+        .background(OverlaySurface)
+        .background(GlassFill)
+        .border(1.dp, GlassBorder, shape)
+
 /** Frosted glass tinted toward an accent colour — gives a card a colour identity (water = blue,
  *  steps/exercise = green) while keeping the frosted look. */
 fun Modifier.accentGlass(accent: Color, shape: Shape = RoundedCornerShape(26.dp)): Modifier =

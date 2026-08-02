@@ -9,11 +9,11 @@ import com.fitpal.app.data.repository.MealRepository
 import com.fitpal.app.data.repository.NutritionRepository
 import com.fitpal.app.domain.HealthScorer
 import com.fitpal.app.domain.model.DetectedFood
-import com.fitpal.app.domain.model.HealthSwap
 import com.fitpal.app.domain.model.Ingredient
 import com.fitpal.app.domain.model.MealInsights
 import com.fitpal.app.ml.AiSource
 import com.fitpal.app.ml.FoodAnalysisPipeline
+import com.fitpal.app.ml.FoodJsonParser
 import com.fitpal.app.ml.FoodPrompts
 import com.fitpal.app.ml.ModelManager
 import com.fitpal.app.ui.navigation.Screen
@@ -253,8 +253,11 @@ class GalleryFoodDetailViewModel @Inject constructor(
                 )
                 val (response, source) = pipeline.generateRawTextWithSource(prompt)
 
-                val swaps = Regex("SWAP:\\s*(.+?)\\s*->\\s*(.+?)\\s*\\|\\s*(.+)").findAll(response)
-                    .map { HealthSwap(it.groupValues[1].trim(), it.groupValues[2].trim(), it.groupValues[3].trim()) }.toList()
+                // Only keep swaps that name something really in this food.
+                val swaps = FoodJsonParser.parseItemSwaps(
+                    response,
+                    listOf(food.label) + _uiState.value.ingredients.map { it.name }
+                )
                 val energy = Regex("ENERGY:\\s*(.+)").find(response)?.groupValues?.get(1)?.trim() ?: ""
                 val mood = Regex("MOOD:\\s*(.+)").find(response)?.groupValues?.get(1)?.trim() ?: ""
                 val energyScore = Regex("ENERGY_SCORE:\\s*(\\d+)").find(response)?.groupValues?.get(1)?.toIntOrNull()?.coerceIn(0, 5) ?: 0

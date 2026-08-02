@@ -350,6 +350,12 @@ class MealRepository @Inject constructor(
      * Replace an item's ingredient list and recompute every total from it.
      * Drives the add/remove/edit-grams controls on the meal detail screen.
      */
+    /** Rename a logged item (used when an AI edit re-identifies the dish). Blank names are ignored. */
+    suspend fun renameItem(itemId: Long, name: String) {
+        val clean = name.trim()
+        if (clean.isNotEmpty()) mealLogDao.updateItemName(itemId, clean)
+    }
+
     suspend fun updateItemIngredients(itemId: Long, ingredients: List<Ingredient>) {
         val micros = ingredients.fold(Micronutrients()) { acc, ing -> acc + ing.micros }
         mealLogDao.updateItemWithIngredients(

@@ -30,14 +30,24 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
-/** One day's energy in and out. [consumed] is 0 on days with nothing logged. */
+/**
+ * One day's energy in and out.
+ *
+ * [restingBurn] is what the body spends just being alive (BMR + everyday movement) — by far
+ * the biggest slice of the day, and the reason "burned = exercise only" always looked wrong.
+ * [activeBurn] is the movement logged on top of it. [consumed] is 0 on days with nothing logged.
+ */
 data class DayEnergy(
     val date: LocalDate,
     val consumed: Float,
+    val restingBurn: Float,
     val stepBurn: Float,
     val exerciseBurn: Float
 ) {
-    val burned: Float get() = stepBurn + exerciseBurn
+    /** Steps + workouts — the part the daily goal does *not* already account for. */
+    val activeBurn: Float get() = stepBurn + exerciseBurn
+    /** Everything the body spent today. */
+    val burned: Float get() = restingBurn + activeBurn
     /** Days with no food logged don't count toward the balance (same rule as the Analytics card). */
     val logged: Boolean get() = consumed > 0f
 }
@@ -49,16 +59,32 @@ data class EnergySummary(
     val periodLabel: String = ""
 ) {
     val loggedDays: List<DayEnergy> get() = days.filter { it.logged }
-    val consumed: Float get() = days.sumOf { it.consumed.toDouble() }.toFloat()
-    val stepBurn: Float get() = days.sumOf { it.stepBurn.toDouble() }.toFloat()
-    val exerciseBurn: Float get() = days.sumOf { it.exerciseBurn.toDouble() }.toFloat()
-    val burned: Float get() = stepBurn + exerciseBurn
+
+    // All totals count logged days only, so "in" and "out" are always measuring the same
+    // days. Counting a resting burn for days with no food logged would make every gap in
+    // the log look like a huge deficit.
+    val consumed: Float get() = loggedDays.sumOf { it.consumed.toDouble() }.toFloat()
+    val restingBurn: Float get() = loggedDays.sumOf { it.restingBurn.toDouble() }.toFloat()
+    val stepBurn: Float get() = loggedDays.sumOf { it.stepBurn.toDouble() }.toFloat()
+    val exerciseBurn: Float get() = loggedDays.sumOf { it.exerciseBurn.toDouble() }.toFloat()
+    val activeBurn: Float get() = stepBurn + exerciseBurn
+    val burned: Float get() = restingBurn + activeBurn
 
     /**
      * Net vs the goal, summed over logged days only — deliberately the same arithmetic as the
      * Analytics "Calorie balance" card so the two screens can never disagree.
+     *
+     * Resting burn is **not** subtracted here on purpose: the daily goal is already built from
+     * it (see [com.fitpal.app.domain.BmrCalculator.restingBurn]), so taking it off again would
+     * count the same 1,800-odd calories twice.
      */
-    val net: Int get() = loggedDays.sumOf { (it.consumed - goal - it.burned).toDouble() }.toInt()
+    val net: Int get() = loggedDays.sumOf { (it.consumed - goal - it.activeBurn).toDouble() }.toInt()
+
+    /**
+     * The other honest number: what actually went in against what the body actually spent,
+     * over the logged days. Answers "am I in a deficit?" rather than "did I hit my plan?".
+     */
+    val balance: Int get() = loggedDays.sumOf { (it.consumed - it.burned).toDouble() }.toInt()
 }
 
 @HiltViewModel
@@ -123,24 +149,35 @@ class CalorieDetailViewModel @Inject constructor(
         combine(stepRows, burnRows) { steps, ex -> steps to ex }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList<DailyStepRow>() to emptyList())
 
-    /** The daily calorie target the balance is measured against. */
-    private val calorieGoal: StateFlow<Int> = combine(
+    /** The daily target the balance is measured against, plus the resting burn behind it. */
+    private data class Baseline(val goal: Int, val resting: Float)
+
+    /**
+     * Both come from the same profile + weight, so they're derived together — the goal is
+     * literally built on top of the resting burn, and they must never be computed from
+     * different inputs. The latest weight is used for every day in the window, the same
+     * approximation the goal itself makes.
+     */
+    private val baseline: StateFlow<Baseline> = combine(
         settingsRepository.userProfile,
         settingsRepository.dailyCalorieGoal,
         weightRepository.getLatest(),
         settingsRepository.macroSelection
     ) { profile, manualGoal, weight, macros ->
-        val kg = weight?.weightKg ?: return@combine 0
-        BmrCalculator.dailyTargets(profile, kg, manualGoal, macros).calories
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+        val kg = weight?.weightKg ?: return@combine Baseline(0, 0f)
+        Baseline(
+            goal = BmrCalculator.dailyTargets(profile, kg, manualGoal, macros).calories,
+            resting = BmrCalculator.restingBurn(profile, kg)
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), Baseline(0, 0f))
 
     val summary: StateFlow<EnergySummary> = combine(
         bounds,
         nutritionRows,
         burnSources,
         settingsRepository.stepCalorieReductionPercent,
-        calorieGoal
-    ) { window, rows, burns, trim, goal ->
+        baseline
+    ) { window, rows, burns, trim, base ->
         val (start, end) = window
         val (steps, exercise) = burns
         val calByDate = rows.associate { it.date to it.calories }
@@ -154,6 +191,7 @@ class CalorieDetailViewModel @Inject constructor(
                 DayEnergy(
                     date = d,
                     consumed = calByDate[key] ?: 0f,
+                    restingBurn = base.resting,
                     stepBurn = stepByDate[key] ?: 0f,
                     exerciseBurn = exByDate[key] ?: 0f
                 )
@@ -161,7 +199,7 @@ class CalorieDetailViewModel @Inject constructor(
             .toList()
         EnergySummary(
             days = days,
-            goal = goal,
+            goal = base.goal,
             periodLabel = "${start.format(dayMonth)} – ${end.format(dayMonth)}"
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), EnergySummary())

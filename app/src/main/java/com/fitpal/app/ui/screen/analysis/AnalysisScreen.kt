@@ -65,6 +65,7 @@ import com.fitpal.app.domain.model.Micronutrients
 import com.fitpal.app.ui.component.AiSourceBadge
 import com.fitpal.app.ui.component.BackdropTheme
 import com.fitpal.app.ui.component.DatePickerDialog
+import com.fitpal.app.ui.component.EditWithAiDialog
 import com.fitpal.app.ui.component.GlassTopBar
 import com.fitpal.app.ui.component.GradientBackdrop
 import com.fitpal.app.ui.component.logDateLabel
@@ -601,60 +602,6 @@ private fun DetectedFoodCard(
             Text(if (isSaved) "Saved" else "Save to collection")
         }
     }
-}
-
-/**
- * "Edit with AI" — the user describes a correction in plain language and the AI re-evaluates the
- * whole dish (rebalancing amounts), rather than just appending an ingredient.
- */
-@Composable
-private fun EditWithAiDialog(
-    foodLabel: String,
-    loading: Boolean,
-    onSubmit: (String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    var text by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = { if (!loading) onDismiss() },
-        title = { Text("Edit \"$foodLabel\" with AI") },
-        text = {
-            Column {
-                Text(
-                    "Say what's wrong or missing — the AI re-checks the whole dish and rebalances the " +
-                        "amounts to fit, instead of just adding on top.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(10.dp))
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("e.g. there are also beans; no cheese; it's grilled not fried") },
-                    minLines = 2,
-                    maxLines = 4,
-                    enabled = !loading
-                )
-                if (loading) {
-                    Spacer(Modifier.height(12.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                        Spacer(Modifier.width(10.dp))
-                        Text("Re-checking the dish…", style = MaterialTheme.typography.bodyMedium)
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = { onSubmit(text) }, enabled = text.isNotBlank() && !loading) {
-                Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Update")
-            }
-        },
-        dismissButton = { TextButton(onClick = onDismiss, enabled = !loading) { Text("Cancel") } }
-    )
 }
 
 /** Full per-dimension health breakdown for the detected foods (for the score view). */

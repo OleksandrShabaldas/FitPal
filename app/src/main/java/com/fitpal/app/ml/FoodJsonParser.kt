@@ -36,6 +36,51 @@ object FoodJsonParser {
         pairingRecommendations = emptyList()
     )
 
+    // ---------------- Health swaps ----------------
+
+    private val SWAP_LINE = Regex("SWAP:\\s*(.+?)\\s*->\\s*(.+?)\\s*\\|\\s*(.+)")
+
+    /** Words too generic to prove a swap is talking about a food that's really in the meal. */
+    private val SWAP_STOPWORDS = setOf(
+        "with", "and", "the", "of", "your", "some", "fresh", "raw", "cooked", "plain",
+        "whole", "large", "small", "medium", "regular", "white", "brown", "portion", "serving"
+    )
+
+    /**
+     * Parse the `SWAP: x -> y | why` lines of a per-item insight, keeping only swaps that
+     * name something actually in the meal.
+     *
+     * Models like to suggest replacing food that isn't there ("swap the mayo" on a plate with
+     * no mayo). The prompt asks them not to; this makes sure. Pass every real name — the
+     * dish plus its ingredients — in [presentFoods].
+     */
+    fun parseItemSwaps(response: String, presentFoods: List<String>): List<HealthSwap> {
+        val swaps = SWAP_LINE.findAll(response)
+            .map { HealthSwap(it.groupValues[1].trim(), it.groupValues[2].trim(), it.groupValues[3].trim()) }
+            .toList()
+        return groundSwaps(swaps, presentFoods)
+    }
+
+    /** Drop any swap whose "from" doesn't correspond to something in [presentFoods]. */
+    fun groundSwaps(swaps: List<HealthSwap>, presentFoods: List<String>): List<HealthSwap> {
+        val names = presentFoods.map(::normaliseFoodName).filter { it.isNotEmpty() }
+        if (names.isEmpty()) return swaps   // nothing to check against — don't throw away advice
+        val tokens = names.flatMap(::significantWords).toSet()
+        return swaps.filter { swap ->
+            val from = normaliseFoodName(swap.original)
+            from.isNotEmpty() && (
+                names.any { it.contains(from) || from.contains(it) } ||
+                    significantWords(from).any { it in tokens }
+                )
+        }
+    }
+
+    private fun normaliseFoodName(raw: String): String =
+        raw.lowercase().replace(Regex("[^a-z0-9 ]"), " ").replace(Regex("\\s+"), " ").trim()
+
+    private fun significantWords(normalised: String): List<String> =
+        normalised.split(" ").filter { it.length >= 4 && it !in SWAP_STOPWORDS }
+
     fun parseFoods(raw: String): List<DetectedFood> {
         val json = extractJsonObject(raw)
 

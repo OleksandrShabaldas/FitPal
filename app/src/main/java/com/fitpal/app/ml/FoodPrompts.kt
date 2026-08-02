@@ -215,6 +215,17 @@ object FoodPrompts {
     }
 
     /** Third pass: health insights for an identified meal. */
+    /**
+     * The meal's real ingredients, spelled out for the insights prompts. Without this the model
+     * only sees a dish name and macros, so it guesses at what's inside — which is how "swap the
+     * mayonnaise" ends up on a plate that never had any.
+     */
+    private fun ingredientLine(foods: List<DetectedFood>): String {
+        val parts = foods.flatMap { it.ingredients }.map { it.name.trim() }.filter { it.isNotEmpty() }
+        if (parts.isEmpty()) return ""
+        return "It is made of exactly these and nothing else: ${parts.distinct().joinToString(", ")}."
+    }
+
     fun insights(foods: List<DetectedFood>): String {
         val summary = foods.joinToString("; ") { food ->
             "${food.label} (${food.totalCalories.toInt()} kcal, P${food.totalProtein.toInt()}g, " +
@@ -222,12 +233,15 @@ object FoodPrompts {
         }
         return """
             A user just logged this meal: $summary.
+            ${ingredientLine(foods)}
             Analyze it and reply with ONLY a JSON object:
             {"healthScore":<1-10>,"scoreFactors":[{"text":"<reason>","positive":<true/false>}],"swaps":[{"from":"<ingredient>","to":"<healthier option>","why":"<short benefit>"}],"energy":"<1-2 sentences on energy impact>","energyScore":<1-5>,"mood":"<1-2 sentences on mood impact>","moodScore":<1-5>,"pairings":["<suggestion 1>","<suggestion 2>"]}
             Rules:
             - healthScore: 1=very unhealthy, 10=excellent. Consider balance, fiber, vitamins, sodium, processing.
             - scoreFactors: 2-5 short reasons. Mix positives and negatives. Be specific.
             - swaps: only if score<10. Suggest 1-3 ingredient swaps that would raise the score. Skip if score is 10.
+              "from" MUST be one of the ingredients listed above. NEVER suggest replacing something
+              that isn't in this meal. If nothing here is worth swapping, return an empty array.
             - energy: how this meal affects energy over the next few hours (sugar crash? sustained? etc).
             - energyScore: 1=heavy/sleepy or a sugar crash, 3=neutral, 5=light and energizing.
             - mood: how the nutrients may affect mood (tryptophan, omega-3, sugar, etc). Be honest but kind.
@@ -247,11 +261,13 @@ object FoodPrompts {
         }
         return """
             A user logged this meal: $summary.
+            ${ingredientLine(foods)}
             Think it through, then reply with ONLY this JSON:
             {"healthScore":<1-10>,"scoreFactors":[{"text":"<reason>","positive":<bool>}],"swaps":[{"from":"<x>","to":"<y>","why":"<benefit>"}],"energy":"<1-2 sentences>","energyScore":<1-5>,"mood":"<1-2 sentences>","moodScore":<1-5>,"pairings":["<idea>"]}
             Make it specific and genuinely useful (not generic):
             - scoreFactors: 3-5 concrete reasons that cite the actual nutrients/amounts at play. Mix positives and negatives.
             - swaps: 1-3 realistic swaps that would meaningfully raise the score, each with the concrete benefit. Empty if the meal is already excellent.
+              Every "from" MUST be an ingredient listed above — never propose replacing something that isn't in this meal.
             - energy: the likely blood-sugar curve + satiety over the next few hours — be specific about why.
             - mood: a plausible mood effect (tryptophan, omega-3, sugar swings, magnesium, …), honest but kind.
             - pairings: 1-3 foods/drinks that fill THIS meal's real gaps — name the missing nutrient. [] if well-rounded.
@@ -439,6 +455,8 @@ object FoodPrompts {
     ): String = """
         Analyse this food: $name, $amountLabel, $kcal kcal (P${protein}g F${fat}g C${carbs}g Fiber ${fiber}g).
         ${if (ingredients.isBlank()) "" else "Made of these ingredients right now (analyse THESE, not any earlier version): $ingredients."}
+        Every SWAP's <original> MUST be this food or one of the ingredients listed above.
+        NEVER suggest replacing something that isn't there — write no SWAP line at all instead.
         Reply in EXACTLY this format, one item per line, nothing else:
         SWAP: <original> -> <healthier swap> | <concrete benefit>
         ENERGY: <one sentence on energy over the next few hours>

@@ -57,6 +57,12 @@ import kotlin.math.roundToInt
 private val CARD = RoundedCornerShape(26.dp)
 private val DAY_LABEL = DateTimeFormatter.ofPattern("EEE d MMM")
 
+// The three parts of "burned". Deliberately far apart in hue — the whole point of the
+// split is that you can see at a glance how much of the day is just being alive.
+private val RestingColor = Color(0xFF4E6B8F)   // slate blue — the baseline
+private val StepColor = Color(0xFF8CC152)      // green — everyday movement
+// Workouts use AccentActivity (teal), the app's existing exercise colour.
+
 /**
  * Calories in vs. out for the week or last 30 days, opened from the Analytics
  * "Calorie balance" card. Totals up top, then an expandable day-by-day list.
@@ -143,7 +149,7 @@ fun CalorieDetailScreen(
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         TotalTile(
                             modifier = Modifier.weight(1f),
-                            label = "Consumed",
+                            label = "Eaten",
                             total = summary.consumed,
                             perDay = if (logged.isNotEmpty()) summary.consumed / logged.size else null,
                             perDaySuffix = "per logged day",
@@ -153,8 +159,8 @@ fun CalorieDetailScreen(
                             modifier = Modifier.weight(1f),
                             label = "Burned",
                             total = summary.burned,
-                            perDay = if (summary.days.isNotEmpty()) summary.burned / summary.days.size else null,
-                            perDaySuffix = "per day",
+                            perDay = if (logged.isNotEmpty()) summary.burned / logged.size else null,
+                            perDaySuffix = "per logged day",
                             accent = AccentActivity
                         )
                     }
@@ -164,15 +170,58 @@ fun CalorieDetailScreen(
                 item {
                     Column(modifier = Modifier.fillMaxWidth().glass(CARD).padding(16.dp)) {
                         Text("In vs out", style = MaterialTheme.typography.titleMedium, color = Cream)
-                        Spacer(Modifier.height(12.dp))
-                        val scale = maxOf(summary.consumed, summary.burned, 1f)
-                        EnergyBar("Eaten", summary.consumed, summary.consumed / scale, GoldLight)
-                        Spacer(Modifier.height(10.dp))
-                        EnergyBar("Burned", summary.burned, summary.burned / scale, AccentActivity)
-                        Spacer(Modifier.height(12.dp))
                         Text(
-                            "Burned = ${"%,d".format(summary.stepBurn.roundToInt())} kcal from steps · " +
-                                "${"%,d".format(summary.exerciseBurn.roundToInt())} kcal from workouts",
+                            "Everything your body spent, not just the workouts",
+                            style = MaterialTheme.typography.bodySmall, color = CreamMuted
+                        )
+                        Spacer(Modifier.height(14.dp))
+                        val scale = maxOf(summary.consumed, summary.burned, 1f)
+                        EnergyBar(
+                            label = "Eaten",
+                            value = summary.consumed,
+                            segments = listOf(summary.consumed to GoldLight),
+                            scale = scale
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        EnergyBar(
+                            label = "Burned",
+                            value = summary.burned,
+                            segments = listOf(
+                                summary.restingBurn to RestingColor,
+                                summary.stepBurn to StepColor,
+                                summary.exerciseBurn to AccentActivity
+                            ),
+                            scale = scale
+                        )
+
+                        Spacer(Modifier.height(12.dp))
+                        BurnLegend(summary)
+
+                        Spacer(Modifier.height(14.dp))
+                        val balance = summary.balance
+                        Text(
+                            text = when {
+                                logged.isEmpty() -> "Nothing logged in this period yet"
+                                balance < 0 -> "You ate ${"%,d".format(-balance)} kcal less than " +
+                                    "you burned — a deficit of about " +
+                                    "${"%,d".format(-balance / logged.size)} a day"
+                                balance > 0 -> "You ate ${"%,d".format(balance)} kcal more than " +
+                                    "you burned — a surplus of about " +
+                                    "${"%,d".format(balance / logged.size)} a day"
+                                else -> "In and out came out level"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = when {
+                                logged.isEmpty() -> CreamMuted
+                                balance < 0 -> ScoreFair
+                                else -> GoldLight
+                            }
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "This is in vs out. The number up top compares you to your daily " +
+                                "goal instead — and your goal already has the resting burn " +
+                                "built into it, so it isn't subtracted twice.",
                             style = MaterialTheme.typography.labelSmall, color = CreamFaint
                         )
                     }
@@ -220,7 +269,8 @@ fun CalorieDetailScreen(
                             }
                             Spacer(Modifier.height(8.dp))
                             Text(
-                                "Newest first · tap a logged day to open it",
+                                "Newest first · tap a logged day to open it. \"Out\" is steps " +
+                                    "and workouts — your daily goal already covers the resting burn.",
                                 style = MaterialTheme.typography.labelSmall, color = CreamFaint
                             )
                         }
@@ -254,26 +304,77 @@ private fun TotalTile(
     }
 }
 
-/** A labelled bar drawn as a share of the bigger of the two totals. */
+/**
+ * A labelled bar drawn as a share of the bigger of the two totals, split into coloured
+ * segments — so "burned" shows at a glance how little of it is actually the gym.
+ */
 @Composable
-private fun EnergyBar(label: String, value: Float, fraction: Float, accent: Color) {
+private fun EnergyBar(
+    label: String,
+    value: Float,
+    segments: List<Pair<Float, Color>>,
+    scale: Float
+) {
     Column {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(label, style = MaterialTheme.typography.bodyMedium, color = CreamMuted)
-            Text("${"%,d".format(value.roundToInt())} kcal", style = MaterialTheme.typography.bodyMedium, color = accent)
+            Text(
+                "${"%,d".format(value.roundToInt())} kcal",
+                style = MaterialTheme.typography.bodyMedium,
+                color = segments.firstOrNull()?.second ?: GoldLight
+            )
         }
         Spacer(Modifier.height(5.dp))
         Box(
-            modifier = Modifier.fillMaxWidth().height(10.dp)
+            modifier = Modifier.fillMaxWidth().height(12.dp)
                 .clip(RoundedCornerShape(6.dp))
                 .background(Color.White.copy(alpha = 0.07f))
         ) {
-            Box(
-                Modifier.fillMaxWidth(fraction.coerceIn(0f, 1f)).height(10.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(accent)
-            )
+            Row(Modifier.fillMaxWidth()) {
+                segments.forEach { (amount, color) ->
+                    val fraction = (amount / scale).coerceIn(0f, 1f)
+                    if (fraction > 0.001f) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth(fraction)
+                                .height(12.dp)
+                                .background(color)
+                        )
+                    }
+                }
+            }
         }
+    }
+}
+
+/** What the three colours in the burned bar mean, with each one's share. */
+@Composable
+private fun BurnLegend(summary: EnergySummary) {
+    val total = summary.burned.takeIf { it > 0f } ?: 1f
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LegendRow("Just being alive", summary.restingBurn, summary.restingBurn / total, RestingColor)
+        LegendRow("Steps", summary.stepBurn, summary.stepBurn / total, StepColor)
+        LegendRow("Workouts", summary.exerciseBurn, summary.exerciseBurn / total, AccentActivity)
+    }
+}
+
+@Composable
+private fun LegendRow(label: String, value: Float, share: Float, color: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(9.dp).clip(RoundedCornerShape(3.dp)).background(color))
+        Spacer(Modifier.width(9.dp))
+        Text(label, style = MaterialTheme.typography.bodySmall, color = CreamMuted)
+        Spacer(Modifier.weight(1f))
+        Text(
+            "${"%,d".format(value.roundToInt())} kcal",
+            style = MaterialTheme.typography.bodySmall, color = Cream
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            "${(share * 100).roundToInt()}%",
+            style = MaterialTheme.typography.labelSmall, color = CreamFaint,
+            textAlign = TextAlign.End, modifier = Modifier.width(36.dp)
+        )
     }
 }
 
@@ -297,7 +398,9 @@ private fun DayHeaderRow() {
 /** One row of the day-by-day list: what went in, what went out, and the day's net vs goal. */
 @Composable
 private fun DayEnergyRow(day: DayEnergy, goal: Int, onClick: (() -> Unit)?) {
-    val net = (day.consumed - goal - day.burned).roundToInt()
+    // "Out" here is steps + workouts only: the goal already carries the resting burn, so
+    // every row stays internally consistent (In − goal − Out = Net).
+    val net = (day.consumed - goal - day.activeBurn).roundToInt()
     val netColor = when {
         !day.logged || goal <= 0 -> CreamFaint
         abs(net) < 100 -> GoldLight
@@ -324,9 +427,9 @@ private fun DayEnergyRow(day: DayEnergy, goal: Int, onClick: (() -> Unit)?) {
             modifier = Modifier.weight(1f)
         )
         Text(
-            if (day.burned > 0f) "%,d".format(day.burned.roundToInt()) else "—",
+            if (day.activeBurn > 0f) "%,d".format(day.activeBurn.roundToInt()) else "—",
             style = MaterialTheme.typography.bodySmall,
-            color = if (day.burned > 0f) AccentActivity else CreamFaint,
+            color = if (day.activeBurn > 0f) AccentActivity else CreamFaint,
             textAlign = TextAlign.End,
             modifier = Modifier.weight(1f)
         )

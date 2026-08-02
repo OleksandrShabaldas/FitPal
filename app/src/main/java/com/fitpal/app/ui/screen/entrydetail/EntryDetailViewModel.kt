@@ -11,12 +11,12 @@ import com.fitpal.app.data.repository.MealRepository
 import com.fitpal.app.data.repository.NutritionRepository
 import com.fitpal.app.domain.HealthScorer
 import com.fitpal.app.domain.model.DetectedFood
-import com.fitpal.app.domain.model.HealthSwap
 import com.fitpal.app.domain.model.Ingredient
 import com.fitpal.app.domain.model.MealInsights
 import com.fitpal.app.domain.model.Micronutrients
 import com.fitpal.app.ml.AiSource
 import com.fitpal.app.ml.FoodAnalysisPipeline
+import com.fitpal.app.ml.FoodJsonParser
 import com.fitpal.app.ml.FoodPrompts
 import com.fitpal.app.ml.ModelManager
 import com.fitpal.app.ui.navigation.Screen
@@ -48,6 +48,10 @@ data class EntryDetailUiState(
     val searchResults: List<UsdaFoodEntity> = emptyList(),
     /** True while the "Add with AI" describe-an-ingredient call is running. */
     val isAiAddingIngredient: Boolean = false,
+    /** True while "Edit with AI" is re-evaluating the whole entry. */
+    val isRefiningWithAi: Boolean = false,
+    /** Set when an AI edit came back with nothing usable, so the screen can say so. */
+    val refineError: String? = null,
     /** True once this meal has been saved to the collection (for a confirmation). */
     val savedToCollection: Boolean = false,
     /** One-shot confirmation after "copy to another date" — shown as a toast, then cleared. */
@@ -248,6 +252,51 @@ class EntryDetailViewModel @Inject constructor(
         }
     }
 
+    /**
+     * "Edit with AI" for an already-logged entry: describe what's wrong in plain language
+     * ("there was no cheese", "it was a large portion") and the AI re-evaluates the whole
+     * thing — ingredients, amounts and the dish name.
+     *
+     * Same pipeline call the pre-log Analysis screen uses; this just writes the result back
+     * to the stored entry instead of to a draft. Cached insights are cleared because they
+     * described the old version of the meal.
+     */
+    fun refineWithAi(instruction: String) {
+        if (instruction.isBlank()) return
+        val item = _uiState.value.item ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isRefiningWithAi = true, refineError = null) }
+            val food = DetectedFood(
+                label = item.name,
+                confidence = 1f,
+                boundingBox = RectF(),
+                estimatedGrams = item.grams,
+                ingredients = _uiState.value.ingredients,
+                isDrink = item.isDrink
+            )
+            val refined = runCatching { pipeline.refineFood(food, instruction) }.getOrNull()
+
+            if (refined == null || refined.ingredients.isEmpty()) {
+                _uiState.update {
+                    it.copy(
+                        isRefiningWithAi = false,
+                        refineError = "The AI didn't come back with a usable change. Try wording it differently."
+                    )
+                }
+                return@launch
+            }
+
+            mealRepository.renameItem(entryId, refined.label.ifBlank { item.name })
+            mealRepository.clearInsights(entryId)
+            _uiState.update { it.copy(isRefiningWithAi = false, insights = null, insightsSource = null) }
+            persistIngredients(refined.ingredients)
+        }
+    }
+
+    fun clearRefineError() {
+        _uiState.update { it.copy(refineError = null) }
+    }
+
     /** Save the new ingredient list, recompute totals, and refresh the screen. */
     private fun persistIngredients(ingredients: List<Ingredient>) {
         _uiState.update { it.copy(ingredients = ingredients) }
@@ -375,8 +424,11 @@ class EntryDetailViewModel @Inject constructor(
                 )
                 val (response, source) = pipeline.generateRawTextWithSource(prompt)
 
-                val swaps = Regex("SWAP:\\s*(.+?)\\s*->\\s*(.+?)\\s*\\|\\s*(.+)").findAll(response)
-                    .map { HealthSwap(it.groupValues[1].trim(), it.groupValues[2].trim(), it.groupValues[3].trim()) }.toList()
+                // Only keep swaps that name something really in this meal.
+                val swaps = FoodJsonParser.parseItemSwaps(
+                    response,
+                    listOf(item.name) + _uiState.value.ingredients.map { it.name }
+                )
                 val energy = Regex("ENERGY:\\s*(.+)").find(response)?.groupValues?.get(1)?.trim() ?: ""
                 val mood = Regex("MOOD:\\s*(.+)").find(response)?.groupValues?.get(1)?.trim() ?: ""
                 val energyScore = Regex("ENERGY_SCORE:\\s*(\\d+)").find(response)?.groupValues?.get(1)?.toIntOrNull()?.coerceIn(0, 5) ?: 0

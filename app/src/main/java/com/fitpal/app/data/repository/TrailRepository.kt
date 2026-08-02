@@ -328,12 +328,14 @@ class TrailRepository @Inject constructor(
     /** True when there's something waiting — drives the badge on Home's streak chip. */
     fun hasPending(): Flow<Boolean> = combine(
         trailDao.observeState(),
-        mealRepository.getDailyNutrition(LocalDate.now().format(fmt))
-    ) { state, todayNutrition ->
+        // Deliberately a date-free query: a flow bound to "today" goes stale if the app is
+        // left open across midnight, and the badge would then watch the wrong day.
+        mealRepository.getLoggedDatesDesc()
+    ) { state, loggedDates ->
         val s = state ?: return@combine false
         val todayIso = LocalDate.now().format(fmt)
         // Either growth is sitting uncollected, or today's log hasn't been ticked in yet.
-        s.bankedGrowth > 0L || (todayNutrition.calories > 0f && s.lastTickDate != todayIso)
+        s.bankedGrowth > 0L || (loggedDates.contains(todayIso) && s.lastTickDate != todayIso)
     }
 
     fun observe(): Flow<TrailDisplay?> {

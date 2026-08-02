@@ -25,6 +25,9 @@ val GlassFill = Color(0x1AFFFFFF)        // ~10% white — stronger so cards rea
 val GlassFillSoft = Color(0x14FFFFFF)    // ~8% white
 val GlassBorder = Color(0x33FFFFFF)      // ~20% white hairline — more defined edge
 val GlassBorderSoft = Color(0x24FFFFFF)  // ~14% white hairline
+// Opaque base under floating panels (dialogs, coach-marks). Glass alone is see-through,
+// and over arbitrary content that makes text unreadable — see Modifier.glassOverlay().
+val OverlaySurface = Color(0xF01A1310)   // ~94% warm near-black
 
 // ---- Gold "Today" accent ----
 val Gold = Color(0xFFE8A93C)

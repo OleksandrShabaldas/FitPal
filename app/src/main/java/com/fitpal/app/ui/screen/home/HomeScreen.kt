@@ -1,6 +1,12 @@
 package com.fitpal.app.ui.screen.home
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
@@ -21,6 +27,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -105,6 +112,7 @@ import com.fitpal.app.ui.theme.CreamFaint
 import com.fitpal.app.ui.theme.CreamMuted
 import com.fitpal.app.ui.theme.Gold
 import com.fitpal.app.ui.theme.GoldLight
+import com.fitpal.app.ui.theme.InkBlack
 import com.fitpal.app.ui.theme.ProteinColor
 import com.fitpal.app.ui.theme.ScorePoor
 import com.fitpal.app.ui.theme.accentGlass
@@ -459,30 +467,47 @@ private fun HomeHeader(
             HeaderGreeting(status)
         }
 
-        GlassCapsule(onClick = onOpenTrail) {
-            Icon(
-                Icons.Default.LocalFireDepartment,
-                contentDescription = null,
-                tint = if (streak > 0) GoldLight else CreamMuted,
-                modifier = Modifier.size(15.dp)
-            )
-            Text(
-                text = "$streak",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
-                color = if (streak > 0) Cream else CreamMuted
-            )
-            // The trail has growth waiting — this chip is its only entry point.
+        // The trail has growth waiting — this chip is its only entry point, so the badge
+        // rides on the corner where a notification dot belongs, not tucked inside the pill.
+        Box {
+            GlassCapsule(onClick = onOpenTrail) {
+                Icon(
+                    Icons.Default.LocalFireDepartment,
+                    contentDescription = null,
+                    tint = if (streak > 0) GoldLight else CreamMuted,
+                    modifier = Modifier.size(15.dp)
+                )
+                Text(
+                    text = "$streak",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = if (streak > 0) Cream else CreamMuted
+                )
+            }
             if (trailPending) {
-                Spacer(Modifier.width(4.dp))
-                Box(
-                    modifier = Modifier
-                        .size(7.dp)
-                        .clip(CircleShape)
-                        .background(AccentGarden)
+                PendingBadge(
+                    modifier = Modifier.align(Alignment.TopEnd).offset(x = 4.dp, y = (-4).dp)
                 )
             }
         }
+    }
+}
+
+/** A pulsing dot that says "there's something waiting for you in there". */
+@Composable
+private fun PendingBadge(modifier: Modifier = Modifier) {
+    val pulse by rememberInfiniteTransition(label = "pending").animateFloat(
+        initialValue = 0.75f,
+        targetValue = 1.15f,
+        animationSpec = infiniteRepeatable(tween(1400, easing = LinearEasing), RepeatMode.Reverse),
+        label = "pendingPulse"
+    )
+    Canvas(modifier = modifier.size(18.dp)) {
+        val c = Offset(size.width / 2f, size.height / 2f)
+        // Halo, then a dark ring so the dot reads against whatever is behind the header.
+        drawCircle(Gold.copy(alpha = 0.22f), radius = size.minDimension * 0.5f * pulse, center = c)
+        drawCircle(InkBlack, radius = size.minDimension * 0.30f, center = c)
+        drawCircle(Gold, radius = size.minDimension * 0.24f, center = c)
     }
 }
 

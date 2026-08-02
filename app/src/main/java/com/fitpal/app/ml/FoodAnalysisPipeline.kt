@@ -136,9 +136,20 @@ class FoodAnalysisPipeline @Inject constructor(
     /**
      * Third pass: generate health insights for identified foods — health score,
      * swaps, energy/mood impact, pairing recommendations.
+     *
+     * Swaps are grounded against the real ingredients before they're returned: the prompt asks
+     * the model to only swap what's actually on the plate, and this makes sure it did.
      */
-    suspend fun analyzeMealInsights(foods: List<DetectedFood>): MealInsights =
-        ingredientEngine.analyzeMealInsights(foods)
+    suspend fun analyzeMealInsights(foods: List<DetectedFood>): MealInsights {
+        val insights = ingredientEngine.analyzeMealInsights(foods)
+        return insights.copy(
+            healthSwaps = FoodJsonParser.groundSwaps(insights.healthSwaps, foodNames(foods))
+        )
+    }
+
+    /** Every name the meal legitimately contains — dish labels plus their ingredients. */
+    private fun foodNames(foods: List<DetectedFood>): List<String> =
+        foods.map { it.label } + foods.flatMap { food -> food.ingredients.map { it.name } }
 
     /**
      * Deep AI nutrition review — daily, weekly, or monthly — with personalised,

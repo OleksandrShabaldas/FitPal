@@ -46,6 +46,15 @@ object BmrCalculator {
     private const val SEDENTARY_MULTIPLIER = 1.2f
 
     /**
+     * What the body burns in a day with no logged exercise: BMR plus everyday living
+     * (NEAT). This is the exact baseline the calorie target is built on, so anything that
+     * shows "natural burn" to the user must use this and not raw [bmr] — otherwise the
+     * screens quietly disagree with the goal.
+     */
+    fun restingBurn(profile: UserProfile, weightKg: Float): Float =
+        bmr(profile, weightKg) * SEDENTARY_MULTIPLIER
+
+    /**
      * Full daily targets adjusted for the user's goal. The calorie target is
      * derived from BMR × 1.2 (sedentary baseline) and then offset by the goal.
      * Macro split follows evidence-based ranges per goal.
