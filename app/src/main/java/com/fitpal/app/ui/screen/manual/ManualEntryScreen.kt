@@ -17,9 +17,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
@@ -43,6 +43,7 @@ import com.fitpal.app.data.local.entity.UsdaFoodEntity
 import com.fitpal.app.ui.component.BackdropTheme
 import com.fitpal.app.ui.component.DatePickerDialog
 import com.fitpal.app.ui.component.EditableFoodItemRow
+import com.fitpal.app.ui.component.FoodPortionSheet
 import com.fitpal.app.ui.component.GlassTopBar
 import com.fitpal.app.ui.component.GradientBackdrop
 import com.fitpal.app.ui.component.MealTotalRow
@@ -81,6 +82,23 @@ fun ManualEntryScreen(
         )
     }
 
+    // Picking a food opens its portion sheet straight away — size it, say how many, and only
+    // then does it join the meal.
+    state.picked?.let { picked ->
+        FoodPortionSheet(
+            base = picked.base,
+            count = picked.count,
+            mealPresets = presets,
+            drinkPresets = drinkPresets,
+            onPortionChange = viewModel::setPickedPortion,
+            onCountChange = viewModel::setPickedCount,
+            onDrinkChange = viewModel::setPickedDrink,
+            onConfirm = viewModel::confirmPicked,
+            onDismiss = viewModel::dismissPicked,
+            maxCount = PickedFood.MAX_COUNT
+        )
+    }
+
     GradientBackdrop(theme = BackdropTheme.TODAY) {
         Column(modifier = Modifier.fillMaxSize()) {
             GlassTopBar(title = "Manual entry", onBack = onBack)
@@ -94,8 +112,8 @@ fun ManualEntryScreen(
                 singleLine = true
             )
 
-            // Search stays open while you add, so keep the meal-so-far visible and offer a
-            // way back to it.
+            // Searching hides the meal you've already built, so keep its running total in view
+            // and offer a way back to it without adding anything.
             if (state.searchResults.isNotEmpty() && state.draft.isNotEmpty()) {
                 Row(
                     modifier = Modifier
@@ -122,7 +140,7 @@ fun ManualEntryScreen(
                             SearchResultRow(
                                 food = food,
                                 addedCount = state.draft.count { it.name == food.description },
-                                onClick = { viewModel.addFood(food) }
+                                onClick = { viewModel.pickFood(food) }
                             )
                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                         }
@@ -205,7 +223,7 @@ private fun SearchResultRow(food: UsdaFoodEntity, addedCount: Int, onClick: () -
                 style = MaterialTheme.typography.labelMedium, color = CreamMuted
             )
         }
-        // Tapping again adds another helping — show how many are already in the meal.
+        // Already in the meal from an earlier search — worth knowing before adding it twice.
         if (addedCount > 0) {
             Text(
                 "×$addedCount",
@@ -215,6 +233,11 @@ private fun SearchResultRow(food: UsdaFoodEntity, addedCount: Int, onClick: () -
                 modifier = Modifier.padding(end = 10.dp)
             )
         }
-        Icon(Icons.Default.Add, contentDescription = "Add ${food.description}", tint = GoldLight)
+        // A chevron, not a "+": tapping opens the portion sheet rather than adding blind.
+        Icon(
+            Icons.Default.ChevronRight,
+            contentDescription = "Choose an amount of ${food.description}",
+            tint = GoldLight
+        )
     }
 }

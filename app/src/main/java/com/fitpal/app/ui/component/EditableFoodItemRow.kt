@@ -183,9 +183,9 @@ fun EditableFoodItemRow(
     }
 }
 
-/** A small round +/− next to the amount field. */
+/** A small round +/− next to the amount field. Shared with [FoodPortionSheet]. */
 @Composable
-private fun StepButton(
+internal fun StepButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     description: String,
     enabled: Boolean,
