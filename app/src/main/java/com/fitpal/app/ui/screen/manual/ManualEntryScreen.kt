@@ -93,6 +93,7 @@ fun ManualEntryScreen(
             onPortionChange = viewModel::setPickedPortion,
             onCountChange = viewModel::setPickedCount,
             onDrinkChange = viewModel::setPickedDrink,
+            onNameChange = viewModel::setPickedName,
             onConfirm = viewModel::confirmPicked,
             onDismiss = viewModel::dismissPicked,
             maxCount = PickedFood.MAX_COUNT
@@ -162,7 +163,8 @@ fun ManualEntryScreen(
                                         viewModel.saveToGallery(ingredient)
                                         Toast.makeText(context, "Saved to collection", Toast.LENGTH_SHORT).show()
                                     },
-                                    saved = ingredient.name in state.savedNames
+                                    saved = ingredient.name in state.savedNames,
+                                    onRename = { viewModel.renameDraftItem(index, it) }
                                 )
                             }
                         }

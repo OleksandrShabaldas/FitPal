@@ -33,6 +33,7 @@ class ExerciseRepository @Inject constructor(
         date: String? = null,
         source: String = "manual",
         aiSource: String? = null,
+        aiModel: String? = null,
         suggestions: List<String> = emptyList()
     ): Long {
         val cal = ExerciseMet.calories(met, weightKg, minutes)
@@ -45,6 +46,7 @@ class ExerciseRepository @Inject constructor(
                 caloriesBurned = cal,
                 source = source,
                 aiSource = aiSource,
+                aiModel = aiModel,
                 suggestionsJson = if (suggestions.isEmpty()) null else org.json.JSONArray(suggestions).toString()
             )
         )

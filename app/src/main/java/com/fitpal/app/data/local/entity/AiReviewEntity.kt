@@ -20,5 +20,7 @@ data class AiReviewEntity(
     val review: String,
     val generatedAt: Long = System.currentTimeMillis(),
     /** Which AI produced it — "ONLINE" / "OFFLINE" (see [com.fitpal.app.ml.AiSource]); null if unknown. */
-    val source: String? = null
+    val source: String? = null,
+    /** The exact model that produced it ("gemini-3-flash-preview", "Gemma 3n E4B"); null if unknown. */
+    val model: String? = null
 )

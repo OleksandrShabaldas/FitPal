@@ -57,11 +57,11 @@ class MealAnalysisWorker(
 
         return try {
             val outcome = analyzePrimary(description)
-            pipeline.setPreferLocal(outcome.source == AiSource.OFFLINE)
+            pipeline.setPreferLocal(outcome.source.isOffline)
             jobManager.setResult(
                 outcome.foods, emptyList(), insights = null,
                 source = outcome.source,
-                onlineError = outcome.onlineError.takeIf { outcome.source == AiSource.OFFLINE }
+                onlineError = outcome.onlineError.takeIf { outcome.source.isOffline }
             )
             AiJobNotifications.postMealDone(applicationContext)
             Result.success()
@@ -103,30 +103,33 @@ class MealAnalysisWorker(
                     }
                     FallbackChoice.CANCEL -> throw AnalysisCancelledException()
                     FallbackChoice.USE_ON_DEVICE -> {
-                        progress("Reading your description on-device…", AiSource.OFFLINE)
+                        progress("Reading your description on-device…", AiSource.offline())
                         val foods = pipeline.describeMealLocal(description)
-                        return PrimaryOutcome(foods, AiSource.OFFLINE, onlineError)
+                        return PrimaryOutcome(foods, AiSource.offline(), onlineError)
                     }
                 }
             }
-            progress("Preparing to ask the online AI…", AiSource.ONLINE)
+            progress("Preparing to ask the online AI…", AiSource.online())
             try {
                 // describeMealOnline's onProgress is a plain (non-suspend) callback, but our
                 // progress() is suspend (it calls setForeground). Bridge them: funnel callback
                 // messages through a channel that one child coroutine drains in order.
+                var model: String? = null
                 val foods = coroutineScope {
                     val progressChannel = Channel<String>(Channel.UNLIMITED)
                     val pump = launch {
-                        for (msg in progressChannel) runCatching { progress(msg, AiSource.ONLINE) }
+                        for (msg in progressChannel) runCatching { progress(msg, AiSource.online(model)) }
                     }
                     try {
-                        pipeline.describeMealOnline(description) { msg -> progressChannel.trySend(msg) }
+                        pipeline.describeMealOnline(
+                            description, onModel = { model = it }
+                        ) { msg -> progressChannel.trySend(msg) }
                     } finally {
                         progressChannel.close()
                         pump.join()
                     }
                 }
-                return PrimaryOutcome(foods, AiSource.ONLINE, null)
+                return PrimaryOutcome(foods, AiSource.online(model), null)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

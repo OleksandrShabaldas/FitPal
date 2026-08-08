@@ -13,5 +13,10 @@ data class MealLogEntity(
     val id: Long = 0,
     val date: String,           // "YYYY-MM-DD" format for easy grouping by day
     val mealType: String,       // "breakfast", "lunch", "dinner", "snack"
+    /**
+     * A name the user gave this whole meal ("Sunday roast"), shown instead of "Meal · 3 dishes".
+     * Null = unnamed, which is the norm — the dishes speak for themselves.
+     */
+    val name: String? = null,
     val timestamp: Long = System.currentTimeMillis()
 )

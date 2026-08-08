@@ -297,6 +297,21 @@ class EntryDetailViewModel @Inject constructor(
         _uiState.update { it.copy(refineError = null) }
     }
 
+    /**
+     * Rename this entry. Works whatever it came from — an AI guess, a barcode, or a database food
+     * carrying its catalogue name ("Cheese, cheddar, sharp"). Only the label changes; the
+     * nutrition, ingredients and history stay exactly as logged.
+     */
+    fun renameEntry(name: String) {
+        val item = _uiState.value.item ?: return
+        val clean = name.trim()
+        if (clean.isEmpty() || clean == item.name) return
+        viewModelScope.launch {
+            mealRepository.renameItem(entryId, clean)
+            _uiState.update { it.copy(item = it.item?.copy(name = clean)) }
+        }
+    }
+
     /** Save the new ingredient list, recompute totals, and refresh the screen. */
     private fun persistIngredients(ingredients: List<Ingredient>) {
         _uiState.update { it.copy(ingredients = ingredients) }
@@ -351,7 +366,7 @@ class EntryDetailViewModel @Inject constructor(
                 food = food,
                 photoPath = item.photoPath,
                 insights = _uiState.value.insights,
-                aiSource = com.fitpal.app.ml.AiSource.fromName(item.aiSource)
+                aiSource = com.fitpal.app.ml.AiSource.fromName(item.aiSource, item.aiModel)
             )
             _uiState.update { it.copy(savedToCollection = true) }
         }

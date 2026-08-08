@@ -10,10 +10,12 @@ import com.fitpal.app.data.local.entity.MealLogEntity
 import com.fitpal.app.data.local.entity.MealLogItemEntity
 import kotlinx.coroutines.flow.Flow
 
-/** A logged item together with the meal category (Breakfast/Lunch/…) it belongs to. */
+/** A logged item together with the meal category (Breakfast/Lunch/…) and name it belongs to. */
 data class MealLogItemWithType(
     @Embedded val item: MealLogItemEntity,
-    val mealType: String
+    val mealType: String,
+    /** The name the user gave the whole meal, if any — the Home group card shows it. */
+    val mealName: String? = null
 )
 
 /** One logged food (name + calories + its day + meal) — for listing what was actually eaten. */
@@ -152,10 +154,10 @@ interface MealLogDao {
     """)
     fun getLoggedDatesDesc(): Flow<List<String>>
 
-    /** Today's items, each tagged with its meal category, for grouping on Home. */
+    /** Today's items, each tagged with its meal category and name, for grouping on Home. */
     @Query(
         """
-        SELECT i.*, m.mealType AS mealType
+        SELECT i.*, m.mealType AS mealType, m.name AS mealName
         FROM meal_log_items i
         JOIN meal_logs m ON i.mealLogId = m.id
         WHERE m.date = :date
@@ -174,9 +176,17 @@ interface MealLogDao {
     @Query("UPDATE meal_log_items SET insightsJson = :insightsJson, insightsGeneratedAt = :generatedAt WHERE id = :id")
     suspend fun updateInsights(id: Long, insightsJson: String?, generatedAt: Long)
 
-    /** Rename a logged item — "Edit with AI" can decide it was actually a different dish. */
+    /** Rename a logged item — the user can, and "Edit with AI" can re-identify the dish. */
     @Query("UPDATE meal_log_items SET name = :name WHERE id = :id")
     suspend fun updateItemName(id: Long, name: String)
+
+    /** Name (or clear the name of) a whole meal — the group of dishes logged in one go. */
+    @Query("UPDATE meal_logs SET name = :name WHERE id = :mealLogId")
+    suspend fun updateMealLogName(mealLogId: Long, name: String?)
+
+    /** The name the user gave a meal, if any. */
+    @Query("SELECT name FROM meal_logs WHERE id = :mealLogId")
+    suspend fun getMealName(mealLogId: Long): String?
 
     /**
      * Update an item's ingredient list and all the totals derived from it.

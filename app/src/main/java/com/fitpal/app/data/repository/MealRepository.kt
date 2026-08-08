@@ -190,7 +190,8 @@ class MealRepository @Inject constructor(
                 ingredientsJson = MealJson.encodeIngredients(food.ingredients),
                 insightsJson = insightsJson,
                 insightsGeneratedAt = insightsAt,
-                aiSource = source?.name
+                aiSource = source?.storedName,
+                aiModel = source?.model
             )
         }
         return mealLogDao.logMealWithItems(mealLog, items)
@@ -322,7 +323,8 @@ class MealRepository @Inject constructor(
         val items = mealLogDao.getItemsForMeal(mealLogId)
         if (items.isEmpty()) return
         val type = mealType ?: mealLogDao.getMealTypeForMeal(mealLogId) ?: defaultMealType()
-        val mealLog = MealLogEntity(date = date, mealType = type)
+        // Carry the meal's name too — a copy of "Sunday roast" is still Sunday roast.
+        val mealLog = MealLogEntity(date = date, mealType = type, name = mealLogDao.getMealName(mealLogId))
         mealLogDao.logMealWithItems(mealLog, items.map { it.copy(id = 0, mealLogId = 0) })
     }
 
@@ -347,15 +349,30 @@ class MealRepository @Inject constructor(
     }
 
     /**
-     * Replace an item's ingredient list and recompute every total from it.
-     * Drives the add/remove/edit-grams controls on the meal detail screen.
+     * Rename a logged item — by hand from the meal screens, or when an AI edit re-identifies the
+     * dish. Works for anything logged, including foods that came from the database under a long
+     * catalogue name. Blank names are ignored (a nameless entry helps nobody).
      */
-    /** Rename a logged item (used when an AI edit re-identifies the dish). Blank names are ignored. */
     suspend fun renameItem(itemId: Long, name: String) {
         val clean = name.trim()
         if (clean.isNotEmpty()) mealLogDao.updateItemName(itemId, clean)
     }
 
+    /**
+     * Name a whole meal — the dishes logged together in one go ("Sunday roast"). A blank name
+     * clears it, so the meal goes back to being described by its dishes.
+     */
+    suspend fun renameMeal(mealLogId: Long, name: String?) {
+        mealLogDao.updateMealLogName(mealLogId, name?.trim()?.takeIf { it.isNotEmpty() })
+    }
+
+    /** The name the user gave a meal, or null if it's unnamed. */
+    suspend fun getMealName(mealLogId: Long): String? = mealLogDao.getMealName(mealLogId)
+
+    /**
+     * Replace an item's ingredient list and recompute every total from it.
+     * Drives the add/remove/edit-grams controls on the meal detail screen.
+     */
     suspend fun updateItemIngredients(itemId: Long, ingredients: List<Ingredient>) {
         val micros = ingredients.fold(Micronutrients()) { acc, ing -> acc + ing.micros }
         mealLogDao.updateItemWithIngredients(

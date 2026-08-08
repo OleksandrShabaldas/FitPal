@@ -148,7 +148,7 @@ fun ExerciseDetailScreen(
                         }
                         Spacer(Modifier.height(4.dp))
                         Text(prettyDate(entry.date), style = MaterialTheme.typography.bodySmall, color = CreamMuted)
-                        AiSource.fromName(entry.aiSource)?.let { src ->
+                        AiSource.fromName(entry.aiSource, entry.aiModel)?.let { src ->
                             Spacer(Modifier.height(10.dp))
                             AiSourceBadge(src)
                         }

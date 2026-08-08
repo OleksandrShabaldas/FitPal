@@ -33,6 +33,8 @@ data class GalleryFoodEntity(
     val insightsJson: String? = null,
     /** Which engine produced the saved analysis (ONLINE/OFFLINE), for the badge. */
     val aiSource: String? = null,
+    /** The exact model behind that analysis ("gemini-3-flash-preview", "Gemma 3n E4B"), for the badge. */
+    val aiModel: String? = null,
     /** The category or subcategory this food is filed under (see [GalleryCategoryEntity]); null = unsorted. */
     val categoryId: Long? = null,
     val createdAt: Long = System.currentTimeMillis(),

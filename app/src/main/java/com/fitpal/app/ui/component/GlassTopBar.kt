@@ -18,6 +18,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.fitpal.app.ui.theme.Cream
 import com.fitpal.app.ui.theme.glass
@@ -48,7 +49,16 @@ fun GlassTopBar(
             }
             Spacer(Modifier.width(14.dp))
         }
-        Text(title, style = MaterialTheme.typography.headlineSmall, color = Cream, modifier = Modifier.weight(1f))
+        // One line, always: titles can now be user-written (a named meal), and a long one
+        // wrapping would push the bar's height around.
+        Text(
+            title,
+            style = MaterialTheme.typography.headlineSmall,
+            color = Cream,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
         actions()
     }
 }

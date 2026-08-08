@@ -357,7 +357,11 @@ fun HomeScreen(
             item = item,
             currentMealType = editingType,
             sourceDate = selectedDate,
-            onSave = { grams -> viewModel.updateItemGrams(item, grams); editingItem = null },
+            onSave = { grams, name ->
+                viewModel.updateItemGrams(item, grams)
+                if (name != item.name) viewModel.renameItem(item.id, name)
+                editingItem = null
+            },
             onDelete = { viewModel.deleteItem(item.id); editingItem = null },
             onCopyToDate = { date, meal, copies -> viewModel.copyItemToDate(item, date, meal, copies); editingItem = null },
             onChangeMealType = { type -> viewModel.setItemMealType(item, type); editingItem = null },
@@ -720,6 +724,7 @@ private fun MealCategorySection(
                 } else {
                     MealGroupCard(
                         items = groupItems,
+                        mealName = section.mealNames[groupItems.first().mealLogId],
                         onGroupClick = { onGroupClick(groupItems.first().mealLogId) },
                         onItemClick = { onItemClick(it.id) },
                         onItemLongClick = { onItemLongClick(it) }
@@ -786,11 +791,13 @@ private fun MealItemRow(
 /**
  * One meal logged in a single generation (a photo or describe with several dishes). Shown as one
  * card — recognisable as ONE meal — with each dish listed and individually tappable to its detail.
+ * [mealName] is the name the user gave the whole meal, if any; without one it's "Meal · N dishes".
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MealGroupCard(
     items: List<MealLogItemEntity>,
+    mealName: String?,
     onGroupClick: () -> Unit,
     onItemClick: (MealLogItemEntity) -> Unit,
     onItemLongClick: (MealLogItemEntity) -> Unit
@@ -814,9 +821,11 @@ private fun MealGroupCard(
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Meal · ${items.size} dishes",
+                    text = mealName ?: "Meal · ${items.size} dishes",
                     style = MaterialTheme.typography.titleSmall,
-                    color = Cream
+                    color = Cream,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = items.joinToString(", ") { it.name },
@@ -1064,7 +1073,7 @@ private fun EditEntryDialog(
     item: MealLogItemEntity,
     currentMealType: String,
     sourceDate: LocalDate,
-    onSave: (Float) -> Unit,
+    onSave: (grams: Float, name: String) -> Unit,
     onDelete: () -> Unit,
     onCopyToDate: (LocalDate, String, Int) -> Unit,
     onChangeMealType: (String) -> Unit,
@@ -1072,6 +1081,9 @@ private fun EditEntryDialog(
 ) {
     val unit = if (item.isDrink) "ml" else "g"
     var grams by remember { mutableStateOf(item.grams.toInt().toString()) }
+    // Editable right here: a database food arrives under its catalogue name, and this is the
+    // fastest place to call it what you actually call it.
+    var name by remember { mutableStateOf(item.name) }
     var showCopyPicker by remember { mutableStateOf(false) }
 
     if (showCopyPicker) {
@@ -1095,6 +1107,13 @@ private fun EditEntryDialog(
         text = {
             Column {
                 OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Name") },
+                    singleLine = true
+                )
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
                     value = grams,
                     onValueChange = { grams = it },
                     label = { Text("Amount ($unit)") },
@@ -1114,7 +1133,13 @@ private fun EditEntryDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { onSave(grams.toFloatOrNull() ?: item.grams) }) { Text("Save") } },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onSave(grams.toFloatOrNull() ?: item.grams, name.trim().ifEmpty { item.name })
+                }
+            ) { Text("Save") }
+        },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }

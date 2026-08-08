@@ -29,12 +29,19 @@ class RemoteIngredientEngine @Inject constructor(
 
     override suspend fun describeMeal(text: String): List<DetectedFood> = describeMeal(text) {}
 
-    /** Like [describeMeal] but reports the live request stage for the UI tooltip. */
-    suspend fun describeMeal(text: String, onProgress: (String) -> Unit): List<DetectedFood> {
+    /**
+     * Like [describeMeal] but reports the live request stage for the UI tooltip, and which model
+     * answered (the client may have cascaded past the first one) for the badge.
+     */
+    suspend fun describeMeal(
+        text: String,
+        onModel: (String) -> Unit = {},
+        onProgress: (String) -> Unit
+    ): List<DetectedFood> {
         // Pure extraction (turn words into foods) — perception, not reasoning. Lean prompt, fast.
         val raw = gemini.generate(
             FoodPrompts.describeOnline(text), temperature = 0.15f, jsonMode = true,
-            thinkingLevel = FAST, onProgress = onProgress
+            thinkingLevel = FAST, onProgress = onProgress, onModel = onModel
         )
         return FoodJsonParser.parseFoods(raw)
     }
@@ -43,7 +50,7 @@ class RemoteIngredientEngine @Inject constructor(
         bitmap: Bitmap,
         note: String,
         onProgress: (String) -> Unit
-    ): List<DetectedFood> = analyzeImageWithCandidates(bitmap, note, onProgress).foods
+    ): List<DetectedFood> = analyzeImageWithCandidates(bitmap, note, onProgress = onProgress).foods
 
     /**
      * Online single pass: identify ingredients AND name composite dishes AND suggest variations
@@ -54,6 +61,7 @@ class RemoteIngredientEngine @Inject constructor(
     suspend fun analyzeImageWithCandidates(
         bitmap: Bitmap,
         note: String,
+        onModel: (String) -> Unit = {},
         onProgress: (String) -> Unit = {}
     ): VisionResult {
         val raw = gemini.generate(
@@ -62,7 +70,8 @@ class RemoteIngredientEngine @Inject constructor(
             temperature = 0.2f,
             jsonMode = true,
             thinkingLevel = FAST,
-            onProgress = onProgress
+            onProgress = onProgress,
+            onModel = onModel
         )
         onProgress("Reading the AI's answer…")
         return FoodJsonParser.parseVisionResult(raw)
@@ -86,9 +95,16 @@ class RemoteIngredientEngine @Inject constructor(
         return FoodJsonParser.parseDishCandidates(raw, ingredients)
     }
 
-    override suspend fun analyzeMealInsights(foods: List<DetectedFood>): MealInsights {
+    override suspend fun analyzeMealInsights(foods: List<DetectedFood>): MealInsights =
+        analyzeMealInsights(foods) {}
+
+    /** Like [analyzeMealInsights] but reports which model answered, for the badge. */
+    suspend fun analyzeMealInsights(foods: List<DetectedFood>, onModel: (String) -> Unit): MealInsights {
         // Health scoring / swaps / energy & mood — reasoning. Deeper prompt + deeper thinking.
-        val raw = gemini.generate(FoodPrompts.insightsOnline(foods), temperature = 0.3f, jsonMode = true, thinkingLevel = DEEP)
+        val raw = gemini.generate(
+            FoodPrompts.insightsOnline(foods), temperature = 0.3f, jsonMode = true,
+            thinkingLevel = DEEP, onModel = onModel
+        )
         return FoodJsonParser.parseInsights(raw)
     }
 
@@ -103,7 +119,10 @@ class RemoteIngredientEngine @Inject constructor(
         extraContext: String
     ): String = generateNutritionReview(period, rows, totalDays, profile, targets, weights, foodLog, extraContext) {}
 
-    /** Like [generateNutritionReview] but reports the live request stage for the UI tooltip. */
+    /**
+     * Like [generateNutritionReview] but reports the live request stage for the UI tooltip, and
+     * which model answered for the badge.
+     */
     suspend fun generateNutritionReview(
         period: String,
         rows: List<DailyNutritionRow>,
@@ -113,6 +132,7 @@ class RemoteIngredientEngine @Inject constructor(
         weights: List<WeightEntryEntity>,
         foodLog: String,
         extraContext: String,
+        onModel: (String) -> Unit = {},
         onProgress: (String) -> Unit
     ): String {
         // Deep, personalised daily/weekly/monthly review — the showcase reasoning task. Leaner
@@ -122,12 +142,18 @@ class RemoteIngredientEngine @Inject constructor(
             temperature = 0.5f,
             jsonMode = false,
             thinkingLevel = DEEP,
-            onProgress = onProgress
+            onProgress = onProgress,
+            onModel = onModel
         ).trim()
     }
 
-    override suspend fun generateRawText(prompt: String): String =
-        gemini.generate(prompt, temperature = 0.5f, jsonMode = false, thinkingLevel = DEEP).trim()
+    override suspend fun generateRawText(prompt: String): String = generateRawText(prompt) {}
+
+    /** Like [generateRawText] but reports which model answered, for the badge. */
+    suspend fun generateRawText(prompt: String, onModel: (String) -> Unit): String =
+        gemini.generate(
+            prompt, temperature = 0.5f, jsonMode = false, thinkingLevel = DEEP, onModel = onModel
+        ).trim()
 
     override fun close() {
         // Nothing to release — calls are stateless HTTP requests.

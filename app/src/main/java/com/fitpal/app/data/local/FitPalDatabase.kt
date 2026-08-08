@@ -47,7 +47,7 @@ import com.fitpal.app.data.local.entity.WeightEntryEntity
         UsdaFoodEntity::class,
         WeightEntryEntity::class
     ],
-    version = 23,
+    version = 24,
     exportSchema = true
 )
 abstract class FitPalDatabase : RoomDatabase() {
@@ -383,6 +383,21 @@ abstract class FitPalDatabase : RoomDatabase() {
         val MIGRATION_22_23 = object : Migration(22, 23) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE trail_projects ADD COLUMN variantIndex INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        /**
+         * v23 -> v24: name the exact AI model behind every generation (the old aiSource only said
+         * online-vs-on-device, and "online" cascades through several models), plus a user-given
+         * name for a whole meal.
+         */
+        val MIGRATION_23_24 = object : Migration(23, 24) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE meal_log_items ADD COLUMN aiModel TEXT")
+                db.execSQL("ALTER TABLE ai_reviews ADD COLUMN model TEXT")
+                db.execSQL("ALTER TABLE gallery_foods ADD COLUMN aiModel TEXT")
+                db.execSQL("ALTER TABLE exercise_entries ADD COLUMN aiModel TEXT")
+                db.execSQL("ALTER TABLE meal_logs ADD COLUMN name TEXT")
             }
         }
     }

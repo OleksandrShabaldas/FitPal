@@ -313,6 +313,18 @@ class AnalysisViewModel @Inject constructor(
         }
     }
 
+    /** Rename a dish before it's logged — what the AI called it is a suggestion, not a verdict. */
+    fun renameFood(foodIndex: Int, name: String) {
+        val clean = name.trim()
+        if (clean.isEmpty()) return
+        _uiState.update { state ->
+            val foods = state.detectedFoods.toMutableList()
+            val food = foods.getOrNull(foodIndex) ?: return@update state
+            foods[foodIndex] = food.copy(label = clean)
+            state.copy(detectedFoods = foods)
+        }
+    }
+
     /** Set the whole dish's weight, scaling every ingredient proportionally. */
     fun scaleFoodToGrams(foodIndex: Int, newTotalGrams: Float) {
         if (newTotalGrams <= 0f) return

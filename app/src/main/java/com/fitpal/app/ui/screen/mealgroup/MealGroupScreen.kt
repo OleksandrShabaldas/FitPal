@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -52,6 +53,7 @@ import com.fitpal.app.ui.component.GlassTopBar
 import com.fitpal.app.ui.component.GradientBackdrop
 import com.fitpal.app.ui.component.MacroBar
 import com.fitpal.app.ui.component.MealTypeSelector
+import com.fitpal.app.ui.component.RenameDialog
 import com.fitpal.app.ui.theme.CalorieColor
 import com.fitpal.app.ui.theme.Cream
 import com.fitpal.app.ui.theme.CreamMuted
@@ -74,6 +76,9 @@ fun MealGroupScreen(
     val context = androidx.compose.ui.platform.LocalContext.current
     var showCopyPicker by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showRenameMeal by remember { mutableStateOf(false) }
+    // The dish being renamed (id + its current name), or null when no rename is open.
+    var renamingDish by remember { mutableStateOf<Pair<Long, String>?>(null) }
 
     // Pop back once the whole meal is deleted (or all dishes were removed individually). Guarded
     // so it fires exactly once (delete sets the flag AND empties the flow — both would pop).
@@ -105,6 +110,28 @@ fun MealGroupScreen(
             onDismiss = { showCopyPicker = false }
         )
     }
+    if (showRenameMeal) {
+        RenameDialog(
+            currentName = state.mealName.orEmpty(),
+            title = "Name this meal",
+            label = "Meal name",
+            placeholder = "e.g. Sunday roast",
+            hint = "Names the whole meal on your day. Leave it empty to go back to listing its dishes.",
+            allowEmpty = true,
+            onConfirm = { viewModel.renameMeal(it); showRenameMeal = false },
+            onDismiss = { showRenameMeal = false }
+        )
+    }
+    renamingDish?.let { (dishId, dishName) ->
+        RenameDialog(
+            currentName = dishName,
+            title = "Rename this dish",
+            label = "Dish name",
+            hint = "Only the name changes — the amount and nutrition stay as logged.",
+            onConfirm = { viewModel.renameDish(dishId, it); renamingDish = null },
+            onDismiss = { renamingDish = null }
+        )
+    }
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
@@ -122,11 +149,18 @@ fun MealGroupScreen(
     GradientBackdrop(theme = BackdropTheme.TODAY) {
         Column(modifier = Modifier.fillMaxSize()) {
             GlassTopBar(
-                title = "Meal",
+                title = state.mealName ?: "Meal",
                 onBack = onBack,
                 actions = {
                     if (state.dishes.isNotEmpty()) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier.size(40.dp).glass(CircleShape).clickable { showRenameMeal = true },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.Edit, contentDescription = "Name this meal", tint = Cream, modifier = Modifier.size(20.dp))
+                            }
+                            Spacer(Modifier.width(8.dp))
                             Box(
                                 modifier = Modifier.size(40.dp).glass(CircleShape).clickable { showCopyPicker = true },
                                 contentAlignment = Alignment.Center
@@ -177,7 +211,7 @@ fun MealGroupScreen(
                                     style = MaterialTheme.typography.bodySmall, color = CreamMuted
                                 )
                                 Text(
-                                    "Tap a dish to edit it.",
+                                    "Tap a dish to edit it, or its name to rename it.",
                                     style = MaterialTheme.typography.bodySmall, color = CreamMuted
                                 )
                                 Spacer(Modifier.height(12.dp))
@@ -191,6 +225,7 @@ fun MealGroupScreen(
                                 onTotalGramsChange = { g -> viewModel.scaleDishToGrams(dish.item.id, g) },
                                 onIngredientRemove = { i -> viewModel.removeIngredient(dish.item.id, i) },
                                 onRemoveDish = { viewModel.removeDish(dish.item.id) },
+                                onRename = { renamingDish = dish.item.id to dish.item.name },
                                 onOpenDetails = { onDishClick(dish.item.id) }
                             )
                         }
@@ -208,14 +243,39 @@ private fun DishCard(
     onTotalGramsChange: (newTotalGrams: Float) -> Unit,
     onIngredientRemove: (ingredientIndex: Int) -> Unit,
     onRemoveDish: () -> Unit,
+    onRename: () -> Unit,
     onOpenDetails: () -> Unit
 ) {
     val item = dish.item
     val unit = if (item.isDrink) "ml" else "g"
     Column(modifier = Modifier.fillMaxWidth().glass().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(item.name, style = MaterialTheme.typography.titleLarge, color = Cream)
+            // Tap the dish name to rename it — the AI's wording (or a database catalogue name)
+            // is a starting point, not something to live with.
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable(onClick = onRename)
+                    .padding(vertical = 2.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        item.name,
+                        style = MaterialTheme.typography.titleLarge,
+                        color = Cream,
+                        maxLines = 2,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Icon(
+                        Icons.Default.Edit,
+                        contentDescription = "Rename ${item.name}",
+                        tint = CreamMuted,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
                 Text("${item.grams.toInt()} $unit", style = MaterialTheme.typography.labelSmall, color = CreamMuted)
             }
             Text("${item.calories.toInt()} kcal", style = MaterialTheme.typography.titleMedium, color = CalorieColor)

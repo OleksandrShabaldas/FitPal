@@ -19,10 +19,12 @@ class AiReviewRepository @Inject constructor(
 ) {
     /** Saved review for a period (text + which AI made it), or null if not generated yet. */
     suspend fun get(period: String, periodKey: String): SavedReview? =
-        aiReviewDao.get(period, periodKey)?.let { SavedReview(it.review, AiSource.fromName(it.source)) }
+        aiReviewDao.get(period, periodKey)?.let { SavedReview(it.review, AiSource.fromName(it.source, it.model)) }
 
     suspend fun save(period: String, periodKey: String, review: String, source: AiSource?) {
-        aiReviewDao.upsert(AiReviewEntity(period, periodKey, review, source = source?.name))
+        aiReviewDao.upsert(
+            AiReviewEntity(period, periodKey, review, source = source?.storedName, model = source?.model)
+        )
     }
 
     suspend fun delete(period: String, periodKey: String) {

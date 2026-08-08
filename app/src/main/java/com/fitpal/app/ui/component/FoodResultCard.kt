@@ -1,5 +1,6 @@
 package com.fitpal.app.ui.component
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,12 +11,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -59,21 +62,52 @@ fun FoodResultCard(
     drinkPresets: List<ServingPreset> = emptyList(),
     onSave: (() -> Unit)? = null,
     /** When true, the save button shows a filled bookmark to confirm it's in the collection. */
-    saved: Boolean = false
+    saved: Boolean = false,
+    /** When given, the name is tappable and can be rewritten before the meal is logged. */
+    onRename: ((String) -> Unit)? = null
 ) {
     // Drinks are measured in millilitres and tap the drink presets; meals use grams.
     val unit = if (food.isDrink) "ml" else "g"
     val activePresets = if (food.isDrink) drinkPresets else mealPresets
+    var renaming by remember { mutableStateOf(false) }
+
+    if (renaming && onRename != null) {
+        RenameDialog(
+            currentName = food.label,
+            title = "Rename this dish",
+            label = "Dish name",
+            hint = "Only the name changes — the ingredients and amounts stay as they are.",
+            onConfirm = { onRename(it); renaming = false },
+            onDismiss = { renaming = false }
+        )
+    }
+
     Box(modifier = modifier.fillMaxWidth().glass()) {
         Column(modifier = Modifier.padding(16.dp)) {
             // Header: name + live total (grams + calories) + remove the whole food
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = food.label,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .then(if (onRename != null) Modifier.clickable { renaming = true } else Modifier)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = food.label,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        if (onRename != null) {
+                            Spacer(Modifier.width(6.dp))
+                            Icon(
+                                Icons.Default.Edit,
+                                contentDescription = "Rename ${food.label}",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(15.dp)
+                            )
+                        }
+                    }
                     Text(
                         text = "${food.totalGrams.toInt()} $unit · ${food.totalCalories.toInt()} kcal" +
                             if (food.isDrink && food.totalWaterMl > 0f)

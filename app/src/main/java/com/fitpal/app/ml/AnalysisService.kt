@@ -104,12 +104,12 @@ class AnalysisService : Service() {
         val outcome = analyzePrimaryImage(job, bitmap)
         // Keep the secondary steps (dish naming, insights) on the same engine the primary used,
         // so a forced on-device run doesn't waste time retrying a dead online connection.
-        pipeline.setPreferLocal(outcome.source == AiSource.OFFLINE)
+        pipeline.setPreferLocal(outcome.source.isOffline)
 
         // Online already named the dish AND produced any candidates in its single pass. On-device
         // keeps the two-pass workaround: its weaker model names the dish better when shown the
         // photo again alongside the loose ingredients.
-        val candidates: List<DetectedFood> = if (outcome.source == AiSource.ONLINE) {
+        val candidates: List<DetectedFood> = if (outcome.source.isOnline) {
             outcome.dishCandidates
         } else {
             val loose = outcome.foods.flatMap { it.ingredients }
@@ -126,7 +126,7 @@ class AnalysisService : Service() {
         jobManager.setResult(
             finalFoods, candidates, insights = null,
             source = outcome.source,
-            onlineError = outcome.onlineError.takeIf { outcome.source == AiSource.OFFLINE }
+            onlineError = outcome.onlineError.takeIf { outcome.source.isOffline }
         )
         notify(NOTIF_ID, completeNotification(job))
 
@@ -137,11 +137,11 @@ class AnalysisService : Service() {
 
     private suspend fun runText(job: AnalysisJob) {
         val outcome = analyzePrimaryText(job)
-        pipeline.setPreferLocal(outcome.source == AiSource.OFFLINE)
+        pipeline.setPreferLocal(outcome.source.isOffline)
         jobManager.setResult(
             outcome.foods, emptyList(), insights = null,
             source = outcome.source,
-            onlineError = outcome.onlineError.takeIf { outcome.source == AiSource.OFFLINE }
+            onlineError = outcome.onlineError.takeIf { outcome.source.isOffline }
         )
         notify(NOTIF_ID, completeNotification(job))
     }
@@ -169,17 +169,22 @@ class AnalysisService : Service() {
                             job,
                             if (onlineError != null) "Switching to the on-device model…"
                             else "Looking at your food on-device…",
-                            AiSource.OFFLINE
+                            AiSource.offline()
                         )
-                        val foods = pipeline.analyzeImageLocal(bitmap, job.note) { msg -> updateProgress(job, msg, AiSource.OFFLINE) }
-                        return PrimaryOutcome(foods, AiSource.OFFLINE, onlineError)
+                        val foods = pipeline.analyzeImageLocal(bitmap, job.note) { msg -> updateProgress(job, msg, AiSource.offline()) }
+                        return PrimaryOutcome(foods, AiSource.offline(), onlineError)
                     }
                 }
             }
-            updateProgress(job, "Preparing to ask the online AI…", AiSource.ONLINE)
+            updateProgress(job, "Preparing to ask the online AI…", AiSource.online())
             try {
-                val result = pipeline.analyzeImageOnline(bitmap, job.note) { msg -> updateProgress(job, msg, AiSource.ONLINE) }
-                return PrimaryOutcome(result.foods, AiSource.ONLINE, null, result.dishCandidates)
+                // Which model answered is only known once the request lands (the client cascades
+                // through the configured models), so it's captured here and named on the badge.
+                var model: String? = null
+                val result = pipeline.analyzeImageOnline(
+                    bitmap, job.note, onModel = { model = it }
+                ) { msg -> updateProgress(job, msg, AiSource.online(model)) }
+                return PrimaryOutcome(result.foods, AiSource.online(model), null, result.dishCandidates)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -206,17 +211,20 @@ class AnalysisService : Service() {
                             job,
                             if (onlineError != null) "Switching to the on-device model…"
                             else "Reading your description on-device…",
-                            AiSource.OFFLINE
+                            AiSource.offline()
                         )
                         val foods = pipeline.describeMealLocal(job.description)
-                        return PrimaryOutcome(foods, AiSource.OFFLINE, onlineError)
+                        return PrimaryOutcome(foods, AiSource.offline(), onlineError)
                     }
                 }
             }
-            updateProgress(job, "Preparing to ask the online AI…", AiSource.ONLINE)
+            updateProgress(job, "Preparing to ask the online AI…", AiSource.online())
             try {
-                val foods = pipeline.describeMealOnline(job.description) { msg -> updateProgress(job, msg, AiSource.ONLINE) }
-                return PrimaryOutcome(foods, AiSource.ONLINE, null)
+                var model: String? = null
+                val foods = pipeline.describeMealOnline(
+                    job.description, onModel = { model = it }
+                ) { msg -> updateProgress(job, msg, AiSource.online(model)) }
+                return PrimaryOutcome(foods, AiSource.online(model), null)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

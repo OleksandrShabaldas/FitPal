@@ -26,6 +26,8 @@ data class MealGroupDish(
 data class MealGroupUiState(
     val dishes: List<MealGroupDish> = emptyList(),
     val mealType: String = "",
+    /** The name the user gave this whole meal, or null while it's unnamed. */
+    val mealName: String? = null,
     /** The day this meal is logged on — so "copy to date" can center on it. */
     val date: LocalDate = LocalDate.now(),
     val isLoading: Boolean = true,
@@ -59,7 +61,8 @@ class MealGroupViewModel @Inject constructor(
         viewModelScope.launch {
             val type = mealRepository.getMealTypeForMeal(mealLogId) ?: ""
             val date = mealRepository.getMealDate(mealLogId)?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: LocalDate.now()
-            _uiState.update { it.copy(mealType = type, date = date) }
+            val name = mealRepository.getMealName(mealLogId)
+            _uiState.update { it.copy(mealType = type, date = date, mealName = name) }
         }
         viewModelScope.launch {
             mealRepository.getItemsForMealFlow(mealLogId).collect { items ->
@@ -120,6 +123,26 @@ class MealGroupViewModel @Inject constructor(
         updated[idx] = updated[idx].copy(ingredients = newIngredients)
         _uiState.update { it.copy(dishes = updated) }
         viewModelScope.launch { mealRepository.updateItemIngredients(itemId, newIngredients) }
+    }
+
+    /**
+     * Name the whole meal ("Sunday roast") — an empty name clears it and the meal goes back to
+     * being described by its dishes. Renaming a *dish* is [renameDish].
+     */
+    fun renameMeal(name: String) {
+        val clean = name.trim().takeIf { it.isNotEmpty() }
+        viewModelScope.launch {
+            mealRepository.renameMeal(mealLogId, clean)
+            _uiState.update { it.copy(mealName = clean) }
+        }
+    }
+
+    /** Rename one dish of the meal — including one logged straight from the food database. */
+    fun renameDish(itemId: Long, name: String) {
+        val clean = name.trim()
+        if (clean.isEmpty()) return
+        // The items Flow refreshes the card; no optimistic update needed.
+        viewModelScope.launch { mealRepository.renameItem(itemId, clean) }
     }
 
     /** Change this whole meal's category (Breakfast/Lunch/Dinner/Snack) — all dishes move together. */

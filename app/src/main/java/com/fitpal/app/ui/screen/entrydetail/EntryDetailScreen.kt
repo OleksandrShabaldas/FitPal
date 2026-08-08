@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.SwapHoriz
@@ -71,6 +72,7 @@ import com.fitpal.app.ui.component.GlassTopBar
 import com.fitpal.app.ui.component.GradientBackdrop
 import com.fitpal.app.ui.component.MealInsightsSection
 import com.fitpal.app.ui.component.MicronutrientBars
+import com.fitpal.app.ui.component.RenameDialog
 import com.fitpal.app.ui.component.SegmentedPills
 import com.fitpal.app.ui.theme.CalorieColor
 import com.fitpal.app.ui.theme.CarbColor
@@ -98,6 +100,7 @@ fun EntryDetailScreen(
     var replacingIndex by remember { mutableStateOf<Int?>(null) }
     var showCopyPicker by remember { mutableStateOf(false) }
     var showEditWithAi by remember { mutableStateOf(false) }
+    var showRename by remember { mutableStateOf(false) }
 
     // Close the AI-edit dialog once the re-check lands (or report that it came back empty).
     LaunchedEffect(state.isRefiningWithAi) {
@@ -208,7 +211,14 @@ fun EntryDetailScreen(
                                     )
                                 }
                             }
-                            item { HeaderCard(item, state.mealType, onMealTypeSelected = viewModel::setMealType) }
+                            item {
+                                HeaderCard(
+                                    item = item,
+                                    mealType = state.mealType,
+                                    onMealTypeSelected = viewModel::setMealType,
+                                    onRename = { showRename = true }
+                                )
+                            }
                             item {
                                 IngredientsCard(
                                     ingredients = state.ingredients,
@@ -239,6 +249,17 @@ fun EntryDetailScreen(
                 }
             }
         }
+    }
+
+    if (showRename) {
+        RenameDialog(
+            currentName = state.item?.name.orEmpty(),
+            title = "Rename this entry",
+            label = "Dish name",
+            hint = "Only the name changes — the amount, ingredients and nutrition stay as logged.",
+            onConfirm = { viewModel.renameEntry(it); showRename = false },
+            onDismiss = { showRename = false }
+        )
     }
 
     if (showEditWithAi) {
@@ -328,9 +349,37 @@ private fun MicronutrientCard(micros: Micronutrients) {
 }
 
 @Composable
-private fun HeaderCard(item: MealLogItemEntity, mealType: String, onMealTypeSelected: (String) -> Unit) {
+private fun HeaderCard(
+    item: MealLogItemEntity,
+    mealType: String,
+    onMealTypeSelected: (String) -> Unit,
+    onRename: () -> Unit
+) {
     Column(modifier = Modifier.fillMaxWidth().glass().padding(18.dp)) {
-        Text(item.name, style = MaterialTheme.typography.headlineMedium, color = Cream)
+        // The name is the one thing here you edit by tapping it — everything the app can name
+        // (the AI, the food database, a barcode) can get it wrong or word it oddly.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .clickable(onClick = onRename)
+                .padding(vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                item.name,
+                style = MaterialTheme.typography.headlineMedium,
+                color = Cream,
+                modifier = Modifier.weight(1f, fill = false)
+            )
+            Spacer(Modifier.width(8.dp))
+            Icon(
+                Icons.Default.Edit,
+                contentDescription = "Rename ${item.name}",
+                tint = CreamMuted,
+                modifier = Modifier.size(18.dp)
+            )
+        }
         Spacer(Modifier.height(6.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             Text("${item.grams.toInt()} ${if (item.isDrink) "ml" else "g"}", style = MaterialTheme.typography.bodyLarge, color = CreamMuted)
@@ -346,7 +395,7 @@ private fun HeaderCard(item: MealLogItemEntity, mealType: String, onMealTypeSele
             onSelect = { i -> onMealTypeSelected(MealTypes.ALL[i]) }
         )
         // Which AI logged this meal (only on entries saved after the online/offline split).
-        AiSource.fromName(item.aiSource)?.let {
+        AiSource.fromName(item.aiSource, item.aiModel)?.let {
             Spacer(Modifier.height(10.dp))
             AiSourceBadge(it)
         }

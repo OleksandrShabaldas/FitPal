@@ -96,7 +96,7 @@ class GalleryFoodDetailViewModel @Inject constructor(
                     photoPath = entity.photoPath,
                     ingredients = domain.ingredients,
                     insights = galleryRepository.insightsForFood(entity),
-                    aiSource = AiSource.fromName(entity.aiSource),
+                    aiSource = AiSource.fromName(entity.aiSource, entity.aiModel),
                     isLoading = false,
                     modelReady = aiAvailable()
                 )

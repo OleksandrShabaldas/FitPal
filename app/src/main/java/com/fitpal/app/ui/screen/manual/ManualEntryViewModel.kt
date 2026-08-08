@@ -135,6 +135,14 @@ class ManualEntryViewModel @Inject constructor(
     fun setPickedPortion(grams: Float) =
         updatePicked { it.copy(base = it.base.withGrams(grams), portionEdited = true) }
 
+    /**
+     * Rename the picked food before it joins the meal. Database entries come with catalogue names
+     * ("Cheese, cheddar, sharp"), which is the wrong thing to read back in your day — so the name
+     * is editable here, at the one point every database pick passes through.
+     */
+    fun setPickedName(name: String) =
+        updatePicked { it.copy(base = it.base.copy(name = name)) }
+
     /** How many helpings; the sheet adds them as one item of the multiplied size. */
     fun setPickedCount(count: Int) =
         updatePicked { it.copy(count = count.coerceIn(1, PickedFood.MAX_COUNT)) }
@@ -206,6 +214,17 @@ class ManualEntryViewModel @Inject constructor(
             if (index in draft.indices) {
                 draft[index] = draft[index].withGrams(newGrams)
             }
+            state.copy(draft = draft)
+        }
+    }
+
+    /** Rename an item already in the meal you're building — a second chance at the portion sheet's. */
+    fun renameDraftItem(index: Int, name: String) {
+        val clean = name.trim()
+        if (clean.isEmpty()) return
+        _uiState.update { state ->
+            val draft = state.draft.toMutableList()
+            if (index in draft.indices) draft[index] = draft[index].copy(name = clean)
             state.copy(draft = draft)
         }
     }

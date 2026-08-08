@@ -18,6 +18,8 @@ data class ExerciseEntryEntity(
     val source: String = "manual",
     /** Which AI engine produced the analysis (ONLINE/OFFLINE), for the badge. */
     val aiSource: String? = null,
+    /** The exact model behind it ("gemini-3-flash-preview", "Gemma 3n E4B"), for the badge. */
+    val aiModel: String? = null,
     /** JSON array of short coaching tips generated with the estimate. */
     val suggestionsJson: String? = null,
     val timestamp: Long = System.currentTimeMillis()

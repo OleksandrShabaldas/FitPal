@@ -53,7 +53,8 @@ class GalleryRepository @Inject constructor(
             totalFiber = food.totalFiber,
             isDrink = food.isDrink,
             insightsJson = insights?.let { MealJson.encodeInsights(it) },
-            aiSource = aiSource?.name
+            aiSource = aiSource?.storedName,
+            aiModel = aiSource?.model
         )
         val ingredientEntities = food.ingredients.map { galleryIngredientOf(it) }
         return galleryDao.saveFoodWithIngredients(entity, ingredientEntities)
@@ -120,7 +121,8 @@ class GalleryRepository @Inject constructor(
         galleryDao.updateFood(
             existing.copy(
                 insightsJson = MealJson.encodeInsights(insights),
-                aiSource = source?.name ?: existing.aiSource
+                aiSource = source?.storedName ?: existing.aiSource,
+                aiModel = source?.model ?: existing.aiModel
             )
         )
     }

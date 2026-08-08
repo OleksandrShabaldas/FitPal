@@ -121,7 +121,10 @@ fun BarcodeScreen(
                                 viewModel.saveToGallery()
                                 Toast.makeText(context, "Saved to collection", Toast.LENGTH_SHORT).show()
                             },
-                            saved = state.savedToGallery
+                            saved = state.savedToGallery,
+                            // Product names come straight from the barcode database and are often
+                            // shouty or half in another language — fix it before logging.
+                            onRename = viewModel::renameProduct
                         )
                     }
 

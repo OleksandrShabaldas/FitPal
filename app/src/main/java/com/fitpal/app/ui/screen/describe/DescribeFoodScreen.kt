@@ -218,7 +218,8 @@ fun DescribeFoodScreen(
                                     viewModel.saveToGallery(index)
                                     Toast.makeText(context, "Saved to collection", Toast.LENGTH_SHORT).show()
                                 },
-                                saved = food.label in state.savedLabels
+                                saved = food.label in state.savedLabels,
+                                onRename = { viewModel.renameFood(index, it) }
                             )
                         }
                     }

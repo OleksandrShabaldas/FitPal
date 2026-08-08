@@ -217,7 +217,8 @@ class ExerciseViewModel @Inject constructor(
                     met = est.met,
                     weightKg = weight,
                     date = targetDate,
-                    aiSource = _uiState.value.aiSource?.name,
+                    aiSource = _uiState.value.aiSource?.storedName,
+                    aiModel = _uiState.value.aiSource?.model,
                     suggestions = est.suggestions
                 )
                 exerciseJobManager.clear()

@@ -65,5 +65,7 @@ data class MealLogItemEntity(
     @ColumnInfo(defaultValue = "0")
     val insightsGeneratedAt: Long = 0L,
     /** Which AI produced this item — "ONLINE" / "OFFLINE" (see [com.fitpal.app.ml.AiSource]); null if unknown. */
-    val aiSource: String? = null
+    val aiSource: String? = null,
+    /** The exact model that produced it ("gemini-3-flash-preview", "Gemma 3n E4B"); null if unknown. */
+    val aiModel: String? = null
 )

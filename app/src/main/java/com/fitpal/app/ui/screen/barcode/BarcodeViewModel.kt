@@ -94,6 +94,13 @@ class BarcodeViewModel @Inject constructor(
         }
     }
 
+    /** Rename the scanned product before logging — barcode names are the manufacturer's, not yours. */
+    fun renameProduct(name: String) {
+        val clean = name.trim()
+        if (clean.isEmpty()) return
+        _uiState.update { state -> state.copy(product = state.product?.copy(name = clean)) }
+    }
+
     fun saveToGallery() {
         val product = _uiState.value.product ?: return
         if (_uiState.value.savedToGallery) return

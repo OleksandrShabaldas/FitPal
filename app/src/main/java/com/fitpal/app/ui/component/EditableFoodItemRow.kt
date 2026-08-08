@@ -1,5 +1,6 @@
 package com.fitpal.app.ui.component
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -16,6 +17,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -104,16 +106,45 @@ fun EditableFoodItemRow(
     unit: String = "g",
     onSave: (() -> Unit)? = null,
     /** When true, the save button shows a filled bookmark to confirm it's in the collection. */
-    saved: Boolean = false
+    saved: Boolean = false,
+    /** When given, the name is tappable and can be rewritten before the meal is logged. */
+    onRename: ((String) -> Unit)? = null
 ) {
+    var renaming by remember { mutableStateOf(false) }
+    if (renaming && onRename != null) {
+        RenameDialog(
+            currentName = ingredient.name,
+            title = "Rename this item",
+            hint = "Only the name changes — the amount and nutrition stay as they are.",
+            onConfirm = { onRename(it); renaming = false },
+            onDismiss = { renaming = false }
+        )
+    }
+
     Column(modifier = modifier.fillMaxWidth().padding(vertical = 6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             // Name + live calories
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = ingredient.name,
-                    style = MaterialTheme.typography.bodyLarge
-                )
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .then(if (onRename != null) Modifier.clickable { renaming = true } else Modifier)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = ingredient.name,
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    if (onRename != null) {
+                        Spacer(Modifier.width(6.dp))
+                        Icon(
+                            Icons.Default.Edit,
+                            contentDescription = "Rename ${ingredient.name}",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
+                }
                 Text(
                     text = "${ingredient.calories.toInt()} kcal",
                     style = MaterialTheme.typography.labelMedium,

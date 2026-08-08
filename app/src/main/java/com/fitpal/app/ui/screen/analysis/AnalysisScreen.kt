@@ -1,5 +1,6 @@
 package com.fitpal.app.ui.screen.analysis
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -29,6 +30,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -370,6 +372,7 @@ fun AnalysisScreen(
                                     onIngredientRemoved = { ii -> viewModel.removeIngredient(foodIndex, ii) },
                                     onAddIngredient = { addIngredientFor = foodIndex },
                                     onEditWithAi = { editWithAiFor = foodIndex },
+                                    onRename = { viewModel.renameFood(foodIndex, it) },
                                     onRemove = { viewModel.removeFood(foodIndex) },
                                     onSaveToGallery = { viewModel.saveToGallery(foodIndex) },
                                     onRemoveFromGallery = { viewModel.removeFromGallery(foodIndex) }
@@ -487,15 +490,44 @@ private fun DetectedFoodCard(
     onToggleVariation: (variationIndex: Int) -> Unit,
     onAddIngredient: () -> Unit,
     onEditWithAi: () -> Unit,
+    onRename: (String) -> Unit,
     onRemove: () -> Unit,
     onSaveToGallery: () -> Unit,
     onRemoveFromGallery: () -> Unit
 ) {
     val unit = if (food.isDrink) "ml" else "g"
+    var renaming by remember { mutableStateOf(false) }
+
+    if (renaming) {
+        com.fitpal.app.ui.component.RenameDialog(
+            currentName = food.label,
+            title = "Rename this dish",
+            label = "Dish name",
+            hint = "Only the name changes — the ingredients and amounts stay as they are.",
+            onConfirm = { onRename(it); renaming = false },
+            onDismiss = { renaming = false }
+        )
+    }
+
     Column(modifier = Modifier.fillMaxWidth().glass().padding(16.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(food.label, style = MaterialTheme.typography.titleLarge, color = Cream)
+            // Tap the dish name to rewrite it before logging.
+            Column(modifier = Modifier.weight(1f).clickable { renaming = true }) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        food.label,
+                        style = MaterialTheme.typography.titleLarge,
+                        color = Cream,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Icon(
+                        Icons.Default.Edit,
+                        contentDescription = "Rename ${food.label}",
+                        tint = CreamMuted,
+                        modifier = Modifier.size(15.dp)
+                    )
+                }
                 Text(
                     text = "${food.totalGrams.toInt()} $unit" +
                         if (food.isDrink && food.totalWaterMl > 0f) " + ${food.totalWaterMl.toInt()} ml water" else "",

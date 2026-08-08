@@ -47,7 +47,9 @@ data class MealSection(
     val type: String,
     val label: String,
     val items: List<MealLogItemEntity>,
-    val calories: Float
+    val calories: Float,
+    /** Names the user gave whole meals in this section, keyed by meal-log id (named ones only). */
+    val mealNames: Map<Long, String> = emptyMap()
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -259,6 +261,11 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch { mealRepository.updateItemGrams(item, newGrams) }
     }
 
+    /** Rename a logged entry — including one that came from the food database under its catalogue name. */
+    fun renameItem(itemId: Long, name: String) {
+        viewModelScope.launch { mealRepository.renameItem(itemId, name) }
+    }
+
     /** Change a logged entry's meal category (Breakfast/Lunch/Dinner/Snack). */
     fun setItemMealType(item: MealLogItemEntity, type: String) {
         viewModelScope.launch { mealRepository.setItemMealType(item, type) }
@@ -325,12 +332,16 @@ class HomeViewModel @Inject constructor(
     private fun buildSections(rows: List<MealLogItemWithType>): List<MealSection> {
         val byType = rows.groupBy { it.mealType }
         return MealTypes.ALL.map { type ->
-            val items = byType[type]?.map { it.item } ?: emptyList()
+            val typeRows = byType[type].orEmpty()
+            val items = typeRows.map { it.item }
             MealSection(
                 type = type,
                 label = MealTypes.label(type),
                 items = items,
-                calories = items.sumOf { it.calories.toDouble() }.toFloat()
+                calories = items.sumOf { it.calories.toDouble() }.toFloat(),
+                mealNames = typeRows.mapNotNull { row ->
+                    row.mealName?.trim()?.takeIf { it.isNotEmpty() }?.let { row.item.mealLogId to it }
+                }.toMap()
             )
         }
     }

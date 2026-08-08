@@ -64,12 +64,17 @@ class FoodAnalysisPipeline @Inject constructor(
     /**
      * Online-only photo analysis — returns the plate's foods AND any candidate dishes (single
      * pass). Throws ([GeminiQuotaException]/[GeminiUnavailableException]) on failure. The 0-kcal
-     * USDA safety net is applied to both lists.
+     * USDA safety net is applied to both lists. [onModel] reports which online model answered.
      */
-    suspend fun analyzeImageOnline(image: Bitmap, note: String, onProgress: (String) -> Unit = {}): VisionResult {
+    suspend fun analyzeImageOnline(
+        image: Bitmap,
+        note: String,
+        onModel: (String) -> Unit = {},
+        onProgress: (String) -> Unit = {}
+    ): VisionResult {
         val r = routing ?: throw GeminiUnavailableException("Online engine unavailable")
         return try {
-            val result = r.onlineEngine.analyzeImageWithCandidates(image, note, onProgress)
+            val result = r.onlineEngine.analyzeImageWithCandidates(image, note, onModel, onProgress)
             VisionResult(
                 foods = result.foods.map { enrichZeros(it) },
                 dishCandidates = result.dishCandidates.map { enrichZeros(it) }
@@ -85,11 +90,15 @@ class FoodAnalysisPipeline @Inject constructor(
         return engine.analyzeImage(image, note, onProgress).map { enrichZeros(it) }
     }
 
-    /** Online-only text analysis. Throws on failure. */
-    suspend fun describeMealOnline(text: String, onProgress: (String) -> Unit = {}): List<DetectedFood> {
+    /** Online-only text analysis. Throws on failure. [onModel] reports which model answered. */
+    suspend fun describeMealOnline(
+        text: String,
+        onModel: (String) -> Unit = {},
+        onProgress: (String) -> Unit = {}
+    ): List<DetectedFood> {
         val r = routing ?: throw GeminiUnavailableException("Online engine unavailable")
         return try {
-            r.onlineEngine.describeMeal(text, onProgress).map { enrichZeros(it) }
+            r.onlineEngine.describeMeal(text, onModel, onProgress).map { enrichZeros(it) }
         } catch (e: GeminiQuotaException) {
             throw e // GeminiClient already recorded per-model quota
         }
@@ -183,18 +192,25 @@ class FoodAnalysisPipeline @Inject constructor(
     }
 
     // ---- Source-reporting variants: try online, silently fall back to on-device, and tell the
-    //      caller which engine produced the result so the UI can show an online/on-device badge.
+    //      caller which engine AND model produced the result so the UI can name it on the badge.
     //      (These are for non-photo generations — review, per-item insights, exercise — where a
     //      silent fallback is fine; only the food primary analysis offers a manual choice.) ----
 
+    /**
+     * The online lambda is handed a `reportModel` callback: whichever model [GeminiClient] ended up
+     * using reports itself through it, so the returned [AiSource] can name it rather than just
+     * saying "online".
+     */
     private suspend fun <T> withSource(
-        online: suspend (RemoteIngredientEngine) -> T,
+        online: suspend (RemoteIngredientEngine, (String) -> Unit) -> T,
         local: suspend (IngredientEngine) -> T
     ): Pair<T, AiSource> {
         val r = routing
         if (r != null && r.canUseOnline()) {
             try {
-                return online(r.onlineEngine) to AiSource.ONLINE
+                var model: String? = null
+                val result = online(r.onlineEngine) { model = it }
+                return result to AiSource.online(model)
             } catch (e: GeminiQuotaException) {
                 // GeminiClient already recorded per-model quota; fall through to on-device.
             } catch (e: kotlinx.coroutines.CancellationException) {
@@ -204,7 +220,7 @@ class FoodAnalysisPipeline @Inject constructor(
             }
         }
         val engine = r?.offlineEngine ?: ingredientEngine
-        return local(engine) to AiSource.OFFLINE
+        return local(engine) to AiSource.offline()
     }
 
     suspend fun generateNutritionReviewWithSource(
@@ -220,7 +236,12 @@ class FoodAnalysisPipeline @Inject constructor(
     ): Pair<String, AiSource> = withSource(
         // Online RemoteIngredientEngine has an onProgress-capable overload; the on-device path
         // has no fine-grained stages, so it just reports a single "thinking" message.
-        { it.generateNutritionReview(period, rows, totalDays, profile, targets, weights, foodLog, extraContext, onProgress) },
+        { engine, reportModel ->
+            engine.generateNutritionReview(
+                period, rows, totalDays, profile, targets, weights, foodLog, extraContext,
+                onModel = reportModel, onProgress = onProgress
+            )
+        },
         {
             onProgress("Thinking on your phone — this can take a moment…")
             it.generateNutritionReview(period, rows, totalDays, profile, targets, weights, foodLog, extraContext)
@@ -228,7 +249,7 @@ class FoodAnalysisPipeline @Inject constructor(
     )
 
     suspend fun generateRawTextWithSource(prompt: String): Pair<String, AiSource> =
-        withSource({ it.generateRawText(prompt) }, { it.generateRawText(prompt) })
+        withSource({ engine, reportModel -> engine.generateRawText(prompt, reportModel) }, { it.generateRawText(prompt) })
 
     fun close() {
         ingredientEngine.close()

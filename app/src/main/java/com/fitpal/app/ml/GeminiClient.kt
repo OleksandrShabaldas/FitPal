@@ -57,7 +57,10 @@ class GeminiClient @Inject constructor(
         // need deep reasoning, so default to "low" for much faster replies. null = leave it default.
         thinkingLevel: String? = "low",
         // Reports the live stage (encoding / sending / waiting / retrying) for the UI tooltip.
-        onProgress: (String) -> Unit = {}
+        onProgress: (String) -> Unit = {},
+        // Reports WHICH model finally answered — the cascade below may have moved past the first
+        // one — so the UI can name it on the badge instead of just saying "online".
+        onModel: (String) -> Unit = {}
     ): String {
         val key = settingsRepository.geminiApiKey.value?.trim()
         if (key.isNullOrBlank()) throw GeminiUnavailableException("No Gemini API key set")
@@ -72,7 +75,9 @@ class GeminiClient @Inject constructor(
         for ((index, model) in candidates.withIndex()) {
             if (index > 0) onProgress("Switching to fallback model: $model…")
             try {
-                return requestModel(model, prompt, images, temperature, jsonMode, thinkingLevel, key, onProgress)
+                val text = requestModel(model, prompt, images, temperature, jsonMode, thinkingLevel, key, onProgress)
+                onModel(model)
+                return text
             } catch (e: GeminiQuotaException) {
                 settingsRepository.markModelQuotaExhausted(model)
                 onProgress("$model is out of free quota — trying the next model…")

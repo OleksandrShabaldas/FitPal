@@ -65,7 +65,8 @@ class ModelManager @Inject constructor(
         Spec(
             id = ModelId.LLM,
             displayName = "Vision AI model",
-            description = "Gemma 3n E4B — larger model, more accurate food & meal recognition",
+            // One source of truth for the on-device model's name — the AI badge shows the same.
+            description = "${AiSource.ON_DEVICE_MODEL} — larger model, more accurate food & meal recognition",
             url = GEMMA_URL,
             fileName = "gemma_3n_e4b_int4.task",
             approxBytes = 4_410_000_000L,
