@@ -12,9 +12,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,26 +34,43 @@ import com.fitpal.app.ui.theme.Cream
 import com.fitpal.app.ui.theme.CreamMuted
 
 /**
- * A small, subtle pill naming the AI that produced the generation on screen: the warm accent dot +
- * the model ("Gemini 3 Flash Preview") when the online engine answered, a muted dot + the on-device
- * model ("Gemma 3n E4B") when it fell back. Hidden entirely when the source is unknown.
+ * The user's three online model slots, in Settings order (blanks included so slot numbers line up
+ * with the Settings labels). Provided once at the Compose root by `MainActivity`, so any badge can
+ * name the slot that answered — "Fallback 2" — instead of spelling out a long model id.
  *
- * The model matters because "online" isn't one thing — the app cascades through the models set in
- * Settings when one runs out of free quota, so the same photo can be read by a different model
- * tomorrow. Tapping expands to the engine, the exact model id, and (when on-device was forced) why.
- * Older entries saved before the model was recorded fall back to plain "Online AI" / "On-device AI".
+ * Empty by default: with no slots to match against, a badge just shows the model's own name, which
+ * is never wrong, only longer.
+ */
+val LocalAiModelSlots = compositionLocalOf { emptyList<String>() }
+
+/**
+ * A small pill saying which AI produced the content above it: warm accent dot + the slot that
+ * answered ("Main model" / "Fallback 2"), a muted dot + "On-device" when it ran on the phone.
+ * Hidden entirely when the source is unknown.
+ *
+ * It names the *slot* rather than the model because online isn't one thing — [com.fitpal.app.ml.GeminiClient]
+ * cascades to the next configured model when one runs out of free quota, and "Fallback 2" says that
+ * in two words where the model id needs a line of its own. Tapping opens the exact model id, the
+ * engine in plain words, and (when it fell back to the phone) why. Entries logged before the model
+ * was recorded still show a plain "Online AI" / "On-device AI".
  *
  * Matches the dark/glass design language (Cream text, no Material Card) — see DESIGN_SYSTEM.md.
  */
 @Composable
 fun AiSourceBadge(source: AiSource?, modifier: Modifier = Modifier, reason: String? = null) {
     if (source == null) return
+    val slots = LocalAiModelSlots.current
     val dotColor = if (source.isOnline) MaterialTheme.colorScheme.primary else CreamMuted
     // A reason is only worth showing when on-device was used because online couldn't be.
     val hasReason = source.isOffline && !reason.isNullOrBlank()
-    // Nothing to expand when we know neither the model nor a reason (an old entry).
+    // Nothing to expand when we know neither the model nor a reason (an older entry).
     val expandable = hasReason || source.model != null
     var expanded by remember { mutableStateOf(false) }
+
+    val label = when {
+        source.isOffline -> "On-device"
+        else -> AiSource.slotOf(source.model, slots)?.let { AiSource.slotLabel(it) } ?: source.modelLabel
+    }
 
     Column(modifier = modifier) {
         Row(
@@ -56,39 +78,39 @@ fun AiSourceBadge(source: AiSource?, modifier: Modifier = Modifier, reason: Stri
                 .clip(RoundedCornerShape(50))
                 .then(if (expandable) Modifier.clickable { expanded = !expanded } else Modifier)
                 .background(Cream.copy(alpha = 0.08f))
-                .padding(horizontal = 10.dp, vertical = 5.dp),
+                .padding(start = 8.dp, end = if (expandable) 4.dp else 8.dp, top = 3.dp, bottom = 3.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Spacer(
                 modifier = Modifier
-                    .size(7.dp)
+                    .size(6.dp)
                     .clip(CircleShape)
                     .background(dotColor)
             )
-            Spacer(Modifier.width(7.dp))
+            Spacer(Modifier.width(6.dp))
             Text(
-                text = source.modelLabel,
+                text = label,
                 style = MaterialTheme.typography.labelSmall,
                 color = CreamMuted,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 // A model id we've never seen could be long — cap it rather than push the row wide.
-                modifier = Modifier.widthIn(max = 220.dp)
+                modifier = Modifier.widthIn(max = 180.dp)
             )
-            // A tap affordance — the details stay collapsed until the user wants them.
+            // A chevron, not a word: the pill should read as a label, not a button.
             if (expandable) {
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = if (expanded) "hide" else "details",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary
+                Icon(
+                    if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = if (expanded) "Hide AI details" else "Show which model answered",
+                    tint = CreamMuted,
+                    modifier = Modifier.size(14.dp)
                 )
             }
         }
         if (expandable && expanded) {
             Spacer(Modifier.height(4.dp))
-            // The engine in plain words, plus the raw model id — the pill shows a tidied-up name,
-            // and the exact id is what the user typed in Settings (or would type to change it).
+            // The engine in plain words plus the raw model id — the id is exactly what the user
+            // typed in Settings (or would type to change it).
             Text(
                 text = source.engineLabel + (source.model?.let { " · $it" } ?: ""),
                 style = MaterialTheme.typography.labelSmall,

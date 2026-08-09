@@ -43,6 +43,26 @@ data class AiSource(val engine: Engine, val model: String? = null) {
                 ?.let { AiSource(it, model.orNullIfBlank()) }
 
         /**
+         * Which of the user's configured online slots [model] sits in (0 = the main model, 1 and 2
+         * = the fallbacks), or null if it isn't one of them any more — they can retype a slot at
+         * any time, and an old entry then names the model itself rather than a slot it never used.
+         *
+         * [slots] is the raw Settings order *including blanks*, so slot numbers keep matching the
+         * Settings labels even when a middle field is empty.
+         */
+        fun slotOf(model: String?, slots: List<String>): Int? {
+            val id = model?.trim().orEmpty()
+            if (id.isEmpty()) return null
+            return slots.indexOfFirst { it.trim().equals(id, ignoreCase = true) }.takeIf { it >= 0 }
+        }
+
+        /** The badge's short name for a slot — worded to match the Settings → Online AI fields. */
+        fun slotLabel(slot: Int): String = when (slot) {
+            0 -> "Main model"
+            else -> "Fallback ${slot + 1}"
+        }
+
+        /**
          * Turn a raw model id into something readable: "gemini-3-flash-preview" →
          * "Gemini 3 Flash Preview". Anything that already reads like a name (it has spaces, e.g.
          * "Gemma 3n E4B") is left exactly as it is, so a model id we've never seen still shows up

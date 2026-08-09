@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.fitpal.app.data.local.entity.MealLogItemEntity
 import com.fitpal.app.data.repository.MealRepository
 import com.fitpal.app.domain.model.Ingredient
+import com.fitpal.app.ml.AiSource
 import com.fitpal.app.ui.component.logDateLabel
 import com.fitpal.app.ui.navigation.Screen
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -39,6 +40,14 @@ data class MealGroupUiState(
     val totalCalories: Float get() = dishes.sumOf { it.item.calories.toDouble() }.toFloat()
     /** The shared photo for the generation, if any. */
     val photoPath: String? get() = dishes.firstOrNull { !it.item.photoPath.isNullOrBlank() }?.item?.photoPath
+
+    /**
+     * Which AI produced this meal. Every dish here came from the same generation, so the first
+     * dish that recorded a source speaks for all of them.
+     */
+    val aiSource: AiSource? get() = dishes.firstNotNullOfOrNull {
+        AiSource.fromName(it.item.aiSource, it.item.aiModel)
+    }
 }
 
 /**

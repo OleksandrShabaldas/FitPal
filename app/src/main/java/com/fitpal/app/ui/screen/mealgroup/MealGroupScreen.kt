@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.fitpal.app.ui.component.AiSourceBadge
 import com.fitpal.app.ui.component.BackdropTheme
 import com.fitpal.app.ui.component.DatePickerDialog
 import com.fitpal.app.ui.component.GlassTopBar
@@ -214,6 +215,11 @@ fun MealGroupScreen(
                                     "Tap a dish to edit it, or its name to rename it.",
                                     style = MaterialTheme.typography.bodySmall, color = CreamMuted
                                 )
+                                // Which AI read this meal — one generation, so one badge for it all.
+                                state.aiSource?.let {
+                                    Spacer(Modifier.height(8.dp))
+                                    AiSourceBadge(it)
+                                }
                                 Spacer(Modifier.height(12.dp))
                                 MealTypeSelector(selected = state.mealType, onSelected = viewModel::setMealType)
                             }
