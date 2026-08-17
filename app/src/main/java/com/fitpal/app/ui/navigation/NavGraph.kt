@@ -62,6 +62,7 @@ import com.fitpal.app.ui.screen.gallery.GalleryFoodDetailScreen
 import com.fitpal.app.ui.screen.gallery.GalleryScreen
 import com.fitpal.app.ui.screen.trail.TrailScreen
 import com.fitpal.app.ui.screen.home.HomeScreen
+import com.fitpal.app.ui.screen.search.SearchScreen
 import com.fitpal.app.ui.screen.manual.ManualEntryScreen
 import com.fitpal.app.ui.screen.mealgroup.MealGroupScreen
 import com.fitpal.app.ui.screen.modelsetup.ModelSetupScreen
@@ -153,6 +154,7 @@ fun FitPalNavHost(
             composable(Screen.Home.route) {
                 HomeScreen(
                     onAddFood = { navController.navigate(Screen.AddFood.route) },
+                    onOpenSearch = { navController.navigate(Screen.Search.route) },
                     onEntryClick = { entryId ->
                         navController.navigate(Screen.EntryDetail.buildRoute(entryId))
                     },
@@ -168,6 +170,10 @@ fun FitPalNavHost(
                     onOpenWater = { date -> navController.navigate(Screen.WaterDetail.buildRoute(date)) },
                     onSwipeToNextScreen = { navTo(Screen.Analytics.route) }
                 )
+            }
+
+            composable(Screen.Search.route) {
+                SearchScreen(onBack = safeBack)
             }
 
             composable(Screen.Analytics.route) {

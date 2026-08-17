@@ -134,7 +134,7 @@ fun AnalyticsScreen(
     val microsTotals by viewModel.microsTotals.collectAsStateWithLifecycle()
     val weightRate by viewModel.weightRatePerWeek.collectAsStateWithLifecycle()
     val fitnessGoal by viewModel.fitnessGoal.collectAsStateWithLifecycle()
-    val impliedMaintenance by viewModel.impliedMaintenance.collectAsStateWithLifecycle()
+    val lifetimeMaintenance by viewModel.lifetimeMaintenance.collectAsStateWithLifecycle()
     val spotlight by viewModel.spotlight.collectAsStateWithLifecycle()
     val analyticsViews by viewModel.analyticsViews.collectAsStateWithLifecycle()
     // Which cards are flipped to "Lifetime", plus the all-time data they draw from.
@@ -247,7 +247,7 @@ fun AnalyticsScreen(
             if (!w.enabled) return@forEachKey
             when (w.key) {
                 "balance" -> if (weekRows.isNotEmpty() && calGoal > 0) add("balance")
-                "maintenance" -> if (impliedMaintenance != null) add("maintenance")
+                "maintenance" -> if (lifetimeMaintenance != null) add("maintenance")
                 "averages" -> if (rollingRows.isNotEmpty()) add("averages")
                 "ai" -> { add("aihdr"); add("aiToday"); add("aiWeek"); add("aiMonth") }
                 else -> add(w.key)
@@ -670,9 +670,10 @@ fun AnalyticsScreen(
                     }
 
                     // ---- Implied maintenance (insight only — does not change the budget) ----
-                    "maintenance" -> impliedMaintenance?.let { maint -> item {
+                    // Always from the whole history, so it's the same number in every range.
+                    "maintenance" -> lifetimeMaintenance?.let { maint -> item {
                         ChartCard(
-                            "Maintenance estimate", "from your data",
+                            "Maintenance estimate", "from your whole history",
                             highlight = highlight == "maintenance",
                             spotlight = spotlight, onToggleSpotlight = viewModel::toggleSpotlight
                         ) {
@@ -683,9 +684,9 @@ fun AnalyticsScreen(
                             Spacer(Modifier.height(8.dp))
                             Text(
                                 buildString {
-                                    append("What your average intake and weight change suggest you actually burn. ")
+                                    append("What all your logged days and weigh-ins suggest you actually burn. ")
                                     if (calGoal > 0) append("Your target is ${"%,d".format(calGoal)} kcal. ")
-                                    append("A rough estimate — it sharpens with more logged days and regular weigh-ins.")
+                                    append("A rough estimate — it can still read high while you're losing weight quickly, and settles as your weight steadies.")
                                 },
                                 style = MaterialTheme.typography.bodySmall, color = CreamMuted
                             )

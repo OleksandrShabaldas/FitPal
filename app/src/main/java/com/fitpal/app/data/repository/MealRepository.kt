@@ -5,6 +5,7 @@ import com.fitpal.app.data.local.dao.DailyMicros
 import com.fitpal.app.data.local.dao.DailyNutritionRow
 import com.fitpal.app.data.local.dao.DailyWaterRow
 import com.fitpal.app.data.local.dao.DailyWaterSplit
+import com.fitpal.app.data.local.dao.DistinctLoggedFood
 import com.fitpal.app.data.local.dao.LoggedFoodRow
 import com.fitpal.app.data.local.dao.MealLogDao
 import com.fitpal.app.data.local.dao.MealLogItemWithType
@@ -90,6 +91,9 @@ class MealRepository @Inject constructor(
     /** Recently logged distinct foods (newest first) — the Add screen's one-tap "Your usuals" row. */
     fun recentDistinctFoods(limit: Int = 12): Flow<List<MealLogItemEntity>> =
         mealLogDao.getRecentDistinctItems(limit)
+
+    /** Every distinct food ever logged (real food only) — the global search's food source. */
+    fun distinctLoggedFoods(): Flow<List<DistinctLoggedFood>> = mealLogDao.getDistinctLoggedFoods()
 
     /**
      * Re-log a previously logged item as a fresh one-food meal (one tap from "Your usuals"). Uses

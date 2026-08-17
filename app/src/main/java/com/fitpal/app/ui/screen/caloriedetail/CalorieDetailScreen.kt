@@ -74,12 +74,17 @@ fun CalorieDetailScreen(
     viewModel: CalorieDetailViewModel = hiltViewModel()
 ) {
     val range by viewModel.range.collectAsStateWithLifecycle()
+    val lifetime by viewModel.lifetime.collectAsStateWithLifecycle()
     val summary by viewModel.summary.collectAsStateWithLifecycle()
     var expanded by rememberSaveable { mutableStateOf(false) }
 
     val logged = summary.loggedDays
     val net = summary.net
-    val periodWord = if (range == AnalyticsRange.WEEK) "this week" else "the last 30 days"
+    val periodWord = when {
+        lifetime -> "all time"
+        range == AnalyticsRange.WEEK -> "this week"
+        else -> "the last 30 days"
+    }
 
     GradientBackdrop(theme = BackdropTheme.TRENDS) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -89,11 +94,16 @@ fun CalorieDetailScreen(
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 item {
+                    // Week / 30 days / Lifetime — Lifetime spans everything since the first logged day.
+                    val rangeLabels = AnalyticsRange.entries.map { it.label } + "Lifetime"
                     SegmentedPills(
-                        labels = AnalyticsRange.entries.map { it.label },
-                        selectedIndex = AnalyticsRange.entries.indexOf(range),
+                        labels = rangeLabels,
+                        selectedIndex = if (lifetime) rangeLabels.lastIndex else AnalyticsRange.entries.indexOf(range),
                         accent = AccentTrends,
-                        onSelect = { viewModel.setRange(AnalyticsRange.entries[it]) }
+                        onSelect = { i ->
+                            if (i == rangeLabels.lastIndex) viewModel.setLifetime(true)
+                            else { viewModel.setLifetime(false); viewModel.setRange(AnalyticsRange.entries[i]) }
+                        }
                     )
                 }
 
@@ -258,7 +268,10 @@ fun CalorieDetailScreen(
                             Spacer(Modifier.height(12.dp))
                             DayHeaderRow()
                             Spacer(Modifier.height(4.dp))
-                            summary.days.asReversed().forEach { day ->
+                            // Lifetime can span hundreds of days — show only the logged ones (all
+                            // totals already count logged days only), so the list stays sane.
+                            val dayRows = if (lifetime) summary.days.filter { it.logged } else summary.days
+                            dayRows.asReversed().forEach { day ->
                                 DayEnergyRow(
                                     day = day,
                                     goal = summary.goal,

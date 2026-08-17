@@ -17,9 +17,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
@@ -42,8 +42,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fitpal.app.data.local.entity.UsdaFoodEntity
 import com.fitpal.app.ui.component.BackdropTheme
 import com.fitpal.app.ui.component.DatePickerDialog
-import com.fitpal.app.ui.component.EditableFoodItemRow
-import com.fitpal.app.ui.component.FoodPortionSheet
+import com.fitpal.app.ui.component.FoodPortionEditor
 import com.fitpal.app.ui.component.GlassTopBar
 import com.fitpal.app.ui.component.GradientBackdrop
 import com.fitpal.app.ui.component.MealTotalRow
@@ -79,24 +78,6 @@ fun ManualEntryScreen(
             confirmLabel = "Log here",
             onConfirm = { date -> showDatePicker = false; viewModel.setLogDate(date) },
             onDismiss = { showDatePicker = false }
-        )
-    }
-
-    // Picking a food opens its portion sheet straight away — size it, say how many, and only
-    // then does it join the meal.
-    state.picked?.let { picked ->
-        FoodPortionSheet(
-            base = picked.base,
-            count = picked.count,
-            mealPresets = presets,
-            drinkPresets = drinkPresets,
-            onPortionChange = viewModel::setPickedPortion,
-            onCountChange = viewModel::setPickedCount,
-            onDrinkChange = viewModel::setPickedDrink,
-            onNameChange = viewModel::setPickedName,
-            onConfirm = viewModel::confirmPicked,
-            onDismiss = viewModel::dismissPicked,
-            maxCount = PickedFood.MAX_COUNT
         )
     }
 
@@ -140,7 +121,7 @@ fun ManualEntryScreen(
                         items(state.searchResults, key = { it.fdcId }) { food ->
                             SearchResultRow(
                                 food = food,
-                                addedCount = state.draft.count { it.name == food.description },
+                                addedCount = state.draft.count { it.base.name == food.description },
                                 onClick = { viewModel.pickFood(food) }
                             )
                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -148,23 +129,30 @@ fun ManualEntryScreen(
                     }
 
                     state.draft.isNotEmpty() -> {
-                        LazyColumn(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
                             item {
-                                Text("Your meal", style = MaterialTheme.typography.titleMedium, color = Cream, modifier = Modifier.padding(top = 8.dp, bottom = 4.dp))
+                                Text("Your meal", style = MaterialTheme.typography.titleMedium, color = Cream, modifier = Modifier.padding(top = 8.dp))
                             }
-                            itemsIndexed(state.draft) { index, ingredient ->
-                                EditableFoodItemRow(
-                                    ingredient = ingredient,
-                                    onGramsChanged = { viewModel.updateGrams(index, it) },
+                            itemsIndexed(state.draft) { index, item ->
+                                FoodPortionEditor(
+                                    base = item.base,
+                                    count = item.count,
+                                    mealPresets = presets,
+                                    drinkPresets = drinkPresets,
+                                    onPortionChange = { viewModel.setDraftPortion(index, it) },
+                                    onCountChange = { viewModel.setDraftCount(index, it) },
+                                    onDrinkChange = { viewModel.setDraftDrink(index, it) },
+                                    onNameChange = { viewModel.renameDraftItem(index, it) },
                                     onRemove = { viewModel.removeItem(index) },
-                                    presets = if (ingredient.isDrink) drinkPresets else presets,
-                                    unit = if (ingredient.isDrink) "ml" else "g",
                                     onSave = {
-                                        viewModel.saveToGallery(ingredient)
+                                        viewModel.saveToGallery(index)
                                         Toast.makeText(context, "Saved to collection", Toast.LENGTH_SHORT).show()
                                     },
-                                    saved = ingredient.name in state.savedNames,
-                                    onRename = { viewModel.renameDraftItem(index, it) }
+                                    saved = item.base.name in state.savedNames,
+                                    maxCount = DraftItem.MAX_COUNT
                                 )
                             }
                         }
@@ -235,10 +223,10 @@ private fun SearchResultRow(food: UsdaFoodEntity, addedCount: Int, onClick: () -
                 modifier = Modifier.padding(end = 10.dp)
             )
         }
-        // A chevron, not a "+": tapping opens the portion sheet rather than adding blind.
+        // Tapping adds it straight to the meal, where its portion & amount are editable inline.
         Icon(
-            Icons.Default.ChevronRight,
-            contentDescription = "Choose an amount of ${food.description}",
+            Icons.Default.Add,
+            contentDescription = "Add ${food.description} to your meal",
             tint = GoldLight
         )
     }

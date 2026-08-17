@@ -305,6 +305,10 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    /** When steps were last pulled from Health Connect (epoch millis; 0 = never). */
+    val stepsLastSyncedAt: StateFlow<Long> = stepRepository.lastSyncedAt
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0L)
+
     /** Pull fresh steps from Health Connect (no-op if not connected). */
     fun syncHealthConnect() {
         viewModelScope.launch {

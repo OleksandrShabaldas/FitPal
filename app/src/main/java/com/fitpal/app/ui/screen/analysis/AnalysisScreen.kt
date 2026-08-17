@@ -73,6 +73,8 @@ import com.fitpal.app.ui.component.GradientBackdrop
 import com.fitpal.app.ui.component.logDateLabel
 import com.fitpal.app.ui.component.MacroBar
 import com.fitpal.app.ui.component.MealInsightsSection
+import com.fitpal.app.ui.component.MealItemCard
+import com.fitpal.app.ui.component.toMealItemContent
 import com.fitpal.app.ui.component.AddIngredientDialog
 import com.fitpal.app.ui.component.MealTypeSelector
 import com.fitpal.app.ui.theme.CalorieColor
@@ -361,21 +363,23 @@ fun AnalysisScreen(
                             }
 
                             itemsIndexed(state.detectedFoods) { foodIndex, food ->
-                                DetectedFoodCard(
-                                    food = food,
-                                    isSaved = state.savedFoodIndices.contains(foodIndex),
-                                    onGramsChanged = { ii, g -> viewModel.updateIngredientGrams(foodIndex, ii, g) },
+                                MealItemCard(
+                                    content = food.toMealItemContent(),
+                                    onIngredientGramsChanged = { ii, g -> viewModel.updateIngredientGrams(foodIndex, ii, g) },
+                                    onIngredientRemoved = { ii -> viewModel.removeIngredient(foodIndex, ii) },
                                     onTotalGramsChanged = { g -> viewModel.scaleFoodToGrams(foodIndex, g) },
                                     onServingsChanged = { n -> viewModel.setServings(foodIndex, n) },
                                     onWaterChanged = { ml -> viewModel.setFoodWater(foodIndex, ml) },
                                     onToggleVariation = { vi -> viewModel.toggleVariation(foodIndex, vi) },
-                                    onIngredientRemoved = { ii -> viewModel.removeIngredient(foodIndex, ii) },
                                     onAddIngredient = { addIngredientFor = foodIndex },
                                     onEditWithAi = { editWithAiFor = foodIndex },
                                     onRename = { viewModel.renameFood(foodIndex, it) },
                                     onRemove = { viewModel.removeFood(foodIndex) },
-                                    onSaveToGallery = { viewModel.saveToGallery(foodIndex) },
-                                    onRemoveFromGallery = { viewModel.removeFromGallery(foodIndex) }
+                                    onToggleSave = {
+                                        if (state.savedFoodIndices.contains(foodIndex)) viewModel.removeFromGallery(foodIndex)
+                                        else viewModel.saveToGallery(foodIndex)
+                                    },
+                                    saved = state.savedFoodIndices.contains(foodIndex)
                                 )
                             }
 
@@ -477,164 +481,6 @@ private fun CenteredMessage(content: @Composable androidx.compose.foundation.lay
     )
 }
 
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun DetectedFoodCard(
-    food: DetectedFood,
-    isSaved: Boolean,
-    onGramsChanged: (ingredientIndex: Int, newGrams: Float) -> Unit,
-    onTotalGramsChanged: (newTotalGrams: Float) -> Unit,
-    onServingsChanged: (newServings: Int) -> Unit,
-    onWaterChanged: (newWaterMl: Float) -> Unit,
-    onIngredientRemoved: (ingredientIndex: Int) -> Unit,
-    onToggleVariation: (variationIndex: Int) -> Unit,
-    onAddIngredient: () -> Unit,
-    onEditWithAi: () -> Unit,
-    onRename: (String) -> Unit,
-    onRemove: () -> Unit,
-    onSaveToGallery: () -> Unit,
-    onRemoveFromGallery: () -> Unit
-) {
-    val unit = if (food.isDrink) "ml" else "g"
-    var renaming by remember { mutableStateOf(false) }
-
-    if (renaming) {
-        com.fitpal.app.ui.component.RenameDialog(
-            currentName = food.label,
-            title = "Rename this dish",
-            label = "Dish name",
-            hint = "Only the name changes — the ingredients and amounts stay as they are.",
-            onConfirm = { onRename(it); renaming = false },
-            onDismiss = { renaming = false }
-        )
-    }
-
-    Column(modifier = Modifier.fillMaxWidth().glass().padding(16.dp)) {
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            // Tap the dish name to rewrite it before logging.
-            Column(modifier = Modifier.weight(1f).clickable { renaming = true }) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        food.label,
-                        style = MaterialTheme.typography.titleLarge,
-                        color = Cream,
-                        modifier = Modifier.weight(1f, fill = false)
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Icon(
-                        Icons.Default.Edit,
-                        contentDescription = "Rename ${food.label}",
-                        tint = CreamMuted,
-                        modifier = Modifier.size(15.dp)
-                    )
-                }
-                Text(
-                    text = "${food.totalGrams.toInt()} $unit" +
-                        if (food.isDrink && food.totalWaterMl > 0f) " + ${food.totalWaterMl.toInt()} ml water" else "",
-                    style = MaterialTheme.typography.labelSmall, color = CreamMuted
-                )
-            }
-            Text("${food.totalCalories.toInt()} kcal", style = MaterialTheme.typography.titleMedium, color = CalorieColor)
-            IconButton(onClick = onRemove) {
-                Icon(Icons.Default.Close, contentDescription = "Remove ${food.label}", tint = CreamMuted)
-            }
-        }
-
-        Spacer(Modifier.height(12.dp))
-        MacroBar(protein = food.totalProtein, fat = food.totalFat, carbs = food.totalCarbs, fiber = food.totalFiber)
-        Spacer(Modifier.height(16.dp))
-
-        // How many of this item — a quick +/− that scales the whole thing (e.g. 2 peaches).
-        Row(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Amount", style = MaterialTheme.typography.titleSmall, color = Cream, modifier = Modifier.weight(1f))
-            FilledTonalIconButton(onClick = { onServingsChanged(food.servings - 1) }, enabled = food.servings > 1) {
-                Icon(Icons.Default.Remove, contentDescription = "One fewer")
-            }
-            Text(
-                "${food.servings}",
-                style = MaterialTheme.typography.titleMedium, color = Cream,
-                textAlign = TextAlign.Center, modifier = Modifier.width(40.dp)
-            )
-            FilledTonalIconButton(onClick = { onServingsChanged(food.servings + 1) }) {
-                Icon(Icons.Default.Add, contentDescription = "One more")
-            }
-        }
-
-        // Water content the AI identified — editable (counts toward hydration).
-        Row(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("💧 Water", style = MaterialTheme.typography.titleSmall, color = Cream, modifier = Modifier.weight(1f))
-            com.fitpal.app.ui.component.GramsField(
-                grams = food.totalWaterMl,
-                onGramsChanged = onWaterChanged,
-                modifier = Modifier.width(110.dp),
-                unit = "ml",
-                commitZero = true
-            )
-        }
-
-        // Whole-dish weight: scales every ingredient at once (only useful for real dishes).
-        if (food.ingredients.size > 1) {
-            Row(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Total weight", style = MaterialTheme.typography.titleSmall, color = Cream, modifier = Modifier.weight(1f))
-                com.fitpal.app.ui.component.GramsField(
-                    grams = food.totalGrams,
-                    onGramsChanged = onTotalGramsChanged,
-                    modifier = Modifier.width(100.dp),
-                    unit = unit
-                )
-            }
-        }
-
-        Text("Ingredients", style = MaterialTheme.typography.titleSmall, color = Cream, modifier = Modifier.padding(bottom = 8.dp))
-        food.ingredients.forEachIndexed { index, ingredient ->
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(ingredient.name, style = MaterialTheme.typography.bodyMedium, color = Cream, modifier = Modifier.weight(1f))
-                com.fitpal.app.ui.component.GramsField(
-                    grams = ingredient.grams,
-                    onGramsChanged = { onGramsChanged(index, it) },
-                    modifier = Modifier.width(80.dp),
-                    unit = unit
-                )
-                Spacer(Modifier.width(8.dp))
-                Text("${ingredient.calories.toInt()} kcal", style = MaterialTheme.typography.bodySmall, color = CreamMuted, modifier = Modifier.width(56.dp))
-                IconButton(onClick = { onIngredientRemoved(index) }, modifier = Modifier.size(32.dp)) {
-                    Icon(Icons.Default.Close, contentDescription = "Remove ${ingredient.name}", tint = CreamMuted)
-                }
-            }
-        }
-
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            TextButton(onClick = onAddIngredient) { Text("+ Add ingredient") }
-            TextButton(onClick = onEditWithAi) {
-                Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("Edit with AI")
-            }
-        }
-
-        if (food.variations.isNotEmpty()) {
-            Spacer(Modifier.height(16.dp))
-            Text("Variations", style = MaterialTheme.typography.titleSmall, color = Cream, modifier = Modifier.padding(bottom = 8.dp))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                food.variations.forEachIndexed { index, variation ->
-                    FilterChip(selected = variation.isSelected, onClick = { onToggleVariation(index) }, label = { Text(variation.description) })
-                }
-            }
-        }
-
-        Spacer(Modifier.height(8.dp))
-        TextButton(onClick = { if (isSaved) onRemoveFromGallery() else onSaveToGallery() }) {
-            Icon(
-                if (isSaved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
-                contentDescription = null, modifier = Modifier.padding(end = 4.dp)
-            )
-            Text(if (isSaved) "Saved" else "Save to collection")
-        }
-    }
-}
 
 /** Full per-dimension health breakdown for the detected foods (for the score view). */
 private fun mealBreakdown(foods: List<DetectedFood>): List<HealthScorer.Dimension> {

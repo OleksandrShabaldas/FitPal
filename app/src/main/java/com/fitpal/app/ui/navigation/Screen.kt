@@ -9,6 +9,8 @@ sealed class Screen(val route: String) {
     data object Onboarding : Screen("onboarding")
     data object Home : Screen("home")
     data object AddFood : Screen("add_food")
+    /** Global fuzzy search over everything the user has ever logged (foods + exercises). */
+    data object Search : Screen("search")
     data object Camera : Screen("camera")
     data object Gallery : Screen("gallery")
     data object ManualEntry : Screen("manual_entry")

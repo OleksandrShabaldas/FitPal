@@ -19,6 +19,9 @@ class ExerciseRepository @Inject constructor(
     fun todayString(): String = LocalDate.now().format(fmt)
 
     fun getForDate(date: String): Flow<List<ExerciseEntryEntity>> = exerciseDao.getForDate(date)
+
+    /** Every distinct exercise ever logged (latest of each) — the global search's exercise source. */
+    fun distinctExercises(): Flow<List<ExerciseEntryEntity>> = exerciseDao.getDistinctExercises()
     fun getTotalBurnedForDate(date: String): Flow<Float> = exerciseDao.getTotalBurnedForDate(date)
     fun getDailyBurnRange(from: String, to: String): Flow<List<DailyBurnRow>> =
         exerciseDao.getDailyBurnRange(from, to)

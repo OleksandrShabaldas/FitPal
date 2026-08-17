@@ -16,20 +16,46 @@ object WeightTrend {
     /** Energy in 1 kg of body-mass change (mostly fat). The standard ~7700 kcal/kg. */
     private const val KCAL_PER_KG = 7700f
 
+    /** Lifetime maintenance needs a real baseline, not two weigh-ins a few days apart. */
+    private const val MIN_LIFETIME_POINTS = 4
+    private const val MIN_LIFETIME_SPAN_DAYS = 21L
+
     /**
      * Least-squares trend in kg/week over the weights dated within [from, to] inclusive.
      * Null when there are fewer than two points or they span under four days (too noisy to trust).
      */
     fun ratePerWeek(weights: List<WeightEntryEntity>, from: LocalDate, to: LocalDate): Float? {
-        val pts = weights
+        val pts = datedPoints(weights).filter { !it.first.isBefore(from) && !it.first.isAfter(to) }
+        if (pts.size < 2) return null
+        if (pts.last().first.toEpochDay() - pts.first().first.toEpochDay() < 4L) return null
+        return slopePerWeek(pts)
+    }
+
+    /**
+     * Weekly weight trend over the user's ENTIRE weigh-in history, with stricter guards than
+     * [ratePerWeek]: at least [MIN_LIFETIME_POINTS] weigh-ins spanning at least
+     * [MIN_LIFETIME_SPAN_DAYS] days. A long baseline is what makes short-term water/glycogen swings
+     * average out instead of being amplified by [KCAL_PER_KG] in [impliedMaintenance].
+     */
+    fun lifetimeRatePerWeek(weights: List<WeightEntryEntity>): Float? {
+        val pts = datedPoints(weights)
+        if (pts.size < MIN_LIFETIME_POINTS) return null
+        if (pts.last().first.toEpochDay() - pts.first().first.toEpochDay() < MIN_LIFETIME_SPAN_DAYS) return null
+        return slopePerWeek(pts)
+    }
+
+    /** Parse + sort weigh-ins to (date, kg), dropping any with an unparseable date. */
+    private fun datedPoints(weights: List<WeightEntryEntity>): List<Pair<LocalDate, Float>> =
+        weights
             .mapNotNull { w -> runCatching { LocalDate.parse(w.date) }.getOrNull()?.let { it to w.weightKg } }
-            .filter { !it.first.isBefore(from) && !it.first.isAfter(to) }
             .sortedBy { it.first }
+
+    /** Least-squares trend in kg/week over already date-sorted points; null if degenerate. */
+    private fun slopePerWeek(pts: List<Pair<LocalDate, Float>>): Float? {
         if (pts.size < 2) return null
         val x0 = pts.first().first.toEpochDay()
         val xs = pts.map { (it.first.toEpochDay() - x0).toFloat() }
         val ys = pts.map { it.second }
-        if (xs.last() - xs.first() < 4f) return null
         val n = pts.size
         val sx = xs.sum()
         val sy = ys.sum()
@@ -37,8 +63,7 @@ object WeightTrend {
         val sxy = xs.indices.sumOf { (xs[it] * ys[it]).toDouble() }.toFloat()
         val denom = n * sxx - sx * sx
         if (abs(denom) < 1e-3f) return null
-        val slopePerDay = (n * sxy - sx * sy) / denom
-        return slopePerDay * 7f
+        return (n * sxy - sx * sy) / denom * 7f
     }
 
     /** A short, goal-framed label for a weekly rate, e.g. "0.4 kg/week down · on track to lose fat". */

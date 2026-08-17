@@ -47,6 +47,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.DateRange
@@ -77,6 +78,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.withStyle
@@ -128,6 +130,7 @@ import java.util.Locale
 @Composable
 fun HomeScreen(
     onAddFood: () -> Unit,
+    onOpenSearch: () -> Unit = {},
     onEntryClick: (Long) -> Unit = {},
     onGroupClick: (Long) -> Unit = {},
     onOpenReview: (period: String, key: String) -> Unit = { _, _ -> },
@@ -148,6 +151,7 @@ fun HomeScreen(
     val manualSteps by viewModel.manualSteps.collectAsStateWithLifecycle()
     val syncedSteps by viewModel.syncedSteps.collectAsStateWithLifecycle()
     val stepSources by viewModel.stepSources.collectAsStateWithLifecycle()
+    val stepsLastSyncedAt by viewModel.stepsLastSyncedAt.collectAsStateWithLifecycle()
     val dailyStreak by viewModel.dailyStreak.collectAsStateWithLifecycle()
     val trailPending by viewModel.trailPending.collectAsStateWithLifecycle()
     val exerciseCalories by viewModel.exerciseCalories.collectAsStateWithLifecycle()
@@ -192,7 +196,10 @@ fun HomeScreen(
     var swipeDragX by remember { mutableFloatStateOf(0f) }
 
     GradientBackdrop(theme = BackdropTheme.TODAY) {
+        Column(modifier = Modifier.fillMaxSize()) {
+        HomeSearchBar(onClick = onOpenSearch)
         AnimatedContent(
+            modifier = Modifier.weight(1f),
             targetState = selectedDate,
             transitionSpec = {
                 if (targetState.isAfter(initialState)) {
@@ -350,6 +357,7 @@ fun HomeScreen(
                 }
             }
         }
+        }
     }
 
     editingItem?.let { item ->
@@ -386,6 +394,7 @@ fun HomeScreen(
             initialManual = manualSteps,
             initialSynced = syncedSteps,
             sources = stepSources,
+            lastSyncedAt = stepsLastSyncedAt,
             canSync = viewModel.healthConnectAvailable,
             onSync = { viewModel.syncHealthConnect() },
             onSave = { manual, synced ->
@@ -950,6 +959,31 @@ private fun WaterCard(totalMl: Float, goalMl: Int, presets: List<Int>, onAddWate
     }
 }
 
+/**
+ * The pinned "search anything you've logged" bar at the very top of Home. A compact glass pill that
+ * opens the full search screen (with keyboard); it stays put while the day content scrolls/swipes.
+ */
+@Composable
+private fun HomeSearchBar(onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 2.dp)
+            .glass(RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(Icons.Default.Search, contentDescription = null, tint = CreamMuted, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(10.dp))
+        Text(
+            "Search your foods & workouts",
+            style = MaterialTheme.typography.bodyMedium,
+            color = CreamMuted
+        )
+    }
+}
+
 @Composable
 private fun StepsCard(totalSteps: Int, caloriesBurned: Float, onLogSteps: () -> Unit) {
     Row(
@@ -1159,6 +1193,7 @@ private fun StepInputDialog(
     initialManual: Int,
     initialSynced: Int,
     sources: Map<String, Int>,
+    lastSyncedAt: Long,
     canSync: Boolean,
     onSync: () -> Unit,
     onSave: (manual: Int, synced: Int) -> Unit,
@@ -1216,6 +1251,24 @@ private fun StepInputDialog(
                             TextButton(onClick = onSync) { Text("Sync") }
                         }
                     }
+                    Text(
+                        if (lastSyncedAt > 0L)
+                            "Checked Health Connect ${android.text.format.DateUtils.getRelativeTimeSpanString(lastSyncedAt, System.currentTimeMillis(), android.text.format.DateUtils.MINUTE_IN_MILLIS)}."
+                        else "Not synced yet.",
+                        style = MaterialTheme.typography.labelSmall, color = CreamFaint
+                    )
+                    Text(
+                        "Samsung Health updates Health Connect on its own schedule, so this can trail what " +
+                            "Samsung Health shows. If today looks low, open Samsung Health to push its latest " +
+                            "count, then tap Sync.",
+                        style = MaterialTheme.typography.labelSmall, color = CreamFaint
+                    )
+                    val ctx = LocalContext.current
+                    TextButton(onClick = {
+                        val intent = ctx.packageManager.getLaunchIntentForPackage("com.sec.android.app.shealth")
+                        if (intent != null) ctx.startActivity(intent)
+                        else android.widget.Toast.makeText(ctx, "Samsung Health isn't installed", android.widget.Toast.LENGTH_SHORT).show()
+                    }) { Text("Open Samsung Health") }
                     Text(
                         "The higher of Health Connect and what your watch reports directly. Open FitPal " +
                             "on your watch once and tap \"Sync watch steps\" so the watch can report its own " +

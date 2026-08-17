@@ -26,6 +26,12 @@ data class LoggedFoodRow(
     val mealType: String
 )
 
+/** One representative logged food per distinct name (its latest version) + the day last logged. */
+data class DistinctLoggedFood(
+    @Embedded val item: MealLogItemEntity,
+    val lastDate: String
+)
+
 /** One row per day — used for analytics charts over a date range. */
 data class DailyNutritionRow(
     val date: String,
@@ -141,6 +147,24 @@ interface MealLogDao {
         LIMIT :limit
     """)
     fun getRecentDistinctItems(limit: Int): Flow<List<MealLogItemEntity>>
+
+    /**
+     * Every distinct food name the user has ever logged (real food only), each carrying its most
+     * recent logged version and the day it was last logged. Powers the global search — de-dupes by
+     * name (case-insensitive), newest first.
+     */
+    @Query("""
+        SELECT i.*, m.date AS lastDate FROM meal_log_items i
+        JOIN meal_logs m ON i.mealLogId = m.id
+        WHERE i.id IN (
+            SELECT MAX(i2.id) FROM meal_log_items i2
+            JOIN meal_logs m2 ON i2.mealLogId = m2.id
+            WHERE i2.calories > 0 AND m2.mealType != 'water'
+            GROUP BY i2.name COLLATE NOCASE
+        )
+        ORDER BY i.id DESC
+    """)
+    fun getDistinctLoggedFoods(): Flow<List<DistinctLoggedFood>>
 
     /**
      * Distinct days (newest first) on which the user logged real food (calories > 0).

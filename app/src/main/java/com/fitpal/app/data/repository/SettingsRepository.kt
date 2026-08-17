@@ -50,6 +50,18 @@ class SettingsRepository @Inject constructor(
         _stepCalorieReductionPercent.value = clamped
     }
 
+    // --- Steps last-synced time ---
+    // When we last pulled Health Connect (epoch millis; 0 = never). Lets the UI show freshness, so
+    // "synced" reads as "we checked Health Connect at HH:mm", not "Samsung Health is up to date".
+
+    private val _stepsLastSyncedAt = MutableStateFlow(prefs.getLong(KEY_STEPS_SYNCED_AT, 0L))
+    val stepsLastSyncedAt: StateFlow<Long> = _stepsLastSyncedAt
+
+    fun setStepsLastSyncedAt(epochMillis: Long) {
+        prefs.edit().putLong(KEY_STEPS_SYNCED_AT, epochMillis).apply()
+        _stepsLastSyncedAt.value = epochMillis
+    }
+
     // --- User Profile (body stats + goal) ---
 
     private val _userProfile = MutableStateFlow(loadProfile())
@@ -587,6 +599,7 @@ class SettingsRepository @Inject constructor(
     companion object {
         private const val KEY_CALORIE_GOAL = "daily_calorie_goal"
         private const val KEY_STEP_CAL_REDUCTION = "step_cal_reduction_pct"
+        private const val KEY_STEPS_SYNCED_AT = "steps_last_synced_at"
         private const val KEY_HF_TOKEN = "hf_token"
         private const val KEY_GEMINI_KEY = "gemini_api_key"
         private const val KEY_ONLINE_AI_ENABLED = "online_ai_enabled"

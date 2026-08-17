@@ -52,7 +52,8 @@ import com.fitpal.app.ui.component.BackdropTheme
 import com.fitpal.app.ui.component.DatePickerDialog
 import com.fitpal.app.ui.component.GlassTopBar
 import com.fitpal.app.ui.component.GradientBackdrop
-import com.fitpal.app.ui.component.MacroBar
+import com.fitpal.app.ui.component.MealItemCard
+import com.fitpal.app.ui.component.MealItemContent
 import com.fitpal.app.ui.component.MealTypeSelector
 import com.fitpal.app.ui.component.RenameDialog
 import com.fitpal.app.ui.theme.CalorieColor
@@ -78,8 +79,6 @@ fun MealGroupScreen(
     var showCopyPicker by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showRenameMeal by remember { mutableStateOf(false) }
-    // The dish being renamed (id + its current name), or null when no rename is open.
-    var renamingDish by remember { mutableStateOf<Pair<Long, String>?>(null) }
 
     // Pop back once the whole meal is deleted (or all dishes were removed individually). Guarded
     // so it fires exactly once (delete sets the flag AND empties the flow — both would pop).
@@ -121,16 +120,6 @@ fun MealGroupScreen(
             allowEmpty = true,
             onConfirm = { viewModel.renameMeal(it); showRenameMeal = false },
             onDismiss = { showRenameMeal = false }
-        )
-    }
-    renamingDish?.let { (dishId, dishName) ->
-        RenameDialog(
-            currentName = dishName,
-            title = "Rename this dish",
-            label = "Dish name",
-            hint = "Only the name changes — the amount and nutrition stay as logged.",
-            onConfirm = { viewModel.renameDish(dishId, it); renamingDish = null },
-            onDismiss = { renamingDish = null }
         )
     }
     if (showDeleteDialog) {
@@ -225,13 +214,13 @@ fun MealGroupScreen(
                             }
                         }
                         itemsIndexed(state.dishes, key = { _, dish -> dish.item.id }) { _, dish ->
-                            DishCard(
-                                dish = dish,
-                                onGramsChange = { i, g -> viewModel.updateIngredientGrams(dish.item.id, i, g) },
-                                onTotalGramsChange = { g -> viewModel.scaleDishToGrams(dish.item.id, g) },
-                                onIngredientRemove = { i -> viewModel.removeIngredient(dish.item.id, i) },
-                                onRemoveDish = { viewModel.removeDish(dish.item.id) },
-                                onRename = { renamingDish = dish.item.id to dish.item.name },
+                            MealItemCard(
+                                content = dish.toMealItemContent(),
+                                onIngredientGramsChanged = { i, g -> viewModel.updateIngredientGrams(dish.item.id, i, g) },
+                                onIngredientRemoved = { i -> viewModel.removeIngredient(dish.item.id, i) },
+                                onTotalGramsChanged = { g -> viewModel.scaleDishToGrams(dish.item.id, g) },
+                                onRemove = { viewModel.removeDish(dish.item.id) },
+                                onRename = { viewModel.renameDish(dish.item.id, it) },
                                 onOpenDetails = { onDishClick(dish.item.id) }
                             )
                         }
@@ -242,100 +231,17 @@ fun MealGroupScreen(
     }
 }
 
-@Composable
-private fun DishCard(
-    dish: MealGroupDish,
-    onGramsChange: (ingredientIndex: Int, newGrams: Float) -> Unit,
-    onTotalGramsChange: (newTotalGrams: Float) -> Unit,
-    onIngredientRemove: (ingredientIndex: Int) -> Unit,
-    onRemoveDish: () -> Unit,
-    onRename: () -> Unit,
-    onOpenDetails: () -> Unit
-) {
-    val item = dish.item
-    val unit = if (item.isDrink) "ml" else "g"
-    Column(modifier = Modifier.fillMaxWidth().glass().padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            // Tap the dish name to rename it — the AI's wording (or a database catalogue name)
-            // is a starting point, not something to live with.
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(10.dp))
-                    .clickable(onClick = onRename)
-                    .padding(vertical = 2.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        item.name,
-                        style = MaterialTheme.typography.titleLarge,
-                        color = Cream,
-                        maxLines = 2,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false)
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Icon(
-                        Icons.Default.Edit,
-                        contentDescription = "Rename ${item.name}",
-                        tint = CreamMuted,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-                Text("${item.grams.toInt()} $unit", style = MaterialTheme.typography.labelSmall, color = CreamMuted)
-            }
-            Text("${item.calories.toInt()} kcal", style = MaterialTheme.typography.titleMedium, color = CalorieColor)
-            IconButton(onClick = onRemoveDish) {
-                Icon(Icons.Default.Close, contentDescription = "Remove ${item.name}", tint = CreamMuted)
-            }
-        }
-
-        Spacer(Modifier.height(12.dp))
-        MacroBar(protein = item.protein, fat = item.fat, carbs = item.carbs, fiber = item.fiber)
-        Spacer(Modifier.height(16.dp))
-
-        // Whole-dish weight: scales every ingredient at once (only useful for real dishes).
-        if (dish.ingredients.size > 1) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Total weight", style = MaterialTheme.typography.titleSmall, color = Cream, modifier = Modifier.weight(1f))
-                com.fitpal.app.ui.component.GramsField(
-                    grams = item.grams,
-                    onGramsChanged = onTotalGramsChange,
-                    modifier = Modifier.width(100.dp),
-                    unit = unit
-                )
-            }
-        }
-
-        Text("Ingredients", style = MaterialTheme.typography.titleSmall, color = Cream, modifier = Modifier.padding(bottom = 8.dp))
-        dish.ingredients.forEachIndexed { index, ingredient ->
-            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(ingredient.name, style = MaterialTheme.typography.bodyMedium, color = Cream, modifier = Modifier.weight(1f))
-                com.fitpal.app.ui.component.GramsField(
-                    grams = ingredient.grams,
-                    onGramsChanged = { onGramsChange(index, it) },
-                    modifier = Modifier.width(82.dp),
-                    unit = unit
-                )
-                Spacer(Modifier.width(8.dp))
-                Text("${ingredient.calories.toInt()} kcal", style = MaterialTheme.typography.bodySmall, color = CreamMuted, modifier = Modifier.width(56.dp))
-                IconButton(onClick = { onIngredientRemove(index) }, modifier = Modifier.size(32.dp)) {
-                    Icon(Icons.Default.Close, contentDescription = "Remove ${ingredient.name}", tint = CreamMuted)
-                }
-            }
-        }
-
-        Spacer(Modifier.height(8.dp))
-        Row(
-            modifier = Modifier.glassSoft(CircleShape).clickable(onClick = onOpenDetails).padding(horizontal = 14.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = GoldLight, modifier = Modifier.size(16.dp))
-            Spacer(Modifier.width(6.dp))
-            Text("Open details & AI insights", style = MaterialTheme.typography.labelLarge, color = Cream)
-        }
-    }
-}
+/** Adapter from a saved dish (a logged item + its parsed ingredients) to the shared card. */
+private fun MealGroupDish.toMealItemContent(): MealItemContent = MealItemContent(
+    name = item.name,
+    grams = item.grams,
+    calories = item.calories,
+    protein = item.protein,
+    fat = item.fat,
+    carbs = item.carbs,
+    fiber = item.fiber,
+    isDrink = item.isDrink,
+    waterMl = item.waterMl,
+    servings = 1,
+    ingredients = ingredients
+)

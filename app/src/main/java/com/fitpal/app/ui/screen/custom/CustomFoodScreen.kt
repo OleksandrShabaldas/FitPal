@@ -1,11 +1,15 @@
 package com.fitpal.app.ui.screen.custom
 
+import android.widget.Toast
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -17,7 +21,9 @@ import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
@@ -31,7 +37,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -41,6 +50,7 @@ import com.fitpal.app.ui.component.DatePickerDialog
 import com.fitpal.app.ui.component.GlassTopBar
 import com.fitpal.app.ui.component.GradientBackdrop
 import com.fitpal.app.ui.component.MealTypeSelector
+import com.fitpal.app.ui.component.PhotoCaptureOverlay
 import com.fitpal.app.ui.component.logDateLabel
 import com.fitpal.app.ui.theme.CreamFaint
 import com.fitpal.app.ui.theme.CreamMuted
@@ -57,8 +67,16 @@ fun CustomFoodScreen(
     val mealType by viewModel.mealType.collectAsStateWithLifecycle()
     val logDate by viewModel.logDate.collectAsStateWithLifecycle()
     var showDatePicker by remember { mutableStateOf(false) }
+    var showLabelCamera by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
     LaunchedEffect(state.saved) { if (state.saved) onLogged() }
+    LaunchedEffect(state.labelError) {
+        state.labelError?.let {
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+            viewModel.clearLabelError()
+        }
+    }
 
     if (showDatePicker) {
         DatePickerDialog(
@@ -70,6 +88,7 @@ fun CustomFoodScreen(
         )
     }
 
+    Box(modifier = Modifier.fillMaxSize()) {
     GradientBackdrop(theme = BackdropTheme.TODAY) {
         Column(modifier = Modifier.fillMaxSize()) {
             GlassTopBar(title = "Custom food", onBack = onBack)
@@ -87,6 +106,17 @@ fun CustomFoodScreen(
                         "Linked to barcode $code — once you log it, scanning this product again will find it automatically.",
                         style = MaterialTheme.typography.bodySmall, color = GoldLight
                     )
+                }
+
+                // Snap the product's nutrition label and let the AI fill the values below.
+                OutlinedButton(
+                    onClick = { showLabelCamera = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !state.isReadingLabel
+                ) {
+                    Icon(Icons.Default.PhotoCamera, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (state.isReadingLabel) "Reading label…" else "Snap nutrition label")
                 }
 
                 Column(
@@ -144,6 +174,27 @@ fun CustomFoodScreen(
                     Icon(Icons.Default.Check, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
                     Text(if (state.isSaving) "Saving…" else "Log food")
+                }
+            }
+        }
+    }
+
+        if (showLabelCamera) {
+            PhotoCaptureOverlay(
+                tip = "Point at the product's nutrition facts label",
+                onCaptured = { path -> showLabelCamera = false; viewModel.readLabel(path) },
+                onClose = { showLabelCamera = false }
+            )
+        }
+        if (state.isReadingLabel) {
+            Box(
+                modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator(color = GoldLight)
+                    Spacer(Modifier.height(12.dp))
+                    Text("Reading the label…", color = Color.White)
                 }
             }
         }

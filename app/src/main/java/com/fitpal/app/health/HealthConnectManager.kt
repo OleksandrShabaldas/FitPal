@@ -13,7 +13,6 @@ import java.time.LocalDate
 import java.time.ZoneId
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.math.roundToLong
 
 /**
  * Thin wrapper over Health Connect for reading steps. Samsung Health (which the watch
@@ -45,71 +44,21 @@ class HealthConnectManager @Inject constructor(
     }
 
     /**
-     * Total steps for a calendar day.
+     * Total steps for a calendar day — Health Connect's own **priority-deduplicated** aggregate.
      *
-     * Health Connect's own aggregate de-duplicates overlapping records by *app priority* —
-     * which on Samsung phones often means the phone's built-in counter wins over the watch
-     * (so a watch's 2000 steps collapse to the phone's 200). Naive summing across apps would
-     * instead double-count a walk both devices saw.
+     * Health Connect resolves overlapping records from different apps by priority; it does NOT sum
+     * them. So a mirror app like Health Sync, which copies Samsung Health's steps into Health
+     * Connect, is counted once — not added on top. (An earlier version summed the per-minute max
+     * across every source, which double-counted those mirrors: Samsung Health 9,600 + Health Sync
+     * 9,000 came out as ~17,000 instead of ~10,000.)
      *
-     * So we do a **time-merge**: split the day into one-minute slots, and for each slot take the
-     * MOST any single source recorded for it, then sum the slots. Overlapping coverage (phone +
-     * watch on the same walk) counts once at the higher value; complementary coverage (each
-     * device active at different times) adds up. We return the larger of this and Health
-     * Connect's own aggregate, so we never under-count.
+     * The one thing priority-dedup can drop is watch steps the phone's counter outranks — but those
+     * are recovered separately, not by summing here: the watch reports its own daily count over the
+     * Data Layer and [com.fitpal.app.data.repository.StepRepository] floors the day to it.
      */
     suspend fun readSteps(date: LocalDate): Long {
         if (!isAvailable()) return 0L
-        val aggregate = aggregateSteps(date)
-        val merged = mergedStepsAcrossSources(date)
-        return maxOf(aggregate, merged)
-    }
-
-    /**
-     * Combine every step source for the day without double-counting overlap. Each source's
-     * records are spread across the minute-slots they cover; per slot we keep the max across
-     * sources; then we sum. See [readSteps].
-     */
-    private suspend fun mergedStepsAcrossSources(date: LocalDate): Long {
-        val (start, end) = dayRange(date)
-        val dayStartMin = start.epochSecond / 60L
-        val slotCount = 24 * 60  // minutes in a day
-        val bySource = HashMap<String, DoubleArray>()
-        runCatching {
-            var pageToken: String? = null
-            do {
-                val response = client().readRecords(
-                    ReadRecordsRequest(
-                        recordType = StepsRecord::class,
-                        timeRangeFilter = TimeRangeFilter.between(start, end),
-                        pageToken = pageToken
-                    )
-                )
-                response.records.forEach { record ->
-                    val pkg = record.metadata.dataOrigin.packageName
-                    val slots = bySource.getOrPut(pkg) { DoubleArray(slotCount) }
-                    spreadRecord(record, dayStartMin, slotCount, slots)
-                }
-                pageToken = response.pageToken
-            } while (pageToken != null)
-        }
-        if (bySource.isEmpty()) return 0L
-        var total = 0.0
-        for (slot in 0 until slotCount) {
-            var best = 0.0
-            for (slots in bySource.values) if (slots[slot] > best) best = slots[slot]
-            total += best
-        }
-        return total.roundToLong()
-    }
-
-    /** Spread one record's steps evenly across the minute-slots it covers (clamped to the day). */
-    private fun spreadRecord(record: StepsRecord, dayStartMin: Long, slotCount: Int, slots: DoubleArray) {
-        val s = (record.startTime.epochSecond / 60L - dayStartMin).toInt().coerceIn(0, slotCount - 1)
-        val e = (record.endTime.epochSecond / 60L - dayStartMin).toInt().coerceIn(s, slotCount - 1)
-        val span = (e - s + 1)
-        val perSlot = record.count.toDouble() / span
-        for (i in s..e) slots[i] += perSlot
+        return aggregateSteps(date)
     }
 
     /** Health Connect's priority-deduplicated total. */

@@ -283,8 +283,20 @@ class AnalyticsViewModel @Inject constructor(
         com.fitpal.app.domain.WeightTrend.ratePerWeek(weights, start, end)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    /** Implied maintenance kcal from avg logged intake vs. measured weight change (display only). */
-    val impliedMaintenance: StateFlow<Int?> = combine(nutritionRows, weightRatePerWeek) { rows, rate ->
+    /** Weekly weight trend over the user's whole history — the basis for the maintenance estimate. */
+    private val lifetimeWeightRate: StateFlow<Float?> = weightEntries
+        .map { com.fitpal.app.domain.WeightTrend.lifetimeRatePerWeek(it) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    /**
+     * Implied maintenance kcal from **lifetime** average intake vs. **lifetime** weight change
+     * (display only — never changes the budget). Uses the whole history on purpose: over months the
+     * day-to-day water/glycogen swings average out, so the 7700 kcal/kg conversion tracks real fat
+     * change instead of amplifying noise — which is what made the old 30-day version read far too
+     * high. Independent of the viewed range, so the card shows in Week and 30-day alike (once there
+     * are enough logged days and weigh-ins).
+     */
+    val lifetimeMaintenance: StateFlow<Int?> = combine(lifetimeRows, lifetimeWeightRate) { rows, rate ->
         val loggedDays = rows.size
         val avg = if (loggedDays > 0) rows.sumOf { it.calories.toDouble() }.toFloat() / loggedDays else 0f
         com.fitpal.app.domain.WeightTrend.impliedMaintenance(avg, rate, loggedDays)

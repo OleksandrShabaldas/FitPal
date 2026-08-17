@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
@@ -43,8 +44,13 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.fitpal.app.ui.component.BackdropTheme
+import com.fitpal.app.ui.component.CameraControlEffect
+import com.fitpal.app.ui.component.FlashToggle
 import com.fitpal.app.ui.component.GlassTopBar
 import com.fitpal.app.ui.component.GradientBackdrop
+import com.fitpal.app.ui.component.ZoomSlider
+import com.fitpal.app.ui.component.pinchZoom
+import com.fitpal.app.ui.component.rememberCameraControlState
 import com.fitpal.app.ui.theme.Cream
 import com.fitpal.app.ui.theme.GoldLight
 import java.io.File
@@ -70,6 +76,9 @@ fun CameraScreen(
 
     val imageCapture = remember { ImageCapture.Builder().build() }
     var isCapturing by remember { mutableStateOf(false) }
+    val camControl = rememberCameraControlState()
+    var camera by remember { mutableStateOf<Camera?>(null) }
+    var hasFlash by remember { mutableStateOf(false) }
 
     GradientBackdrop(theme = BackdropTheme.TODAY) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -80,7 +89,7 @@ fun CameraScreen(
                     val previewView = remember {
                         PreviewView(context).apply { scaleType = PreviewView.ScaleType.FILL_CENTER }
                     }
-                    AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
+                    AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize().pinchZoom(camControl))
 
                     Text(
                         text = "Tip: include a coin or card for a better size estimate",
@@ -102,9 +111,11 @@ fun CameraScreen(
                             val preview = Preview.Builder().build().also { it.setSurfaceProvider(previewView.surfaceProvider) }
                             try {
                                 cameraProvider.unbindAll()
-                                cameraProvider.bindToLifecycle(
+                                val cam = cameraProvider.bindToLifecycle(
                                     lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, imageCapture
                                 )
+                                camera = cam
+                                hasFlash = cam.cameraInfo.hasFlashUnit()
                             } catch (_: Exception) {
                             }
                         }, ContextCompat.getMainExecutor(context))
@@ -137,6 +148,10 @@ fun CameraScreen(
                     ) {
                         Icon(Icons.Default.Camera, contentDescription = "Take photo", modifier = Modifier.size(36.dp))
                     }
+
+                    CameraControlEffect(camera, camControl)
+                    FlashToggle(camControl, hasFlash, Modifier.align(Alignment.TopEnd).padding(16.dp))
+                    ZoomSlider(camControl, Modifier.align(Alignment.BottomCenter).padding(bottom = 124.dp))
                 } else {
                     Column(
                         modifier = Modifier.fillMaxSize().padding(32.dp),

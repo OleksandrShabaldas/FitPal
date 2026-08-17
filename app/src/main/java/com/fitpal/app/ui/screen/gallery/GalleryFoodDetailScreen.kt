@@ -55,15 +55,18 @@ import com.fitpal.app.domain.model.DetectedFood
 import com.fitpal.app.domain.model.Ingredient
 import com.fitpal.app.domain.model.Micronutrients
 import com.fitpal.app.ui.component.AddIngredientDialog
+import com.fitpal.app.ui.component.AiInsightsArea
 import com.fitpal.app.ui.component.AiSourceBadge
 import com.fitpal.app.ui.component.BackdropTheme
 import com.fitpal.app.ui.component.DatePickerDialog
 import com.fitpal.app.ui.component.GlassTopBar
 import com.fitpal.app.ui.component.GradientBackdrop
+import com.fitpal.app.ui.component.IngredientsCard
 import com.fitpal.app.ui.component.MacroBar
 import com.fitpal.app.ui.component.MealInsightsSection
 import com.fitpal.app.ui.component.MealTypeSelector
 import com.fitpal.app.ui.component.MicronutrientBars
+import com.fitpal.app.ui.component.MicronutrientCard
 import com.fitpal.app.ui.component.logDateLabel
 import com.fitpal.app.ui.theme.CalorieColor
 import com.fitpal.app.ui.theme.Cream
@@ -223,7 +226,8 @@ fun GalleryFoodDetailScreen(
                                 modelReady = state.modelReady,
                                 breakdown = breakdownFor(food),
                                 onGenerate = viewModel::generateAiInsights,
-                                onRegenerate = viewModel::regenerateInsights
+                                onRegenerate = viewModel::regenerateInsights,
+                                subject = "food"
                             )
                         }
                     }
@@ -245,144 +249,6 @@ fun GalleryFoodDetailScreen(
                         Spacer(Modifier.width(8.dp))
                         Text("Log this food")
                     }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun IngredientsCard(
-    ingredients: List<Ingredient>,
-    isDrink: Boolean,
-    onGramsChanged: (index: Int, newGrams: Float) -> Unit,
-    onRemove: (index: Int) -> Unit,
-    onReplace: (index: Int) -> Unit,
-    onAdd: () -> Unit
-) {
-    val unit = if (isDrink) "ml" else "g"
-    Column(modifier = Modifier.fillMaxWidth().glass().padding(16.dp)) {
-        Text("Ingredients", style = MaterialTheme.typography.titleSmall, color = Cream, modifier = Modifier.padding(bottom = 8.dp))
-        ingredients.forEachIndexed { index, ingredient ->
-            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                // Tap the name to swap this ingredient for a different one (keeps the amount).
-                Row(
-                    modifier = Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).clickable { onReplace(index) }.padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(ingredient.name, style = MaterialTheme.typography.bodyMedium, color = Cream, modifier = Modifier.weight(1f, fill = false))
-                    Spacer(Modifier.width(4.dp))
-                    Icon(Icons.Default.SwapHoriz, contentDescription = "Change ${ingredient.name}", tint = CreamMuted, modifier = Modifier.size(15.dp))
-                }
-                Spacer(Modifier.width(6.dp))
-                com.fitpal.app.ui.component.GramsField(
-                    grams = ingredient.grams,
-                    onGramsChanged = { onGramsChanged(index, it) },
-                    modifier = Modifier.width(82.dp),
-                    unit = unit
-                )
-                Spacer(Modifier.width(8.dp))
-                Text("${ingredient.calories.toInt()} kcal", style = MaterialTheme.typography.bodySmall, color = CreamMuted, modifier = Modifier.width(56.dp))
-                IconButton(onClick = { onRemove(index) }, modifier = Modifier.size(32.dp)) {
-                    Icon(Icons.Default.Close, contentDescription = "Remove ${ingredient.name}", tint = CreamMuted)
-                }
-            }
-        }
-        Spacer(Modifier.height(8.dp))
-        Row(
-            modifier = Modifier.glassSoft(CircleShape).clickable(onClick = onAdd).padding(horizontal = 14.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(Icons.Default.Add, contentDescription = null, tint = GoldLight, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(6.dp))
-            Text("Add ingredient", style = MaterialTheme.typography.labelLarge, color = Cream)
-        }
-    }
-}
-
-/** Vitamins & minerals for this food — collapsed by default, only the ones actually present. */
-@Composable
-private fun MicronutrientCard(micros: Micronutrients) {
-    var expanded by remember { mutableStateOf(false) }
-    Column(
-        modifier = Modifier.fillMaxWidth().glass().clickable { expanded = !expanded }.padding(16.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Vitamins & minerals", style = MaterialTheme.typography.titleSmall, color = Cream, modifier = Modifier.weight(1f))
-            Icon(
-                if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                contentDescription = if (expanded) "Collapse" else "Show vitamins & minerals",
-                tint = CreamMuted
-            )
-        }
-        AnimatedVisibility(visible = expanded) {
-            Column {
-                Spacer(Modifier.height(14.dp))
-                MicronutrientBars(micros, showAll = false)
-            }
-        }
-    }
-}
-
-@Composable
-private fun AiInsightsArea(
-    isLoadingAi: Boolean,
-    insights: com.fitpal.app.domain.model.MealInsights?,
-    insightsSource: com.fitpal.app.ml.AiSource?,
-    modelReady: Boolean,
-    breakdown: List<HealthScorer.Dimension>,
-    onGenerate: () -> Unit,
-    onRegenerate: () -> Unit
-) {
-    when {
-        isLoadingAi -> {
-            Column(modifier = Modifier.fillMaxWidth().glass().padding(16.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = GoldLight, modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("AI analysis", style = MaterialTheme.typography.titleSmall, color = Cream)
-                }
-                Spacer(Modifier.height(10.dp))
-                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.height(8.dp))
-                Text("Analysing...", style = MaterialTheme.typography.bodySmall, color = CreamMuted)
-            }
-        }
-        insights != null -> {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                MealInsightsSection(insights, breakdown = breakdown)
-                insightsSource?.let { AiSourceBadge(it) }
-                if (modelReady) {
-                    Row(
-                        modifier = Modifier.glassSoft(CircleShape).clickable(onClick = onRegenerate).padding(horizontal = 14.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = GoldLight, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Refresh analysis", style = MaterialTheme.typography.labelLarge, color = Cream)
-                    }
-                }
-            }
-        }
-        else -> {
-            Column(modifier = Modifier.fillMaxWidth().glass().padding(16.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = GoldLight, modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("AI analysis", style = MaterialTheme.typography.titleSmall, color = Cream)
-                }
-                Spacer(Modifier.height(10.dp))
-                if (modelReady) {
-                    Row(
-                        modifier = Modifier.glassSoft(CircleShape).clickable(onClick = onGenerate).padding(horizontal = 14.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = GoldLight, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Generate full AI analysis", style = MaterialTheme.typography.labelLarge, color = Cream)
-                    }
-                } else {
-                    Text("Set up the AI model to analyse this food.", style = MaterialTheme.typography.bodySmall, color = CreamMuted)
                 }
             }
         }

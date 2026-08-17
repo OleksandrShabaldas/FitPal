@@ -28,6 +28,18 @@ interface ExerciseDao {
     @Query("SELECT * FROM exercise_entries WHERE id = :id")
     suspend fun getById(id: Long): ExerciseEntryEntity?
 
+    /**
+     * Every distinct exercise the user has ever logged, keeping the latest version of each
+     * (case-insensitive by name), newest first. Powers the global search.
+     */
+    @Query("""
+        SELECT * FROM exercise_entries WHERE id IN (
+            SELECT MAX(id) FROM exercise_entries GROUP BY name COLLATE NOCASE
+        )
+        ORDER BY id DESC
+    """)
+    fun getDistinctExercises(): Flow<List<ExerciseEntryEntity>>
+
     /** All logged workouts in a date range — used to give the AI overview the activity log. */
     @Query("SELECT * FROM exercise_entries WHERE date BETWEEN :from AND :to ORDER BY date ASC, timestamp ASC")
     suspend fun getEntriesInRange(from: String, to: String): List<ExerciseEntryEntity>

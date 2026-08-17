@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
@@ -49,6 +50,11 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fitpal.app.ui.component.BackdropTheme
+import com.fitpal.app.ui.component.CameraControlEffect
+import com.fitpal.app.ui.component.FlashToggle
+import com.fitpal.app.ui.component.ZoomSlider
+import com.fitpal.app.ui.component.pinchZoom
+import com.fitpal.app.ui.component.rememberCameraControlState
 import com.fitpal.app.ui.component.DatePickerDialog
 import com.fitpal.app.ui.component.EditableFoodItemRow
 import com.fitpal.app.ui.component.GlassTopBar
@@ -75,7 +81,6 @@ fun BarcodeScreen(
     val mealType by viewModel.mealType.collectAsStateWithLifecycle()
     val logDate by viewModel.logDate.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
     var showDatePicker by remember { mutableStateOf(false) }
 
     LaunchedEffect(state.saved) { if (state.saved) onLogged() }
@@ -154,10 +159,7 @@ fun BarcodeScreen(
                         OutlinedButton(onClick = { viewModel.scanAgain() }) { Text("Scan again") }
                     }
 
-                    else -> ScannerCamera(
-                        onBarcode = viewModel::onBarcodeScanned,
-                        bindProvider = { previewView, analysis -> bindCamera(context, lifecycleOwner, previewView, analysis) }
-                    )
+                    else -> ScannerCamera(onBarcode = viewModel::onBarcodeScanned)
                 }
             }
 
@@ -194,54 +196,44 @@ private fun CenteredMessage(text: String) {
 }
 
 @Composable
-private fun ScannerCamera(
-    onBarcode: (String) -> Unit,
-    bindProvider: (PreviewView, ImageAnalysis) -> AutoCloseable
-) {
+private fun ScannerCamera(onBarcode: (String) -> Unit) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val previewView = remember { PreviewView(context) }
+    val camControl = rememberCameraControlState()
+    var camera by remember { mutableStateOf<Camera?>(null) }
+    var hasFlash by remember { mutableStateOf(false) }
 
-    AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
+    Box(modifier = Modifier.fillMaxSize()) {
+        AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize().pinchZoom(camControl))
 
-    DisposableEffect(Unit) {
-        val executor = Executors.newSingleThreadExecutor()
-        val analysis = ImageAnalysis.Builder()
-            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-            .build()
-        analysis.setAnalyzer(executor, BarcodeAnalyzer(onBarcode))
-        val binding = bindProvider(previewView, analysis)
-        onDispose {
-            executor.shutdown()
-            try {
-                binding.close()
-            } catch (_: Exception) {
+        DisposableEffect(Unit) {
+            val executor = Executors.newSingleThreadExecutor()
+            val analysis = ImageAnalysis.Builder()
+                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                .build()
+            analysis.setAnalyzer(executor, BarcodeAnalyzer(onBarcode))
+            val providerFuture = ProcessCameraProvider.getInstance(context)
+            providerFuture.addListener({
+                val provider = providerFuture.get()
+                val preview = Preview.Builder().build().also { it.setSurfaceProvider(previewView.surfaceProvider) }
+                try {
+                    provider.unbindAll()
+                    val cam = provider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis)
+                    camera = cam
+                    hasFlash = cam.cameraInfo.hasFlashUnit()
+                } catch (_: Exception) {
+                }
+            }, ContextCompat.getMainExecutor(context))
+            onDispose {
+                executor.shutdown()
+                try { providerFuture.get().unbindAll() } catch (_: Exception) {}
             }
         }
-    }
-}
 
-private fun bindCamera(
-    context: android.content.Context,
-    lifecycleOwner: androidx.lifecycle.LifecycleOwner,
-    previewView: PreviewView,
-    analysis: ImageAnalysis
-): AutoCloseable {
-    val providerFuture = ProcessCameraProvider.getInstance(context)
-    providerFuture.addListener({
-        val provider = providerFuture.get()
-        val preview = Preview.Builder().build().also { it.setSurfaceProvider(previewView.surfaceProvider) }
-        try {
-            provider.unbindAll()
-            provider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis)
-        } catch (_: Exception) {
-        }
-    }, ContextCompat.getMainExecutor(context))
-
-    return AutoCloseable {
-        try {
-            providerFuture.get().unbindAll()
-        } catch (_: Exception) {
-        }
+        CameraControlEffect(camera, camControl)
+        FlashToggle(camControl, hasFlash, Modifier.align(Alignment.TopEnd).padding(16.dp))
+        ZoomSlider(camControl, Modifier.align(Alignment.BottomCenter).padding(bottom = 32.dp))
     }
 }
 

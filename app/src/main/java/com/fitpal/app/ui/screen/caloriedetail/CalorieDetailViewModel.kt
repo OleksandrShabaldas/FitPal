@@ -100,6 +100,7 @@ class CalorieDetailViewModel @Inject constructor(
 
     private val dateFormat = DateTimeFormatter.ISO_LOCAL_DATE
     private val dayMonth = DateTimeFormatter.ofPattern("d MMM")
+    private val dayMonthYear = DateTimeFormatter.ofPattern("d MMM yyyy")
 
     /** The day the period is built around — passed in so we open on exactly what Analytics showed. */
     private val anchor: LocalDate = savedStateHandle.get<String>(Screen.CalorieDetail.ARG_ANCHOR)
@@ -115,6 +116,17 @@ class CalorieDetailViewModel @Inject constructor(
 
     fun setRange(r: AnalyticsRange) { _range.value = r }
 
+    /** "Lifetime" overrides the week/month window with everything since the first logged day. */
+    private val _lifetime = MutableStateFlow(false)
+    val lifetime: StateFlow<Boolean> = _lifetime.asStateFlow()
+
+    fun setLifetime(on: Boolean) { _lifetime.value = on }
+
+    /** The earliest day with any logged meal — where the Lifetime window starts. */
+    private val earliestLogged: StateFlow<LocalDate?> = mealRepository.getLoggedDatesDesc()
+        .map { dates -> dates.lastOrNull()?.let { runCatching { LocalDate.parse(it) }.getOrNull() } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
     /** Same windows as Analytics: WEEK = the Mon–Sun week around the anchor, MONTH = 30 days to it. */
     private fun rangeOf(r: AnalyticsRange, a: LocalDate): Pair<LocalDate, LocalDate> = when (r) {
         AnalyticsRange.WEEK -> {
@@ -124,9 +136,11 @@ class CalorieDetailViewModel @Inject constructor(
         AnalyticsRange.MONTH -> a.minusDays(29L) to a
     }
 
-    private val bounds: StateFlow<Pair<LocalDate, LocalDate>> = _range
-        .map { rangeOf(it, anchor) }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, rangeOf(_range.value, anchor))
+    /** The window we query: the week/month around the anchor, or first-logged-day→today for Lifetime. */
+    private val bounds: StateFlow<Pair<LocalDate, LocalDate>> =
+        combine(_range, _lifetime, earliestLogged) { r, lifetime, earliest ->
+            if (lifetime) (earliest ?: anchor) to LocalDate.now() else rangeOf(r, anchor)
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, rangeOf(_range.value, anchor))
 
     /** Re-query whenever the window changes. */
     private fun <T> boundsDriven(query: (from: String, to: String) -> Flow<List<T>>): StateFlow<List<T>> {
@@ -200,7 +214,8 @@ class CalorieDetailViewModel @Inject constructor(
         EnergySummary(
             days = days,
             goal = base.goal,
-            periodLabel = "${start.format(dayMonth)} – ${end.format(dayMonth)}"
+            periodLabel = if (_lifetime.value) "All time · since ${start.format(dayMonthYear)}"
+            else "${start.format(dayMonth)} – ${end.format(dayMonth)}"
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), EnergySummary())
 

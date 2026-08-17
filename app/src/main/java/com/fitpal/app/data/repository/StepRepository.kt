@@ -121,6 +121,9 @@ class StepRepository @Inject constructor(
 
     fun healthConnectAvailable(): Boolean = healthConnectManager.isAvailable()
 
+    /** When we last pulled Health Connect (epoch millis; 0 = never). Drives the "synced HH:mm" label. */
+    val lastSyncedAt: Flow<Long> get() = settingsRepository.stepsLastSyncedAt
+
     /**
      * Steps for a day grouped by source — every Health Connect writer, plus the watch's own
      * report (under [WATCH_SOURCE_KEY]) so the user can see it arrived.
@@ -173,6 +176,9 @@ class StepRepository @Inject constructor(
                 synced++
             }
         }
+        // We queried Health Connect (permission was present) — record when, even if nothing changed,
+        // so the UI can show how fresh the pull is rather than implying Samsung Health is current.
+        settingsRepository.setStepsLastSyncedAt(System.currentTimeMillis())
         return synced
     }
 

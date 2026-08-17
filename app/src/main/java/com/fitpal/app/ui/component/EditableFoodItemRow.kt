@@ -108,7 +108,9 @@ fun EditableFoodItemRow(
     /** When true, the save button shows a filled bookmark to confirm it's in the collection. */
     saved: Boolean = false,
     /** When given, the name is tappable and can be rewritten before the meal is logged. */
-    onRename: ((String) -> Unit)? = null
+    onRename: ((String) -> Unit)? = null,
+    /** Whether clearing the field commits 0 live. Safe (true) for drafts; false when edits hit the DB. */
+    commitZero: Boolean = true
 ) {
     var renaming by remember { mutableStateOf(false) }
     if (renaming && onRename != null) {
@@ -171,7 +173,7 @@ fun EditableFoodItemRow(
                 onGramsChanged = onGramsChanged,
                 modifier = Modifier.width(88.dp),
                 unit = unit,
-                commitZero = true
+                commitZero = commitZero
             )
 
             StepButton(
@@ -214,7 +216,7 @@ fun EditableFoodItemRow(
     }
 }
 
-/** A small round +/− next to the amount field. Shared with [FoodPortionSheet]. */
+/** A small round +/− next to the amount field. Shared with [FoodPortionEditor]. */
 @Composable
 internal fun StepButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,

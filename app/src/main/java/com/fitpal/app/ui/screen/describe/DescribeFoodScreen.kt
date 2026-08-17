@@ -41,11 +41,12 @@ import com.fitpal.app.ui.component.AddIngredientDialog
 import com.fitpal.app.ui.component.AiSourceBadge
 import com.fitpal.app.ui.component.BackdropTheme
 import com.fitpal.app.ui.component.DatePickerDialog
-import com.fitpal.app.ui.component.FoodResultCard
 import com.fitpal.app.ui.component.GlassTopBar
 import com.fitpal.app.ui.component.GradientBackdrop
+import com.fitpal.app.ui.component.MealItemCard
 import com.fitpal.app.ui.component.MealTotalRow
 import com.fitpal.app.ui.component.MealTypeSelector
+import com.fitpal.app.ui.component.toMealItemContent
 import com.fitpal.app.ui.component.logDateLabel
 import com.fitpal.app.ui.theme.Cream
 import com.fitpal.app.ui.theme.CreamMuted
@@ -204,8 +205,8 @@ fun DescribeFoodScreen(
                             }
                         }
                         itemsIndexed(state.foods) { index, food ->
-                            FoodResultCard(
-                                food = food,
+                            MealItemCard(
+                                content = food.toMealItemContent(),
                                 onIngredientGramsChanged = { ii, g -> viewModel.updateIngredientGrams(index, ii, g) },
                                 onIngredientRemoved = { ii -> viewModel.removeIngredient(index, ii) },
                                 onToggleVariation = { vi -> viewModel.toggleVariation(index, vi) },
@@ -214,7 +215,7 @@ fun DescribeFoodScreen(
                                 onAddIngredient = { addIngredientFor = index },
                                 mealPresets = mealPresets,
                                 drinkPresets = drinkPresets,
-                                onSave = {
+                                onToggleSave = {
                                     viewModel.saveToGallery(index)
                                     Toast.makeText(context, "Saved to collection", Toast.LENGTH_SHORT).show()
                                 },
