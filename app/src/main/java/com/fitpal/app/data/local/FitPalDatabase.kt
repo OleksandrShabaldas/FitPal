@@ -8,6 +8,7 @@ import com.fitpal.app.data.local.dao.AiReviewDao
 import com.fitpal.app.data.local.dao.ChallengeDao
 import com.fitpal.app.data.local.dao.ExerciseDao
 import com.fitpal.app.data.local.dao.GalleryDao
+import com.fitpal.app.data.local.dao.InsightsCacheDao
 import com.fitpal.app.data.local.dao.MealLogDao
 import com.fitpal.app.data.local.dao.NutritionDao
 import com.fitpal.app.data.local.dao.StepDao
@@ -16,6 +17,7 @@ import com.fitpal.app.data.local.dao.WeightDao
 import com.fitpal.app.data.local.entity.AiReviewEntity
 import com.fitpal.app.data.local.entity.ChallengeEntity
 import com.fitpal.app.data.local.entity.ExerciseEntryEntity
+import com.fitpal.app.data.local.entity.FoodInsightsCacheEntity
 import com.fitpal.app.data.local.entity.GalleryCategoryEntity
 import com.fitpal.app.data.local.entity.GalleryFoodEntity
 import com.fitpal.app.data.local.entity.GalleryIngredientEntity
@@ -34,6 +36,7 @@ import com.fitpal.app.data.local.entity.WeightEntryEntity
         AiReviewEntity::class,
         ChallengeEntity::class,
         ExerciseEntryEntity::class,
+        FoodInsightsCacheEntity::class,
         GalleryCategoryEntity::class,
         GalleryFoodEntity::class,
         GalleryIngredientEntity::class,
@@ -47,7 +50,7 @@ import com.fitpal.app.data.local.entity.WeightEntryEntity
         UsdaFoodEntity::class,
         WeightEntryEntity::class
     ],
-    version = 24,
+    version = 25,
     exportSchema = true
 )
 abstract class FitPalDatabase : RoomDatabase() {
@@ -55,6 +58,7 @@ abstract class FitPalDatabase : RoomDatabase() {
     abstract fun challengeDao(): ChallengeDao
     abstract fun exerciseDao(): ExerciseDao
     abstract fun galleryDao(): GalleryDao
+    abstract fun insightsCacheDao(): InsightsCacheDao
     abstract fun mealLogDao(): MealLogDao
     abstract fun nutritionDao(): NutritionDao
     abstract fun stepDao(): StepDao
@@ -398,6 +402,20 @@ abstract class FitPalDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE gallery_foods ADD COLUMN aiModel TEXT")
                 db.execSQL("ALTER TABLE exercise_entries ADD COLUMN aiModel TEXT")
                 db.execSQL("ALTER TABLE meal_logs ADD COLUMN name TEXT")
+            }
+        }
+
+        /** v24 -> v25: a content-signature cache of AI food overviews, so the same food (database,
+         *  collection, or hand-typed) reuses its overview instead of regenerating. */
+        val MIGRATION_24_25 = object : Migration(24, 25) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS food_insights_cache (
+                        signature TEXT PRIMARY KEY NOT NULL,
+                        insightsJson TEXT NOT NULL,
+                        generatedAt INTEGER NOT NULL
+                    )
+                """)
             }
         }
     }

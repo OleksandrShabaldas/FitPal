@@ -21,6 +21,8 @@ import dagger.hilt.components.SingletonComponent
 @InstallIn(SingletonComponent::class)
 interface WearWorkerEntryPoint {
     fun pipeline(): FoodAnalysisPipeline
+    fun insightsGenerator(): com.fitpal.app.ml.InsightsGenerator
+    fun galleryRepository(): com.fitpal.app.data.repository.GalleryRepository
     fun analysisJobManager(): AnalysisJobManager
     fun exerciseAnalysisJobManager(): ExerciseAnalysisJobManager
     fun mealRepository(): MealRepository

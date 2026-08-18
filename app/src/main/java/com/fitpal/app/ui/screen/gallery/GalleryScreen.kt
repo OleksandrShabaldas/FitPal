@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fitpal.app.ui.component.BackdropTheme
+import com.fitpal.app.ui.component.CategorizedFoodList
 import com.fitpal.app.ui.component.DatePickerDialog
 import com.fitpal.app.ui.component.FoodCard
 import com.fitpal.app.ui.component.GlassTopBar
@@ -53,6 +54,8 @@ fun GalleryScreen(
     viewModel: GalleryViewModel = hiltViewModel()
 ) {
     val foods by viewModel.foods.collectAsStateWithLifecycle()
+    val view by viewModel.collectionView.collectAsStateWithLifecycle()
+    val collapsed by viewModel.collapsedSections.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val logged by viewModel.logged.collectAsStateWithLifecycle()
     val logDate by viewModel.logDate.collectAsStateWithLifecycle()
@@ -116,23 +119,26 @@ fun GalleryScreen(
                     style = MaterialTheme.typography.labelMedium, color = CreamMuted,
                     modifier = Modifier.padding(start = 20.dp, bottom = 2.dp)
                 )
-                LazyColumn(contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(foods, key = { it.id }) { food ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            FoodCard(
-                                name = food.name,
-                                grams = food.defaultPortionGrams,
-                                calories = food.totalCalories,
-                                unit = if (food.isDrink) "ml" else "g",
-                                modifier = Modifier.weight(1f),
-                                onClick = { onOpenDetail(food.id) }
-                            )
-                            IconButton(onClick = { viewModel.quickLog(food.id) }) {
-                                Icon(Icons.Default.Add, contentDescription = "Log ${food.name}", tint = GoldLight)
-                            }
-                            IconButton(onClick = { viewModel.deleteFood(food) }) {
-                                Icon(Icons.Default.DeleteOutline, contentDescription = "Delete ${food.name}", tint = CreamMuted)
-                            }
+                CategorizedFoodList(
+                    view = view,
+                    collapsed = collapsed,
+                    onToggleCollapsed = viewModel::toggleCollapsed,
+                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 24.dp)
+                ) { food ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        FoodCard(
+                            name = food.name,
+                            grams = food.defaultPortionGrams,
+                            calories = food.totalCalories,
+                            unit = if (food.isDrink) "ml" else "g",
+                            modifier = Modifier.weight(1f),
+                            onClick = { onOpenDetail(food.id) }
+                        )
+                        IconButton(onClick = { viewModel.quickLog(food.id) }) {
+                            Icon(Icons.Default.Add, contentDescription = "Log ${food.name}", tint = GoldLight)
+                        }
+                        IconButton(onClick = { viewModel.deleteFood(food) }) {
+                            Icon(Icons.Default.DeleteOutline, contentDescription = "Delete ${food.name}", tint = CreamMuted)
                         }
                     }
                 }

@@ -44,21 +44,27 @@ class HealthConnectManager @Inject constructor(
     }
 
     /**
-     * Total steps for a calendar day — Health Connect's own **priority-deduplicated** aggregate.
+     * Total steps for a calendar day — the **largest single source** in Health Connect.
      *
-     * Health Connect resolves overlapping records from different apps by priority; it does NOT sum
-     * them. So a mirror app like Health Sync, which copies Samsung Health's steps into Health
-     * Connect, is counted once — not added on top. (An earlier version summed the per-minute max
-     * across every source, which double-counted those mirrors: Samsung Health 9,600 + Health Sync
-     * 9,000 came out as ~17,000 instead of ~10,000.)
+     * Every app writing steps (Samsung Health, the phone's own "Android" counter, a mirror like
+     * Health Sync, …) is an overlapping *view of the same steps*, not an additive slice — so any
+     * form of summing over-counts. Even Health Connect's own aggregate over-counts here, because it
+     * only de-duplicates records that overlap in time: two apps that log the same walk with slightly
+     * different timestamps get added together (measured: Samsung Health 6,219 + the phone's 3,807
+     * came out as ~8,900 when the real day was ~6,300). The single most complete source — usually
+     * Samsung Health, which already merges phone + watch on Samsung devices — is the honest number,
+     * so we take the max of the per-source totals.
      *
-     * The one thing priority-dedup can drop is watch steps the phone's counter outranks — but those
-     * are recovered separately, not by summing here: the watch reports its own daily count over the
-     * Data Layer and [com.fitpal.app.data.repository.StepRepository] floors the day to it.
+     * The one thing this can miss is a walk captured only by the watch when Samsung Health didn't
+     * sync it — recovered separately: the watch reports its own daily count over the Data Layer and
+     * [com.fitpal.app.data.repository.StepRepository] floors the day to it.
      */
     suspend fun readSteps(date: LocalDate): Long {
         if (!isAvailable()) return 0L
-        return aggregateSteps(date)
+        val byOrigin = readStepsByOrigin(date)
+        val largestSource = byOrigin.values.maxOrNull() ?: 0L
+        // Fall back to the priority-deduped aggregate only if the per-source read came back empty.
+        return if (largestSource > 0L) largestSource else aggregateSteps(date)
     }
 
     /** Health Connect's priority-deduplicated total. */

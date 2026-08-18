@@ -1,12 +1,17 @@
 package com.fitpal.app.ui.screen.home
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
@@ -71,6 +76,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
@@ -194,10 +202,27 @@ fun HomeScreen(
     )
 
     var swipeDragX by remember { mutableFloatStateOf(0f) }
+    // The search bar shows at the top and slides away as you scroll down, back on scroll up.
+    var searchBarVisible by remember { mutableStateOf(true) }
+    val searchBarScroll = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (available.y < -3f) searchBarVisible = false
+                else if (available.y > 3f) searchBarVisible = true
+                return Offset.Zero
+            }
+        }
+    }
 
     GradientBackdrop(theme = BackdropTheme.TODAY) {
-        Column(modifier = Modifier.fillMaxSize()) {
-        HomeSearchBar(onClick = onOpenSearch)
+        Column(modifier = Modifier.fillMaxSize().nestedScroll(searchBarScroll)) {
+        AnimatedVisibility(
+            visible = searchBarVisible,
+            enter = expandVertically() + fadeIn(),
+            exit = shrinkVertically() + fadeOut()
+        ) {
+            HomeSearchBar(onClick = onOpenSearch)
+        }
         AnimatedContent(
             modifier = Modifier.weight(1f),
             targetState = selectedDate,
@@ -968,17 +993,17 @@ private fun HomeSearchBar(onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 2.dp)
-            .glass(RoundedCornerShape(16.dp))
+            .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 2.dp)
+            .glass(RoundedCornerShape(14.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(Icons.Default.Search, contentDescription = null, tint = CreamMuted, modifier = Modifier.size(20.dp))
-        Spacer(Modifier.width(10.dp))
+        Icon(Icons.Default.Search, contentDescription = null, tint = CreamMuted, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
         Text(
             "Search your foods & workouts",
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodySmall,
             color = CreamMuted
         )
     }

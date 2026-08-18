@@ -21,6 +21,7 @@ import javax.inject.Inject
 class GalleryViewModel @Inject constructor(
     private val galleryRepository: GalleryRepository,
     private val mealRepository: MealRepository,
+    private val settingsRepository: com.fitpal.app.data.repository.SettingsRepository,
     mealLogContext: MealLogContext
 ) : ViewModel() {
 
@@ -45,6 +46,26 @@ class GalleryViewModel @Inject constructor(
             else galleryRepository.searchFoods(query)
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val categories: StateFlow<List<com.fitpal.app.data.local.entity.GalleryCategoryEntity>> =
+        galleryRepository.getCategories()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** Saved foods grouped by category / subcategory — the same layout as the Collection tab. */
+    val collectionView: StateFlow<com.fitpal.app.domain.CollectionView> =
+        kotlinx.coroutines.flow.combine(foods, categories) { f, c ->
+            com.fitpal.app.domain.CollectionGrouping.build(f, c, null)
+        }.stateIn(
+            viewModelScope, SharingStarted.WhileSubscribed(5000),
+            com.fitpal.app.domain.CollectionView(null, emptyList(), emptyList(), emptyList())
+        )
+
+    /** Folded category headers — shared with the Collection tab so the collapse state matches. */
+    val collapsedSections: StateFlow<Set<String>> = settingsRepository.collectionCollapsed
+    fun toggleCollapsed(key: String) {
+        val next = collapsedSections.value.toMutableSet().apply { if (!add(key)) remove(key) }
+        settingsRepository.setCollectionCollapsed(next)
+    }
 
     private val _logged = MutableStateFlow(false)
     val logged: StateFlow<Boolean> = _logged

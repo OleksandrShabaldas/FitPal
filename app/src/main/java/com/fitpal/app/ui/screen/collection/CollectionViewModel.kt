@@ -13,6 +13,8 @@ import com.fitpal.app.data.repository.GalleryRepository
 import com.fitpal.app.data.repository.MealRepository
 import com.fitpal.app.data.repository.SettingsRepository
 import com.fitpal.app.data.repository.WeightRepository
+import com.fitpal.app.domain.CollectionGrouping
+import com.fitpal.app.domain.CollectionView
 import com.fitpal.app.domain.HealthScorer
 import com.fitpal.app.domain.model.MealInsights
 import com.fitpal.app.ml.AiSource
@@ -84,52 +86,14 @@ class CollectionViewModel @Inject constructor(
         .map { cats -> cats.filter { it.parentId == null } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    /**
-     * The ready-to-render view: which foods sit directly in the selected category, and the
-     * collapsible subcategory sections beneath it. When "All" is selected everything is flat.
-     */
-    data class CategorySection(val subcategory: GalleryCategoryEntity, val foods: List<GalleryFoodEntity>)
-    /** A top-level category group in the "All" view: its own foods + collapsible subcategory sections. */
-    data class CategoryGroup(
-        val category: GalleryCategoryEntity?,   // null = the "Unsorted" catch-all
-        val directFoods: List<GalleryFoodEntity>,
-        val sections: List<CategorySection>
-    )
-    data class CollectionView(
-        val selectedCategoryId: Long?,
-        val directFoods: List<GalleryFoodEntity>,   // used when a specific category is selected
-        val sections: List<CategorySection>,        // used when a specific category is selected
-        val groups: List<CategoryGroup>             // used for "All" — everything grouped by category
-    )
-
+    /** Foods grouped by category / subcategory (shared with the log-from-collection picker). */
     val collectionView: StateFlow<CollectionView> =
         combine(foods, categories, _selectedCategoryId) { allFoods, cats, selected ->
-            if (selected == null) {
-                // "All": nest everything under collapsible category → subcategory headers.
-                val topCats = cats.filter { it.parentId == null }
-                val knownIds = cats.map { it.id }.toSet()
-                val groups = buildList {
-                    topCats.forEach { top ->
-                        val subs = cats.filter { it.parentId == top.id }
-                        val direct = allFoods.filter { it.categoryId == top.id }
-                        val sections = subs
-                            .map { sub -> CategorySection(sub, allFoods.filter { it.categoryId == sub.id }) }
-                            .filter { it.foods.isNotEmpty() }
-                        // Only show a category header if it actually holds something.
-                        if (direct.isNotEmpty() || sections.isNotEmpty()) add(CategoryGroup(top, direct, sections))
-                    }
-                    // Anything unsorted (or filed under a deleted category) collects in one group at the end.
-                    val unsorted = allFoods.filter { it.categoryId == null || it.categoryId !in knownIds }
-                    if (unsorted.isNotEmpty()) add(CategoryGroup(null, unsorted, emptyList()))
-                }
-                CollectionView(null, emptyList(), emptyList(), groups)
-            } else {
-                val subs = cats.filter { it.parentId == selected }
-                val direct = allFoods.filter { it.categoryId == selected }
-                val sections = subs.map { sub -> CategorySection(sub, allFoods.filter { it.categoryId == sub.id }) }
-                CollectionView(selected, direct, sections, emptyList())
-            }
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), CollectionView(null, emptyList(), emptyList(), emptyList()))
+            CollectionGrouping.build(allFoods, cats, selected)
+        }.stateIn(
+            viewModelScope, SharingStarted.WhileSubscribed(5000),
+            CollectionView(null, emptyList(), emptyList(), emptyList())
+        )
 
     // ---------- Collapsed sections ----------
 

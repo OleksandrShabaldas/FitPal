@@ -68,6 +68,7 @@ import com.fitpal.app.data.local.entity.GalleryCategoryEntity
 import com.fitpal.app.data.local.entity.GalleryFoodEntity
 import com.fitpal.app.data.local.entity.SavedWorkoutEntity
 import com.fitpal.app.ui.component.BackdropTheme
+import com.fitpal.app.ui.component.CategorizedFoodList
 import com.fitpal.app.ui.component.GlassTopBar
 import com.fitpal.app.ui.component.GradientBackdrop
 import com.fitpal.app.ui.component.swipeNavigation
@@ -203,64 +204,12 @@ fun CollectionScreen(
                             }
                         )
                     } else {
-                        LazyColumn(
-                            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 110.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            if (selectedCategoryId == null) {
-                                // "All" — nest everything under collapsible category → subcategory headers.
-                                view.groups.forEach { group ->
-                                    val topKey = group.category?.let { "cat_${it.id}" } ?: "unsorted"
-                                    val topCollapsed = topKey in collapsed
-                                    val total = group.directFoods.size + group.sections.sumOf { it.foods.size }
-                                    item(key = "grp_$topKey") {
-                                        CategoryGroupHeader(
-                                            name = group.category?.name ?: "Unsorted",
-                                            count = total,
-                                            collapsed = topCollapsed,
-                                            onToggle = { viewModel.toggleCollapsed(topKey) }
-                                        )
-                                    }
-                                    if (!topCollapsed) {
-                                        items(group.directFoods, key = { "gd_${it.id}" }) { food -> foodCard(food) }
-                                        group.sections.forEach { section ->
-                                            val subKey = "sub_${section.subcategory.id}"
-                                            val subCollapsed = subKey in collapsed
-                                            item(key = "gsec_$subKey") {
-                                                SubcategoryHeader(
-                                                    name = section.subcategory.name,
-                                                    count = section.foods.size,
-                                                    collapsed = subCollapsed,
-                                                    indent = true,
-                                                    onToggle = { viewModel.toggleCollapsed(subKey) }
-                                                )
-                                            }
-                                            if (!subCollapsed) {
-                                                items(section.foods, key = { "gs_${it.id}" }) { food -> foodCard(food) }
-                                            }
-                                        }
-                                    }
-                                }
-                            } else {
-                                // A specific category selected — its direct foods, then subcategory sections.
-                                items(view.directFoods, key = { it.id }) { food -> foodCard(food) }
-                                view.sections.forEach { section ->
-                                    val subKey = "sub_${section.subcategory.id}"
-                                    val subCollapsed = subKey in collapsed
-                                    item(key = "sec_$subKey") {
-                                        SubcategoryHeader(
-                                            name = section.subcategory.name,
-                                            count = section.foods.size,
-                                            collapsed = subCollapsed,
-                                            onToggle = { viewModel.toggleCollapsed(subKey) }
-                                        )
-                                    }
-                                    if (!subCollapsed) {
-                                        items(section.foods, key = { "sub_${it.id}" }) { food -> foodCard(food) }
-                                    }
-                                }
-                            }
-                        }
+                        CategorizedFoodList(
+                            view = view,
+                            collapsed = collapsed,
+                            onToggleCollapsed = viewModel::toggleCollapsed,
+                            foodCard = foodCard
+                        )
                     }
                 }
                 CollectionTab.EXERCISE -> {
@@ -380,41 +329,6 @@ private fun CategoryTabs(
 }
 
 /** Bold, collapsible header for a top-level category group in the "All" view. */
-@Composable
-private fun CategoryGroupHeader(name: String, count: Int, collapsed: Boolean, onToggle: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(onClick = onToggle).padding(top = 12.dp, bottom = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(name, style = MaterialTheme.typography.titleMedium, color = Cream, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.width(8.dp))
-        Text("$count", style = MaterialTheme.typography.bodyMedium, color = GoldLight, modifier = Modifier.weight(1f))
-        Icon(
-            if (collapsed) Icons.Default.ExpandMore else Icons.Default.ExpandLess,
-            contentDescription = if (collapsed) "Expand" else "Collapse",
-            tint = CreamMuted
-        )
-    }
-}
-
-@Composable
-private fun SubcategoryHeader(name: String, count: Int, collapsed: Boolean, onToggle: () -> Unit, indent: Boolean = false) {
-    Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onToggle)
-            .padding(start = if (indent) 12.dp else 0.dp, top = 10.dp, bottom = 2.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(name, style = MaterialTheme.typography.titleSmall, color = Cream, fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.width(6.dp))
-        Text("($count)", style = MaterialTheme.typography.bodySmall, color = CreamMuted, modifier = Modifier.weight(1f))
-        Icon(
-            if (collapsed) Icons.Default.ExpandMore else Icons.Default.ExpandLess,
-            contentDescription = if (collapsed) "Expand" else "Collapse",
-            tint = CreamMuted
-        )
-    }
-}
-
 @Composable
 private fun CollectionFoodCard(
     food: GalleryFoodEntity,
