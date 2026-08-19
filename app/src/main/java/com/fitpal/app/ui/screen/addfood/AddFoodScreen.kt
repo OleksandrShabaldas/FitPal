@@ -57,6 +57,7 @@ import com.fitpal.app.data.local.entity.MealLogItemEntity
 import com.fitpal.app.ui.component.BackdropTheme
 import com.fitpal.app.ui.component.GlassTopBar
 import com.fitpal.app.ui.component.GradientBackdrop
+import com.fitpal.app.ui.component.rememberFastingGuard
 import com.fitpal.app.ui.theme.CalorieColor
 import com.fitpal.app.ui.theme.Cream
 import com.fitpal.app.ui.theme.CreamMuted
@@ -79,6 +80,7 @@ fun AddFoodScreen(
 ) {
     var showWeightDialog by remember { mutableStateOf(false) }
     val recentFoods by viewModel.recentFoods.collectAsStateWithLifecycle()
+    val fastingGuard = rememberFastingGuard()
     val logged by viewModel.logged.collectAsStateWithLifecycle()
 
     LaunchedEffect(logged) { if (logged) onLogged() }
@@ -107,7 +109,7 @@ fun AddFoodScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         recentFoods.forEach { item ->
-                            RecentChip(item = item, onClick = { viewModel.quickLog(item) })
+                            RecentChip(item = item, onClick = { fastingGuard.attempt { viewModel.quickLog(item) } })
                         }
                     }
                 }

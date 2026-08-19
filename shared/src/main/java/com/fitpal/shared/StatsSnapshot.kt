@@ -31,6 +31,10 @@ data class StatsSnapshot(
     val waterGoalMl: Int = 0,
     /** The user's quick-add water amounts (ml), mirrored from the phone. */
     val waterPresets: List<Int> = listOf(200, 330, 500),
+    /** Intermittent-fasting schedule mirrored from the phone; the watch computes the live countdown itself. */
+    val fastingEnabled: Boolean = false,
+    val fastEatStartMin: Int = 12 * 60,
+    val fastEatEndMin: Int = 20 * 60,
     /** When the phone built this snapshot (epoch millis) — lets the watch show staleness. */
     val updatedAt: Long = 0L
 ) {
@@ -58,6 +62,9 @@ data class StatsSnapshot(
         putInt(K_WATER, waterMl)
         putInt(K_WATER_GOAL, waterGoalMl)
         putIntegerArrayList(K_WATER_PRESETS, ArrayList(waterPresets))
+        putBoolean(K_FASTING_ON, fastingEnabled)
+        putInt(K_FAST_START, fastEatStartMin)
+        putInt(K_FAST_END, fastEatEndMin)
         putLong(K_UPDATED_AT, updatedAt)
     }
 
@@ -79,6 +86,9 @@ data class StatsSnapshot(
         private const val K_WATER = "water"
         private const val K_WATER_GOAL = "water_goal"
         private const val K_WATER_PRESETS = "water_presets"
+        private const val K_FASTING_ON = "fasting_on"
+        private const val K_FAST_START = "fast_start"
+        private const val K_FAST_END = "fast_end"
         private const val K_UPDATED_AT = "updated_at"
 
         fun fromDataMap(map: DataMap): StatsSnapshot = StatsSnapshot(
@@ -100,6 +110,9 @@ data class StatsSnapshot(
             waterGoalMl = map.getInt(K_WATER_GOAL, 0),
             waterPresets = map.getIntegerArrayList(K_WATER_PRESETS)?.toList()
                 ?: listOf(200, 330, 500),
+            fastingEnabled = map.getBoolean(K_FASTING_ON, false),
+            fastEatStartMin = map.getInt(K_FAST_START, 12 * 60),
+            fastEatEndMin = map.getInt(K_FAST_END, 20 * 60),
             updatedAt = map.getLong(K_UPDATED_AT, 0L)
         )
     }

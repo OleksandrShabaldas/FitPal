@@ -142,6 +142,9 @@ fun AnalyticsScreen(
     val lifetimeRows by viewModel.lifetimeRows.collectAsStateWithLifecycle()
     val lifetimeMicros by viewModel.lifetimeMicros.collectAsStateWithLifecycle()
     val widgetLayout by viewModel.widgetLayout.collectAsStateWithLifecycle()
+    val fastingSchedule by viewModel.fastingSchedule.collectAsStateWithLifecycle()
+    val fastingAdherence by viewModel.fastingAdherence.collectAsStateWithLifecycle()
+    val fastingStreak by viewModel.fastingStreak.collectAsStateWithLifecycle()
     var showWeightDialog by remember { mutableStateOf(false) }
     var selectedDay by remember { mutableStateOf<LocalDate?>(null) }
     // The day square you last tapped stays ringed while its dialog is open and for a moment
@@ -423,6 +426,59 @@ fun AnalyticsScreen(
                                     LegendRow(LoggedLow, "Low (35–49)")
                                     LegendRow(LoggedWorst, "Poor (under 35)")
                                     LegendRow(Color.White.copy(alpha = 0.08f), "Not logged")
+                                }
+                            }
+                        }
+                    }
+
+                    // ---- Fasting: which days the eating window was kept, + a streak ----
+                    "fasting" -> item {
+                        ChartCard(
+                            "Fasting",
+                            if (fastingSchedule.enabled) "Days you stayed inside your eating window" else "Set an eating window in Settings",
+                            spotlight = spotlight,
+                            onToggleSpotlight = viewModel::toggleSpotlight
+                        ) {
+                            if (!fastingSchedule.enabled) {
+                                Text(
+                                    "Turn on intermittent fasting in Settings → Fasting to see which days you kept your fast.",
+                                    style = MaterialTheme.typography.bodySmall, color = CreamMuted
+                                )
+                            } else {
+                                val held = weekDates.count { fastingAdherence[it.format(iso)] == com.fitpal.app.domain.model.FastingDayResult.HELD }
+                                val broke = weekDates.count { fastingAdherence[it.format(iso)] == com.fitpal.app.domain.model.FastingDayResult.BROKE }
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Text(
+                                        text = if (fastingStreak > 0) "$fastingStreak" else "—",
+                                        style = MaterialTheme.typography.headlineMedium,
+                                        color = AccentGarden
+                                    )
+                                    Column {
+                                        Text("day streak", style = MaterialTheme.typography.labelMedium, color = Cream)
+                                        Text(
+                                            "$held kept · $broke broken this ${range.label.lowercase()}",
+                                            style = MaterialTheme.typography.labelSmall, color = CreamMuted
+                                        )
+                                    }
+                                }
+                                Spacer(Modifier.height(12.dp))
+                                LoggedHeatmap(
+                                    dates = weekDates,
+                                    colorFor = { d ->
+                                        when (fastingAdherence[d.format(iso)]) {
+                                            com.fitpal.app.domain.model.FastingDayResult.HELD -> AccentGarden
+                                            com.fitpal.app.domain.model.FastingDayResult.BROKE -> ScorePoor
+                                            else -> null
+                                        }
+                                    },
+                                    selected = flashedDay,
+                                    onDayClick = tapDay
+                                )
+                                Spacer(Modifier.height(10.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                                    LegendRow(AccentGarden, "Kept")
+                                    LegendRow(ScorePoor, "Broke fast")
+                                    LegendRow(Color.White.copy(alpha = 0.08f), "No log")
                                 }
                             }
                         }

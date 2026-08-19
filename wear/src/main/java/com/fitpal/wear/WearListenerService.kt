@@ -6,6 +6,7 @@ import androidx.wear.watchface.complications.datasource.ComplicationDataSourceUp
 import com.fitpal.shared.WearContract
 import com.fitpal.wear.complication.CaloriesComplicationService
 import com.fitpal.wear.complication.WaterComplicationService
+import com.fitpal.wear.tile.FastingTileService
 import com.fitpal.wear.tile.WaterTileService
 import com.google.android.gms.wearable.ChannelClient
 import com.google.android.gms.wearable.DataEvent
@@ -32,6 +33,7 @@ class WearListenerService : WearableListenerService() {
         if (!statsChanged) return
 
         runCatching { TileService.getUpdater(this).requestUpdate(WaterTileService::class.java) }
+        runCatching { TileService.getUpdater(this).requestUpdate(FastingTileService::class.java) }
         runCatching {
             ComplicationDataSourceUpdateRequester
                 .create(this, ComponentName(this, WaterComplicationService::class.java))

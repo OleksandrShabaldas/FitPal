@@ -55,6 +55,12 @@ data class DailyWaterSplit(
     val foodWater: Float
 )
 
+/** One row per logged meal — its day plus when it was logged — for the fasting-adherence heatmap. */
+data class MealTimeRow(
+    val date: String,
+    val timestamp: Long
+)
+
 /** Daily micronutrient totals — one query returns all thirteen. */
 data class DailyMicros(
     val vitaminA: Float,
@@ -119,6 +125,14 @@ interface MealLogDao {
 
     @Query("SELECT * FROM meal_log_items WHERE id = :itemId")
     suspend fun getItemById(itemId: Long): MealLogItemEntity?
+
+    /** Live item row — so a detail screen sees the AI overview the moment the background worker writes it. */
+    @Query("SELECT * FROM meal_log_items WHERE id = :itemId")
+    fun observeItemById(itemId: Long): Flow<MealLogItemEntity?>
+
+    /** Every non-water meal's day + log time in a range — for fasting adherence (excludes plain water quick-adds). */
+    @Query("SELECT date, timestamp FROM meal_logs WHERE date BETWEEN :from AND :to AND mealType != 'water'")
+    fun getMealTimesInRange(from: String, to: String): Flow<List<MealTimeRow>>
 
     /** Get the meal type for a specific log item (via its parent meal log). */
     @Query("""

@@ -48,6 +48,11 @@ class ReminderReceiver : BroadcastReceiver() {
                 // One-shot alarm — arm the next occurrence (re-schedules every enabled reminder).
                 entryPoint(context).reminderManager().reschedule()
             }
+            ReminderManager.ACTION_FIRE_FASTING -> {
+                postFastingNotification(context, intent.getStringExtra(ReminderManager.EXTRA_FASTING_EVENT))
+                // One-shot alarm — arm tomorrow's occurrence.
+                entryPoint(context).reminderManager().reschedule()
+            }
         }
     }
 
@@ -103,6 +108,28 @@ class ReminderReceiver : BroadcastReceiver() {
         runCatching { manager.notify(NOTIF_LOG, notification) }
     }
 
+    /** The two fasting-window notifications (eating opens / fast begins), driven by the schedule times. */
+    private fun postFastingNotification(context: Context, event: String?) {
+        val manager = context.getSystemService(NotificationManager::class.java) ?: return
+        manager.createNotificationChannel(
+            NotificationChannel(CHANNEL_REMINDERS, "Reminders", NotificationManager.IMPORTANCE_DEFAULT)
+        )
+        val fastBegin = event == ReminderManager.FASTING_FAST_BEGIN
+        val notifId = if (fastBegin) NOTIF_FAST_BEGIN else NOTIF_EAT_OPEN
+        val title = if (fastBegin) "Fasting time" else "You can eat now"
+        val text = if (fastBegin) "Your eating window has closed — time to start your fast."
+            else "Your eating window is open. Enjoy your first meal."
+        val pi = openIntent(context, Screen.Home.route, notifId)
+        val notification = NotificationCompat.Builder(context, CHANNEL_REMINDERS)
+            .setSmallIcon(android.R.drawable.ic_popup_reminder)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setAutoCancel(true)
+            .setContentIntent(pi)
+            .build()
+        runCatching { manager.notify(notifId, notification) }
+    }
+
     private fun postNotification(context: Context, kind: ReminderKind, route: String, channelId: String, channelName: String) {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
         manager.createNotificationChannel(
@@ -139,5 +166,7 @@ class ReminderReceiver : BroadcastReceiver() {
         private const val CHANNEL_OVERVIEWS = "fitpal_overviews"
         private const val NOTIF_LOG = 5202
         private const val NOTIF_KIND_BASE = 5220
+        private const val NOTIF_EAT_OPEN = 5240
+        private const val NOTIF_FAST_BEGIN = 5241
     }
 }

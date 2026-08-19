@@ -53,6 +53,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fitpal.app.ui.component.BackdropTheme
 import com.fitpal.app.ui.component.GlassTopBar
 import com.fitpal.app.ui.component.GradientBackdrop
+import com.fitpal.app.ui.component.rememberFastingGuard
 import com.fitpal.app.ui.theme.AccentActivity
 import com.fitpal.app.ui.theme.Cream
 import com.fitpal.app.ui.theme.CreamFaint
@@ -81,6 +82,7 @@ fun SearchScreen(
     var selected by remember { mutableStateOf<SearchResult?>(null) }
     val focusRequester = remember { FocusRequester() }
     val context = LocalContext.current
+    val fastingGuard = rememberFastingGuard()
 
     // Open straight into the keyboard — search is a type-first screen.
     LaunchedEffect(Unit) { runCatching { focusRequester.requestFocus() } }
@@ -147,9 +149,11 @@ fun SearchScreen(
             result = result,
             onLogAgain = {
                 when (result) {
-                    is SearchResult.Food -> viewModel.logFoodAgain(result.item) {
-                        android.widget.Toast.makeText(context, "Added to today", android.widget.Toast.LENGTH_SHORT).show()
-                        selected = null
+                    is SearchResult.Food -> fastingGuard.attempt {
+                        viewModel.logFoodAgain(result.item) {
+                            android.widget.Toast.makeText(context, "Added to today", android.widget.Toast.LENGTH_SHORT).show()
+                            selected = null
+                        }
                     }
                     is SearchResult.Exercise -> viewModel.logExerciseAgain(result.entry) {
                         android.widget.Toast.makeText(context, "Logged to today", android.widget.Toast.LENGTH_SHORT).show()

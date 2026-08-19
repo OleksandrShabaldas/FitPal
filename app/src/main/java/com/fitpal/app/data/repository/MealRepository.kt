@@ -103,6 +103,13 @@ class MealRepository @Inject constructor(
     suspend fun getLoggedFoodsInRange(from: String, to: String): List<LoggedFoodRow> =
         mealLogDao.getLoggedFoodsInRange(from, to)
 
+    /** Live item row — lets the detail screen show the AI overview the moment the background worker writes it. */
+    fun observeItem(itemId: Long): Flow<MealLogItemEntity?> = mealLogDao.observeItemById(itemId)
+
+    /** Each non-water meal's (day, log time) in a range — the fasting-adherence heatmap's raw data. */
+    fun getMealTimesInRange(from: String, to: String): Flow<List<com.fitpal.app.data.local.dao.MealTimeRow>> =
+        mealLogDao.getMealTimesInRange(from, to)
+
     /** Per-day water totals for a date range — analytics water chart. */
     fun getDailyWaterRange(from: String, to: String): Flow<List<DailyWaterRow>> =
         mealLogDao.getDailyWaterRange(from, to)

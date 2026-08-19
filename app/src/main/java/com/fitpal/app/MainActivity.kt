@@ -14,6 +14,7 @@ import androidx.core.content.IntentCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fitpal.app.data.repository.SettingsRepository
 import com.fitpal.app.ui.component.LocalAiModelSlots
+import com.fitpal.app.ui.component.LocalFastingSchedule
 import com.fitpal.app.ui.component.UpdatePromptDialog
 import com.fitpal.app.ui.navigation.FitPalNavHost
 import com.fitpal.app.ui.navigation.Screen
@@ -45,7 +46,12 @@ class MainActivity : ComponentActivity() {
                 val model1 by settingsRepository.geminiModel.collectAsStateWithLifecycle()
                 val model2 by settingsRepository.geminiModel2.collectAsStateWithLifecycle()
                 val model3 by settingsRepository.geminiModel3.collectAsStateWithLifecycle()
-                CompositionLocalProvider(LocalAiModelSlots provides listOf(model1, model2, model3)) {
+                // Fasting schedule, so the Home strip and the log-time warning share one source.
+                val fastingSchedule by settingsRepository.fastingSchedule.collectAsStateWithLifecycle()
+                CompositionLocalProvider(
+                    LocalAiModelSlots provides listOf(model1, model2, model3),
+                    LocalFastingSchedule provides fastingSchedule
+                ) {
                     FitPalNavHost(
                         pendingRoute = pendingRoute,
                         onPendingRouteHandled = { pendingRoute = null },

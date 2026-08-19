@@ -3,6 +3,8 @@
     <string name="app_name">FitPal</string>
     <string name="water_tile_label">FitPal water</string>
     <string name="water_tile_description">Quick-add water to FitPal</string>
+    <string name="fasting_tile_label">FitPal fasting</string>
+    <string name="fasting_tile_description">Your fasting timer at a glance</string>
     <string name="water_complication_label">Water</string>
     <string name="calories_complication_label">Calories left</string>
 </resources>

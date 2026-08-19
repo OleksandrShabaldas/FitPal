@@ -48,6 +48,7 @@ import com.fitpal.app.ui.component.GradientBackdrop
 import com.fitpal.app.ui.component.MealTotalRow
 import com.fitpal.app.ui.component.MealTypeSelector
 import com.fitpal.app.ui.component.logDateLabel
+import com.fitpal.app.ui.component.rememberFastingGuard
 import androidx.compose.ui.text.font.FontWeight
 import com.fitpal.app.ui.theme.Cream
 import com.fitpal.app.ui.theme.CreamFaint
@@ -66,6 +67,7 @@ fun ManualEntryScreen(
     val drinkPresets by viewModel.drinkPresets.collectAsStateWithLifecycle()
     val mealType by viewModel.mealType.collectAsStateWithLifecycle()
     val logDate by viewModel.logDate.collectAsStateWithLifecycle()
+    val fastingGuard = rememberFastingGuard()
     val context = androidx.compose.ui.platform.LocalContext.current
     var showDatePicker by remember { mutableStateOf(false) }
 
@@ -189,7 +191,7 @@ fun ManualEntryScreen(
                         Spacer(Modifier.width(8.dp))
                         Text("Logging to: ${logDateLabel(logDate)}")
                     }
-                    Button(onClick = { viewModel.logMeal() }, modifier = Modifier.fillMaxWidth(), enabled = !state.isSaving) {
+                    Button(onClick = { fastingGuard.attempt(isForToday = logDate == java.time.LocalDate.now()) { viewModel.logMeal() } }, modifier = Modifier.fillMaxWidth(), enabled = !state.isSaving) {
                         Icon(Icons.Default.Check, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
                         Text(if (state.isSaving) "Saving…" else "Log meal")

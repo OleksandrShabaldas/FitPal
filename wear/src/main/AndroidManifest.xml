@@ -90,6 +90,18 @@
                 android:resource="@drawable/tile_water_preview" />
         </service>
 
+        <!-- Fasting timer tile -->
+        <service
+            android:name=".tile.FastingTileService"
+            android:exported="true"
+            android:label="@string/fasting_tile_label"
+            android:description="@string/fasting_tile_description"
+            android:permission="com.google.android.wearable.permission.BIND_TILE_PROVIDER">
+            <intent-filter>
+                <action android:name="androidx.wear.tiles.action.BIND_TILE_PROVIDER" />
+            </intent-filter>
+        </service>
+
         <!-- Water quick-log complication -->
         <service
             android:name=".complication.WaterComplicationService"

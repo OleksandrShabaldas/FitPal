@@ -17,6 +17,7 @@ import com.fitpal.app.data.repository.WeightRepository
 import com.fitpal.app.domain.BmrCalculator
 import com.fitpal.app.domain.DailyTargets
 import com.fitpal.app.domain.FocusedDate
+import com.fitpal.app.domain.model.adherenceByDay
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -192,6 +193,48 @@ class AnalyticsViewModel @Inject constructor(
             }
         }
         flow
+    }
+
+    // ---- Fasting adherence (derived from when meals were logged; no extra storage) ----
+    val fastingSchedule: StateFlow<com.fitpal.app.domain.model.FastingSchedule> = settingsRepository.fastingSchedule
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), com.fitpal.app.domain.model.FastingSchedule.DISABLED)
+
+    /** Meal (day, log-time) rows over the viewed window — colours the fasting heatmap. */
+    private val fastingMealTimes: StateFlow<List<com.fitpal.app.data.local.dao.MealTimeRow>> =
+        rangeDriven { from, to -> mealRepository.getMealTimesInRange(from, to) }
+
+    /** Per-day HELD/BROKE over the viewed window (empty when fasting is off). */
+    val fastingAdherence: StateFlow<Map<String, com.fitpal.app.domain.model.FastingDayResult>> =
+        combine(fastingMealTimes, settingsRepository.fastingSchedule) { times, schedule ->
+            schedule.adherenceByDay(times.map { it.date to minuteOfDay(it.timestamp) })
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
+    /** Consecutive days up to today the fast was kept — over a 90-day lookback, independent of the view. */
+    val fastingStreak: StateFlow<Int> = run {
+        val recent = MutableStateFlow<List<com.fitpal.app.data.local.dao.MealTimeRow>>(emptyList())
+        viewModelScope.launch {
+            mealRepository.getMealTimesInRange(today.minusDays(90).format(dateFormat), today.format(dateFormat))
+                .collect { recent.value = it }
+        }
+        combine(recent, settingsRepository.fastingSchedule) { times, schedule ->
+            fastingStreakOf(schedule.adherenceByDay(times.map { it.date to minuteOfDay(it.timestamp) }))
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+    }
+
+    private fun minuteOfDay(epochMillis: Long): Int =
+        java.time.Instant.ofEpochMilli(epochMillis).atZone(java.time.ZoneId.systemDefault())
+            .let { it.hour * 60 + it.minute }
+
+    private fun fastingStreakOf(adherence: Map<String, com.fitpal.app.domain.model.FastingDayResult>): Int {
+        var streak = 0
+        var day = today
+        // Today may not have any logged food yet — start from yesterday so it doesn't zero the streak.
+        if (adherence[day.format(dateFormat)] == null) day = day.minusDays(1)
+        while (adherence[day.format(dateFormat)] == com.fitpal.app.domain.model.FastingDayResult.HELD) {
+            streak++
+            day = day.minusDays(1)
+        }
+        return streak
     }
 
     // ---- "Lifetime" view: every logged day ever, for the weight / macro / micro cards ----

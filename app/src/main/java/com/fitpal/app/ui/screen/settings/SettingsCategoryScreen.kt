@@ -72,6 +72,8 @@ import com.fitpal.app.ui.component.BackdropTheme
 import com.fitpal.app.ui.component.GlassTopBar
 import com.fitpal.app.ui.component.GradientBackdrop
 import com.fitpal.app.ui.component.MarkdownText
+import com.fitpal.app.ui.component.fastingClockLabel
+import com.fitpal.app.ui.component.fastingCountdownLabel
 import com.fitpal.app.ui.theme.glass
 import kotlin.math.roundToInt
 
@@ -82,6 +84,7 @@ val SETTINGS_CATEGORIES = listOf(
     SettingsCategoryInfo("profile", "Profile & goals", "Sex, age, height, fitness goal and calorie target"),
     SettingsCategoryInfo("activity", "Activity & health", "Step calories and Samsung Health sync"),
     SettingsCategoryInfo("presets", "Quick-add & meal times", "Tap amounts for food and drinks, and meal time windows"),
+    SettingsCategoryInfo("fasting", "Fasting", "Your eating window and the fasting log warning"),
     SettingsCategoryInfo("ai", "AI", "Online Gemini key, models and on-device model"),
     SettingsCategoryInfo("personalize", "Personalize", "Reorder and show or hide cards on each screen"),
     SettingsCategoryInfo("data", "Data & about", "Back up, restore, clear data and app info")
@@ -122,6 +125,9 @@ fun SettingsCategoryScreen(
                 "presets" -> {
                     PresetsSection(viewModel)
                     MealTimesSection(viewModel)
+                }
+                "fasting" -> {
+                    FastingSection(viewModel)
                 }
                 "ai" -> {
                     OnlineAiSection(viewModel)
@@ -918,6 +924,93 @@ private fun MealTimesSection(viewModel: SettingsViewModel) {
             Text("Dinner", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
             TimePickRow("From", windows.dinnerStart) { viewModel.setMealWindows(windows.copy(dinnerStart = it)) }
             TimePickRow("Until", windows.dinnerEnd) { viewModel.setMealWindows(windows.copy(dinnerEnd = it)) }
+        }
+    }
+}
+
+/**
+ * Intermittent fasting: a single daily eating window (everything outside it is a fast). Home shows a
+ * live countdown, and logging a meal during a fast asks for confirmation. Reuses [TimePickRow].
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun FastingSection(viewModel: SettingsViewModel) {
+    val schedule by viewModel.fastingSchedule.collectAsStateWithLifecycle()
+    Box(modifier = Modifier.fillMaxWidth().glass()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Intermittent fasting", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "Set the hours you eat. Everything outside is a fast — Home shows a live timer, and logging during a fast asks first.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                Switch(checked = schedule.enabled, onCheckedChange = { viewModel.setFastingEnabled(it) })
+            }
+
+            if (schedule.enabled) {
+                Spacer(Modifier.height(10.dp))
+                // A "right now" snapshot so setup shows exactly what today looks like.
+                val nowMin = java.time.LocalTime.now().let { it.hour * 60 + it.minute }
+                val state = schedule.stateAt(nowMin)
+                Text(
+                    text = if (state.isFasting)
+                        "Right now: fasting · ${fastingCountdownLabel(state.minutesLeftInPhase)} until your window opens at ${fastingClockLabel(state.nextChangeMin)}"
+                    else
+                        "Right now: eating window open · ${fastingCountdownLabel(state.minutesLeftInPhase)} left (closes ${fastingClockLabel(state.nextChangeMin)})",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+
+                Spacer(Modifier.height(8.dp))
+                Text("Eating window", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                TimePickRow("From", schedule.eatStartMin) { viewModel.setFastingWindow(it, schedule.eatEndMin) }
+                TimePickRow("Until", schedule.eatEndMin) { viewModel.setFastingWindow(schedule.eatStartMin, it) }
+
+                Spacer(Modifier.height(8.dp))
+                Text("Quick presets", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.height(6.dp))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    com.fitpal.app.domain.model.FastingPreset.entries.forEach { preset ->
+                        val selected = schedule.eatStartMin == preset.eatStartMin && schedule.eatEndMin == preset.eatEndMin
+                        FilterChip(
+                            selected = selected,
+                            onClick = { viewModel.setFastingWindow(preset.eatStartMin, preset.eatEndMin) },
+                            label = { Text(preset.label) }
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(6.dp))
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Warn me when I log during a fast", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "Ask before logging food while you should be fasting.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Switch(checked = schedule.warnOnLog, onCheckedChange = { viewModel.setFastingWarnOnLog(it) })
+                }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Notify me when it starts and ends", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "A reminder when your eating window opens, and when your fast begins.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Switch(checked = schedule.notify, onCheckedChange = { viewModel.setFastingNotify(it) })
+                }
+            }
         }
     }
 }

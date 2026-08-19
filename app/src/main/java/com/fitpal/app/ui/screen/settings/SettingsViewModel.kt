@@ -67,6 +67,14 @@ class SettingsViewModel @Inject constructor(
     val mealWindows: StateFlow<com.fitpal.app.domain.model.MealWindows> = settingsRepository.mealWindows
     fun setMealWindows(w: com.fitpal.app.domain.model.MealWindows) = settingsRepository.setMealWindows(w)
 
+    // ---- Intermittent fasting (eating window + log warning + notifications) ----
+    val fastingSchedule: StateFlow<com.fitpal.app.domain.model.FastingSchedule> = settingsRepository.fastingSchedule
+    // Any change to the window or the enable/notify flags re-arms the fasting alarms.
+    fun setFastingEnabled(enabled: Boolean) { settingsRepository.setFastingEnabled(enabled); reminderManager.reschedule() }
+    fun setFastingWindow(eatStartMin: Int, eatEndMin: Int) { settingsRepository.setFastingWindow(eatStartMin, eatEndMin); reminderManager.reschedule() }
+    fun setFastingWarnOnLog(warn: Boolean) = settingsRepository.setFastingWarnOnLog(warn)
+    fun setFastingNotify(notify: Boolean) { settingsRepository.setFastingNotify(notify); reminderManager.reschedule() }
+
     // ---- Per-macro target presets ----
     val macroSelection: StateFlow<com.fitpal.app.domain.MacroSelection> = settingsRepository.macroSelection
     fun setMacroTarget(macro: com.fitpal.app.domain.Macro, key: String) = settingsRepository.setMacroTarget(macro, key)

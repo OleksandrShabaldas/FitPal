@@ -68,6 +68,7 @@ import com.fitpal.app.ui.component.MealTypeSelector
 import com.fitpal.app.ui.component.MicronutrientBars
 import com.fitpal.app.ui.component.MicronutrientCard
 import com.fitpal.app.ui.component.logDateLabel
+import com.fitpal.app.ui.component.rememberFastingGuard
 import com.fitpal.app.ui.theme.CalorieColor
 import com.fitpal.app.ui.theme.Cream
 import com.fitpal.app.ui.theme.CreamMuted
@@ -84,6 +85,7 @@ fun GalleryFoodDetailScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val mealType by viewModel.mealType.collectAsStateWithLifecycle()
     val logDate by viewModel.logDate.collectAsStateWithLifecycle()
+    val fastingGuard = rememberFastingGuard()
     var showDatePicker by remember { mutableStateOf(false) }
     var showAddDialog by remember { mutableStateOf(false) }
     var replacingIndex by remember { mutableStateOf<Int?>(null) }
@@ -244,7 +246,7 @@ fun GalleryFoodDetailScreen(
                     ) {
                         Text("Logging to: ${logDateLabel(logDate)}")
                     }
-                    Button(onClick = { viewModel.logIt() }, modifier = Modifier.fillMaxWidth()) {
+                    Button(onClick = { fastingGuard.attempt(isForToday = logDate == java.time.LocalDate.now()) { viewModel.logIt() } }, modifier = Modifier.fillMaxWidth()) {
                         Icon(Icons.Default.Check, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
                         Text("Log this food")

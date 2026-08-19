@@ -83,6 +83,9 @@ class WearStatsPublisher @Inject constructor(
             waterMl = water.toInt(),
             waterGoalMl = waterGoal,
             waterPresets = settingsRepository.waterPresets.value,
+            fastingEnabled = settingsRepository.fastingSchedule.value.enabled,
+            fastEatStartMin = settingsRepository.fastingSchedule.value.eatStartMin,
+            fastEatEndMin = settingsRepository.fastingSchedule.value.eatEndMin,
             updatedAt = System.currentTimeMillis()
         )
     }

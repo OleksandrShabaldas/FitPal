@@ -291,6 +291,44 @@ class SettingsRepository @Inject constructor(
     fun mealTypeForNow(): String =
         _mealWindows.value.mealTypeForMinutes(java.time.LocalTime.now().let { it.hour * 60 + it.minute })
 
+    // --- Intermittent fasting (a daily eating window; everything outside it is a fast) ---
+    // Stateless: the current phase + countdown are derived from the clock, so nothing to persist
+    // beyond the window itself. See [com.fitpal.app.domain.model.FastingSchedule].
+
+    private fun loadFastingSchedule() = com.fitpal.app.domain.model.FastingSchedule(
+        enabled = prefs.getBoolean(KEY_FASTING_ENABLED, false),
+        eatStartMin = prefs.getInt(KEY_FAST_EAT_START, 12 * 60),
+        eatEndMin = prefs.getInt(KEY_FAST_EAT_END, 20 * 60),
+        warnOnLog = prefs.getBoolean(KEY_FASTING_WARN, true),
+        notify = prefs.getBoolean(KEY_FASTING_NOTIFY, false)
+    )
+
+    private val _fastingSchedule = MutableStateFlow(loadFastingSchedule())
+    /** The user's fasting schedule: the eating window + whether to warn when logging during a fast. */
+    val fastingSchedule: StateFlow<com.fitpal.app.domain.model.FastingSchedule> = _fastingSchedule
+
+    fun setFastingEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_FASTING_ENABLED, enabled).apply()
+        _fastingSchedule.value = _fastingSchedule.value.copy(enabled = enabled)
+    }
+
+    fun setFastingWindow(eatStartMin: Int, eatEndMin: Int) {
+        val s = eatStartMin.coerceIn(0, 24 * 60 - 1)
+        val e = eatEndMin.coerceIn(0, 24 * 60 - 1)
+        prefs.edit().putInt(KEY_FAST_EAT_START, s).putInt(KEY_FAST_EAT_END, e).apply()
+        _fastingSchedule.value = _fastingSchedule.value.copy(eatStartMin = s, eatEndMin = e)
+    }
+
+    fun setFastingWarnOnLog(warn: Boolean) {
+        prefs.edit().putBoolean(KEY_FASTING_WARN, warn).apply()
+        _fastingSchedule.value = _fastingSchedule.value.copy(warnOnLog = warn)
+    }
+
+    fun setFastingNotify(notify: Boolean) {
+        prefs.edit().putBoolean(KEY_FASTING_NOTIFY, notify).apply()
+        _fastingSchedule.value = _fastingSchedule.value.copy(notify = notify)
+    }
+
     // --- Per-macro target presets ("auto" = derive from goal + weight) ---
 
     private fun loadMacroSelection() = com.fitpal.app.domain.MacroSelection(
@@ -622,6 +660,11 @@ class SettingsRepository @Inject constructor(
         private const val KEY_LUNCH_END = "meal_lunch_end"
         private const val KEY_DINNER_START = "meal_dinner_start"
         private const val KEY_DINNER_END = "meal_dinner_end"
+        private const val KEY_FASTING_ENABLED = "fasting_enabled"
+        private const val KEY_FAST_EAT_START = "fasting_eat_start"
+        private const val KEY_FAST_EAT_END = "fasting_eat_end"
+        private const val KEY_FASTING_WARN = "fasting_warn_on_log"
+        private const val KEY_FASTING_NOTIFY = "fasting_notify"
         private const val KEY_MACRO_PROTEIN = "macro_protein"
         private const val KEY_MACRO_FAT = "macro_fat"
         private const val KEY_MACRO_CARBS = "macro_carbs"

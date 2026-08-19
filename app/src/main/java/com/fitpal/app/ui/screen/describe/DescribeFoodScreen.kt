@@ -48,6 +48,7 @@ import com.fitpal.app.ui.component.MealTotalRow
 import com.fitpal.app.ui.component.MealTypeSelector
 import com.fitpal.app.ui.component.toMealItemContent
 import com.fitpal.app.ui.component.logDateLabel
+import com.fitpal.app.ui.component.rememberFastingGuard
 import com.fitpal.app.ui.theme.Cream
 import com.fitpal.app.ui.theme.CreamMuted
 
@@ -64,6 +65,7 @@ fun DescribeFoodScreen(
     val drinkPresets by viewModel.drinkPresets.collectAsStateWithLifecycle()
     val mealType by viewModel.mealType.collectAsStateWithLifecycle()
     val logDate by viewModel.logDate.collectAsStateWithLifecycle()
+    val fastingGuard = rememberFastingGuard()
     val context = androidx.compose.ui.platform.LocalContext.current
     var addIngredientFor by remember { mutableStateOf<Int?>(null) }
     var showDatePicker by remember { mutableStateOf(false) }
@@ -235,7 +237,7 @@ fun DescribeFoodScreen(
             if (state.foods.isNotEmpty()) {
                 Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
                     MealTotalRow(totalCalories = state.totalCalories, itemCount = state.foods.size)
-                    Button(onClick = { viewModel.logMeal() }, modifier = Modifier.fillMaxWidth(), enabled = !state.isSaving) {
+                    Button(onClick = { fastingGuard.attempt(isForToday = logDate == java.time.LocalDate.now()) { viewModel.logMeal() } }, modifier = Modifier.fillMaxWidth(), enabled = !state.isSaving) {
                         Icon(Icons.Default.Check, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
                         Text(if (state.isSaving) "Saving…" else "Log meal")

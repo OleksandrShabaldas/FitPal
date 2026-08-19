@@ -41,6 +41,7 @@ import com.fitpal.app.ui.component.FoodCard
 import com.fitpal.app.ui.component.GlassTopBar
 import com.fitpal.app.ui.component.GradientBackdrop
 import com.fitpal.app.ui.component.logDateLabel
+import com.fitpal.app.ui.component.rememberFastingGuard
 import com.fitpal.app.ui.theme.Cream
 import com.fitpal.app.ui.theme.CreamFaint
 import com.fitpal.app.ui.theme.CreamMuted
@@ -59,6 +60,7 @@ fun GalleryScreen(
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val logged by viewModel.logged.collectAsStateWithLifecycle()
     val logDate by viewModel.logDate.collectAsStateWithLifecycle()
+    val fastingGuard = rememberFastingGuard()
     var showDatePicker by remember { mutableStateOf(false) }
 
     LaunchedEffect(logged) { if (logged) onLogged() }
@@ -134,7 +136,7 @@ fun GalleryScreen(
                             modifier = Modifier.weight(1f),
                             onClick = { onOpenDetail(food.id) }
                         )
-                        IconButton(onClick = { viewModel.quickLog(food.id) }) {
+                        IconButton(onClick = { fastingGuard.attempt(isForToday = logDate == java.time.LocalDate.now()) { viewModel.quickLog(food.id) } }) {
                             Icon(Icons.Default.Add, contentDescription = "Log ${food.name}", tint = GoldLight)
                         }
                         IconButton(onClick = { viewModel.deleteFood(food) }) {

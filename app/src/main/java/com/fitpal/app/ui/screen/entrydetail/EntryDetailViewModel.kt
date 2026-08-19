@@ -76,6 +76,29 @@ class EntryDetailViewModel @Inject constructor(
 
     init {
         loadEntry()
+        observeGeneratedInsights()
+    }
+
+    /**
+     * Fill in the AI overview the moment the background [com.fitpal.app.ml.InsightsWorker] writes it,
+     * so logging a food and opening it straight away shows the overview without leaving and coming
+     * back. Only fills an empty slot — never clobbers an edit or a manual (re)generation in progress.
+     */
+    private fun observeGeneratedInsights() {
+        viewModelScope.launch {
+            mealRepository.observeItem(entryId).collect { item ->
+                if (item == null || item.insightsJson.isNullOrBlank()) return@collect
+                val s = _uiState.value
+                if (s.insights != null || s.isLoadingAi || s.isRefiningWithAi) return@collect
+                val fresh = item.insightsGeneratedAt > 0 &&
+                    (System.currentTimeMillis() - item.insightsGeneratedAt) <= RETENTION_MS
+                if (fresh || item.galleryFoodId != null) {
+                    mealRepository.insightsForItem(item)?.let { ins ->
+                        _uiState.update { it.copy(insights = ins) }
+                    }
+                }
+            }
+        }
     }
 
     private fun loadEntry() {

@@ -71,6 +71,15 @@ class ReminderManager @Inject constructor(
                 scheduleOneShot(am, at, pi)
             }
         }
+
+        // Fasting window notifications — the two times come from the schedule itself (eating opens at
+        // the window start, the fast begins at the window end), not from a user-set reminder time.
+        val fasting = settings.fastingSchedule.value
+        listOf(FASTING_EAT_OPEN to fasting.eatStartMin, FASTING_FAST_BEGIN to fasting.eatEndMin).forEach { (event, minutes) ->
+            val pi = fastingPendingIntent(context, event)
+            am.cancel(pi)
+            if (fasting.enabled && fasting.notify) scheduleOneShot(am, nextDaily(minutes), pi)
+        }
     }
 
     /**
@@ -116,9 +125,16 @@ class ReminderManager @Inject constructor(
     companion object {
         const val ACTION_FIRE = "com.fitpal.app.REMINDER_FIRE"
         const val ACTION_FIRE_KIND = "com.fitpal.app.REMINDER_FIRE_KIND"
+        const val ACTION_FIRE_FASTING = "com.fitpal.app.REMINDER_FIRE_FASTING"
         const val EXTRA_KIND = "kind"
+        const val EXTRA_FASTING_EVENT = "fasting_event"
+        /** The eating window opened (fast ended). */
+        const val FASTING_EAT_OPEN = "eat_open"
+        /** The eating window closed (fast began). */
+        const val FASTING_FAST_BEGIN = "fast_begin"
         private const val REQUEST_CODE = 5201
         private const val REQUEST_CODE_KIND_BASE = 5210
+        private const val REQUEST_CODE_FASTING_BASE = 5230
 
         fun pendingIntent(context: Context): PendingIntent {
             val intent = Intent(context, ReminderReceiver::class.java).setAction(ACTION_FIRE)
@@ -134,6 +150,17 @@ class ReminderManager @Inject constructor(
                 .putExtra(EXTRA_KIND, kind.key)
             return PendingIntent.getBroadcast(
                 context, REQUEST_CODE_KIND_BASE + kind.ordinal, intent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+        }
+
+        fun fastingPendingIntent(context: Context, event: String): PendingIntent {
+            val intent = Intent(context, ReminderReceiver::class.java)
+                .setAction(ACTION_FIRE_FASTING)
+                .putExtra(EXTRA_FASTING_EVENT, event)
+            val code = REQUEST_CODE_FASTING_BASE + if (event == FASTING_FAST_BEGIN) 1 else 0
+            return PendingIntent.getBroadcast(
+                context, code, intent,
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
             )
         }

@@ -1,6 +1,9 @@
 package com.fitpal.app.ui.screen.custom
 
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,6 +25,7 @@ import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -36,6 +40,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,10 +57,23 @@ import com.fitpal.app.ui.component.GradientBackdrop
 import com.fitpal.app.ui.component.MealTypeSelector
 import com.fitpal.app.ui.component.PhotoCaptureOverlay
 import com.fitpal.app.ui.component.logDateLabel
+import com.fitpal.app.ui.component.rememberFastingGuard
 import com.fitpal.app.ui.theme.CreamFaint
 import com.fitpal.app.ui.theme.CreamMuted
 import com.fitpal.app.ui.theme.GoldLight
 import com.fitpal.app.ui.theme.glass
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+/** Copy a picked image Uri into a cache file so [CustomFoodViewModel.readLabel] can decode it off a path. */
+private fun copyLabelToCache(context: android.content.Context, uri: android.net.Uri): String? = runCatching {
+    val dest = java.io.File(context.cacheDir, "label_${System.currentTimeMillis()}.jpg")
+    (context.contentResolver.openInputStream(uri) ?: return null).use { input ->
+        dest.outputStream().use { output -> input.copyTo(output) }
+    }
+    dest.absolutePath
+}.getOrNull()
 
 @Composable
 fun CustomFoodScreen(
@@ -66,9 +84,19 @@ fun CustomFoodScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val mealType by viewModel.mealType.collectAsStateWithLifecycle()
     val logDate by viewModel.logDate.collectAsStateWithLifecycle()
+    val fastingGuard = rememberFastingGuard()
     var showDatePicker by remember { mutableStateOf(false) }
     var showLabelCamera by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val labelPickScope = rememberCoroutineScope()
+    // Pick a photo of the nutrition label from the gallery, then read it exactly like a fresh snap.
+    val pickLabel = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) labelPickScope.launch {
+            val path = withContext(Dispatchers.IO) { copyLabelToCache(context, uri) }
+            if (path != null) viewModel.readLabel(path)
+            else Toast.makeText(context, "Couldn't open that image", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     LaunchedEffect(state.saved) { if (state.saved) onLogged() }
     LaunchedEffect(state.labelError) {
@@ -108,15 +136,26 @@ fun CustomFoodScreen(
                     )
                 }
 
-                // Snap the product's nutrition label and let the AI fill the values below.
-                OutlinedButton(
-                    onClick = { showLabelCamera = true },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !state.isReadingLabel
-                ) {
-                    Icon(Icons.Default.PhotoCamera, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text(if (state.isReadingLabel) "Reading label…" else "Snap nutrition label")
+                // Snap the product's nutrition label — or pick a photo of it — and let the AI fill the values below.
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = { showLabelCamera = true },
+                        modifier = Modifier.weight(1f),
+                        enabled = !state.isReadingLabel
+                    ) {
+                        Icon(Icons.Default.PhotoCamera, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (state.isReadingLabel) "Reading…" else "Snap label")
+                    }
+                    OutlinedButton(
+                        onClick = { pickLabel.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                        modifier = Modifier.weight(1f),
+                        enabled = !state.isReadingLabel
+                    ) {
+                        Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Gallery")
+                    }
                 }
 
                 Column(
@@ -167,7 +206,7 @@ fun CustomFoodScreen(
                     Text("Logging to: ${logDateLabel(logDate)}")
                 }
                 Button(
-                    onClick = { viewModel.log() },
+                    onClick = { fastingGuard.attempt(isForToday = logDate == java.time.LocalDate.now()) { viewModel.log() } },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = state.canSave && !state.isSaving
                 ) {

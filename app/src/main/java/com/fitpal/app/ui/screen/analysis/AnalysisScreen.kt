@@ -71,6 +71,7 @@ import com.fitpal.app.ui.component.EditWithAiDialog
 import com.fitpal.app.ui.component.GlassTopBar
 import com.fitpal.app.ui.component.GradientBackdrop
 import com.fitpal.app.ui.component.logDateLabel
+import com.fitpal.app.ui.component.rememberFastingGuard
 import com.fitpal.app.ui.component.MacroBar
 import com.fitpal.app.ui.component.MealInsightsSection
 import com.fitpal.app.ui.component.MealItemCard
@@ -94,6 +95,7 @@ fun AnalysisScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val mealType by viewModel.mealType.collectAsStateWithLifecycle()
     val logDate by viewModel.logDate.collectAsStateWithLifecycle()
+    val fastingGuard = rememberFastingGuard()
     val context = androidx.compose.ui.platform.LocalContext.current
     // Which food card (index) is currently adding an ingredient, if any.
     var addIngredientFor by remember { mutableStateOf<Int?>(null) }
@@ -457,7 +459,7 @@ fun AnalysisScreen(
                         }
                     }
                     Button(
-                        onClick = { viewModel.logMeal() },
+                        onClick = { fastingGuard.attempt(isForToday = logDate == java.time.LocalDate.now()) { viewModel.logMeal() } },
                         modifier = Modifier.fillMaxWidth(),
                         enabled = !state.isSaving
                     ) {
