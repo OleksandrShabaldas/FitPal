@@ -101,6 +101,36 @@ class HomeViewModel @Inject constructor(
         .flatMapLatest { mealRepository.getTotalWaterForDate(it) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0f)
 
+    /**
+     * Dietary-rule status (dessert / fried / sugary-drink caps) for the selected date — enabled rules
+     * only. The Home strip shows the ones that are near or over; the rest stay quiet. Derived live
+     * from the tagged logged items, so it self-corrects when a portion is edited.
+     */
+    val dietaryStatuses: StateFlow<List<com.fitpal.app.domain.model.DietaryRuleStatus>> = selectedDateString
+        .flatMapLatest { date ->
+            combine(
+                settingsRepository.dietaryRules,
+                mealRepository.dietaryConsumedForDate(date, com.fitpal.app.domain.model.DietaryRuleKind.DESSERT),
+                mealRepository.dietaryConsumedForDate(date, com.fitpal.app.domain.model.DietaryRuleKind.FRIED),
+                mealRepository.dietaryConsumedForDate(date, com.fitpal.app.domain.model.DietaryRuleKind.SUGARY_DRINK)
+            ) { rules, dessert, fried, drink ->
+                val consumed = mapOf(
+                    com.fitpal.app.domain.model.DietaryRuleKind.DESSERT to dessert,
+                    com.fitpal.app.domain.model.DietaryRuleKind.FRIED to fried,
+                    com.fitpal.app.domain.model.DietaryRuleKind.SUGARY_DRINK to drink
+                )
+                rules.filter { it.enabled }.map { rule ->
+                    com.fitpal.app.domain.model.DietaryRuleStatus(
+                        kind = rule.kind,
+                        consumedKcal = (consumed[rule.kind] ?: 0f).toInt(),
+                        limitKcal = rule.dailyLimitKcal,
+                        warnOnLog = rule.warnOnLog
+                    )
+                }
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     /** Micros for the selected date. */
     val dailyMicros: StateFlow<DailyMicros> = selectedDateString
         .flatMapLatest { mealRepository.getDailyMicros(it) }

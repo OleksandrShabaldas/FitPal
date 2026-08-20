@@ -58,6 +58,7 @@ import com.fitpal.app.ui.component.rememberCameraControlState
 import com.fitpal.app.ui.component.DatePickerDialog
 import com.fitpal.app.ui.component.EditableFoodItemRow
 import com.fitpal.app.ui.component.GlassTopBar
+import com.fitpal.app.ui.component.DietaryWarningDialog
 import com.fitpal.app.ui.component.GradientBackdrop
 import com.fitpal.app.ui.component.MealTotalRow
 import com.fitpal.app.ui.component.MealTypeSelector
@@ -86,6 +87,14 @@ fun BarcodeScreen(
     var showDatePicker by remember { mutableStateOf(false) }
 
     LaunchedEffect(state.saved) { if (state.saved) onLogged() }
+
+    state.dietaryWarning?.let { warning ->
+        DietaryWarningDialog(
+            warning = warning,
+            onConfirm = viewModel::confirmDietaryWarning,
+            onDismiss = viewModel::dismissDietaryWarning
+        )
+    }
 
     if (showDatePicker) {
         DatePickerDialog(

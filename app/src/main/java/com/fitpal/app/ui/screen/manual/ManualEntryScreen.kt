@@ -46,6 +46,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fitpal.app.data.local.entity.UsdaFoodEntity
 import com.fitpal.app.ui.component.BackdropTheme
 import com.fitpal.app.ui.component.DatePickerDialog
+import com.fitpal.app.ui.component.DietaryWarningDialog
 import com.fitpal.app.ui.component.FoodPortionEditor
 import com.fitpal.app.ui.component.GlassTopBar
 import com.fitpal.app.ui.component.GradientBackdrop
@@ -96,6 +97,14 @@ fun ManualEntryScreen(
             confirmLabel = "Log here",
             onConfirm = { date -> showDatePicker = false; viewModel.setLogDate(date) },
             onDismiss = { showDatePicker = false }
+        )
+    }
+
+    state.dietaryWarning?.let { warning ->
+        DietaryWarningDialog(
+            warning = warning,
+            onConfirm = viewModel::confirmDietaryWarning,
+            onDismiss = viewModel::dismissDietaryWarning
         )
     }
 

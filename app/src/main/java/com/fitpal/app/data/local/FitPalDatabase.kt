@@ -50,7 +50,7 @@ import com.fitpal.app.data.local.entity.WeightEntryEntity
         UsdaFoodEntity::class,
         WeightEntryEntity::class
     ],
-    version = 25,
+    version = 26,
     exportSchema = true
 )
 abstract class FitPalDatabase : RoomDatabase() {
@@ -416,6 +416,14 @@ abstract class FitPalDatabase : RoomDatabase() {
                         generatedAt INTEGER NOT NULL
                     )
                 """)
+            }
+        }
+
+        /** v25 -> v26: tag a logged item with the dietary-rule categories it counts toward
+         *  (dessert / fried / sugary drink), for the per-rule daily calorie caps. */
+        val MIGRATION_25_26 = object : Migration(25, 26) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE meal_log_items ADD COLUMN ruleTags TEXT")
             }
         }
     }

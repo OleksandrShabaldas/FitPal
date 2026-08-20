@@ -329,6 +329,79 @@ class SettingsRepository @Inject constructor(
         _fastingSchedule.value = _fastingSchedule.value.copy(notify = notify)
     }
 
+    // --- Dietary rules (per-category daily kcal caps: dessert / fried / sugary drinks) ---
+    // Each rule is a small config (enabled + cap + warn + notify + a free-text "what counts" note),
+    // keyed by DietaryRuleKind.id — the same generic, keyed pattern as the extra reminders above.
+    // How much you've had *today* is derived from the tagged logged items, not stored here.
+
+    private fun loadDietaryRules(): List<com.fitpal.app.domain.model.DietaryRule> =
+        com.fitpal.app.domain.model.DietaryRuleKind.entries.map { kind ->
+            com.fitpal.app.domain.model.DietaryRule(
+                kind = kind,
+                enabled = prefs.getBoolean("rule_${kind.id}_on", false),
+                dailyLimitKcal = prefs.getInt("rule_${kind.id}_kcal", kind.defaultLimitKcal),
+                warnOnLog = prefs.getBoolean("rule_${kind.id}_warn", true),
+                notify = prefs.getBoolean("rule_${kind.id}_notify", true),
+                definition = prefs.getString("rule_${kind.id}_def", "") ?: ""
+            )
+        }
+
+    private val _dietaryRules = MutableStateFlow(loadDietaryRules())
+    /** The user's dietary rules, one per [com.fitpal.app.domain.model.DietaryRuleKind]. */
+    val dietaryRules: StateFlow<List<com.fitpal.app.domain.model.DietaryRule>> = _dietaryRules
+
+    fun dietaryRuleFor(kind: com.fitpal.app.domain.model.DietaryRuleKind): com.fitpal.app.domain.model.DietaryRule =
+        _dietaryRules.value.firstOrNull { it.kind == kind } ?: com.fitpal.app.domain.model.DietaryRule(kind)
+
+    /** True if any rule is switched on — a cheap gate so the feature costs nothing when unused. */
+    fun anyDietaryRuleEnabled(): Boolean = _dietaryRules.value.any { it.enabled }
+
+    fun setDietaryRuleEnabled(kind: com.fitpal.app.domain.model.DietaryRuleKind, enabled: Boolean) {
+        prefs.edit().putBoolean("rule_${kind.id}_on", enabled).apply()
+        _dietaryRules.value = loadDietaryRules()
+    }
+
+    fun setDietaryRuleLimit(kind: com.fitpal.app.domain.model.DietaryRuleKind, kcal: Int) {
+        prefs.edit().putInt("rule_${kind.id}_kcal", kcal.coerceIn(0, 10000)).apply()
+        _dietaryRules.value = loadDietaryRules()
+    }
+
+    fun setDietaryRuleWarn(kind: com.fitpal.app.domain.model.DietaryRuleKind, warn: Boolean) {
+        prefs.edit().putBoolean("rule_${kind.id}_warn", warn).apply()
+        _dietaryRules.value = loadDietaryRules()
+    }
+
+    fun setDietaryRuleNotify(kind: com.fitpal.app.domain.model.DietaryRuleKind, notify: Boolean) {
+        prefs.edit().putBoolean("rule_${kind.id}_notify", notify).apply()
+        _dietaryRules.value = loadDietaryRules()
+    }
+
+    fun setDietaryRuleDefinition(kind: com.fitpal.app.domain.model.DietaryRuleKind, text: String) {
+        prefs.edit().putString("rule_${kind.id}_def", text.take(300)).apply()
+        _dietaryRules.value = loadDietaryRules()
+    }
+
+    // Per-rule "already notified today" stamp (date), so the over-limit notification fires once a day.
+    fun isDietaryNotifiedToday(kind: com.fitpal.app.domain.model.DietaryRuleKind): Boolean =
+        dietaryNotifiedMap()[kind.id] == java.time.LocalDate.now().toString()
+
+    fun markDietaryNotified(kind: com.fitpal.app.domain.model.DietaryRuleKind) {
+        val map = dietaryNotifiedMap().apply { put(kind.id, java.time.LocalDate.now().toString()) }
+        val obj = JSONObject()
+        map.forEach { (k, v) -> obj.put(k, v) }
+        prefs.edit().putString(KEY_DIETARY_NOTIFIED, obj.toString()).apply()
+    }
+
+    private fun dietaryNotifiedMap(): MutableMap<String, String> {
+        val raw = prefs.getString(KEY_DIETARY_NOTIFIED, null) ?: return mutableMapOf()
+        return try {
+            val o = JSONObject(raw)
+            buildMap { o.keys().forEach { k -> put(k, o.optString(k)) } }.toMutableMap()
+        } catch (e: Exception) {
+            mutableMapOf()
+        }
+    }
+
     // --- Foods the user hid from the database search (fdcId strings; a local-only "don't show" flag,
     // since the shared food DB can't be edited). Included in backup/restore. ---
 
@@ -450,6 +523,47 @@ class SettingsRepository @Inject constructor(
     /** The active models in fallback order (blank slots dropped, duplicates removed). */
     fun activeModels(): List<String> =
         listOf(_geminiModel.value, _geminiModel2.value, _geminiModel3.value)
+            .map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+
+    /**
+     * A **separate** trio of quick, non-thinking models for the fast dietary-rule check (is this a
+     * dessert / fried / sugary drink?). Kept apart from the analysis models so this lightweight
+     * check — which can run on every log — never eats the free quota the real food analysis needs.
+     * Default to the flash-lite tier; editable in Settings because Google renames ids often.
+     */
+    private val _fastModel = MutableStateFlow(
+        prefs.getString(KEY_FAST_MODEL, DEFAULT_FAST_MODEL)?.ifBlank { DEFAULT_FAST_MODEL } ?: DEFAULT_FAST_MODEL
+    )
+    val fastModel: StateFlow<String> = _fastModel
+    private val _fastModel2 = MutableStateFlow(prefs.getString(KEY_FAST_MODEL2, DEFAULT_FAST_MODEL2) ?: DEFAULT_FAST_MODEL2)
+    val fastModel2: StateFlow<String> = _fastModel2
+    private val _fastModel3 = MutableStateFlow(prefs.getString(KEY_FAST_MODEL3, DEFAULT_FAST_MODEL3) ?: DEFAULT_FAST_MODEL3)
+    val fastModel3: StateFlow<String> = _fastModel3
+
+    fun setFastModel(model: String) {
+        val clean = model.trim().ifEmpty { DEFAULT_FAST_MODEL }
+        prefs.edit().putString(KEY_FAST_MODEL, clean).apply()
+        _fastModel.value = clean
+        clearGeminiQuotaExhausted()
+    }
+
+    fun setFastModel2(model: String) {
+        val clean = model.trim()
+        prefs.edit().putString(KEY_FAST_MODEL2, clean).apply()
+        _fastModel2.value = clean
+        clearGeminiQuotaExhausted()
+    }
+
+    fun setFastModel3(model: String) {
+        val clean = model.trim()
+        prefs.edit().putString(KEY_FAST_MODEL3, clean).apply()
+        _fastModel3.value = clean
+        clearGeminiQuotaExhausted()
+    }
+
+    /** The active fast models in fallback order (blank slots dropped, duplicates removed). */
+    fun activeFastModels(): List<String> =
+        listOf(_fastModel.value, _fastModel2.value, _fastModel3.value)
             .map { it.trim() }.filter { it.isNotEmpty() }.distinct()
 
     // --- Per-model daily free-quota back-off (a map of model id -> the date it ran out). ---
@@ -702,6 +816,16 @@ class SettingsRepository @Inject constructor(
         const val DEFAULT_GEMINI_MODEL = "gemini-3-flash-preview"
         const val DEFAULT_GEMINI_MODEL2 = "gemini-flash-latest"
         const val DEFAULT_GEMINI_MODEL3 = "gemini-2.5-flash"
+
+        // The dedicated fast trio for the dietary-rule check — quick, cheap, non-thinking models.
+        private const val KEY_FAST_MODEL = "fast_model"
+        private const val KEY_FAST_MODEL2 = "fast_model_2"
+        private const val KEY_FAST_MODEL3 = "fast_model_3"
+        const val DEFAULT_FAST_MODEL = "gemini-flash-lite-latest"
+        const val DEFAULT_FAST_MODEL2 = "gemini-2.5-flash-lite"
+        const val DEFAULT_FAST_MODEL3 = "gemini-2.0-flash"
+        // Per-rule "already notified today" stamps, so the over-limit notification fires once a day.
+        private const val KEY_DIETARY_NOTIFIED = "dietary_notified_map"
         private const val KEY_SEX = "profile_sex"
         private const val KEY_AGE = "profile_age"
         private const val KEY_HEIGHT = "profile_height_cm"

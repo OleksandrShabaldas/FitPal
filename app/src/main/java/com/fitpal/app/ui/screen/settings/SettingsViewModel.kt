@@ -129,6 +129,27 @@ class SettingsViewModel @Inject constructor(
         settingsRepository.setGeminiModel3(model)
     }
 
+    // ---- Fast models for the dietary-rule check (a separate, cheap trio) ----
+    val fastModel: StateFlow<String> = settingsRepository.fastModel
+    val fastModel2: StateFlow<String> = settingsRepository.fastModel2
+    val fastModel3: StateFlow<String> = settingsRepository.fastModel3
+    fun setFastModel(model: String) = settingsRepository.setFastModel(model)
+    fun setFastModel2(model: String) = settingsRepository.setFastModel2(model)
+    fun setFastModel3(model: String) = settingsRepository.setFastModel3(model)
+
+    // ---- Dietary rules (dessert / fried / sugary-drink daily calorie caps) ----
+    val dietaryRules: StateFlow<List<com.fitpal.app.domain.model.DietaryRule>> = settingsRepository.dietaryRules
+    fun setDietaryRuleEnabled(kind: com.fitpal.app.domain.model.DietaryRuleKind, enabled: Boolean) =
+        settingsRepository.setDietaryRuleEnabled(kind, enabled)
+    fun setDietaryRuleLimit(kind: com.fitpal.app.domain.model.DietaryRuleKind, kcal: Int) =
+        settingsRepository.setDietaryRuleLimit(kind, kcal)
+    fun setDietaryRuleWarn(kind: com.fitpal.app.domain.model.DietaryRuleKind, warn: Boolean) =
+        settingsRepository.setDietaryRuleWarn(kind, warn)
+    fun setDietaryRuleNotify(kind: com.fitpal.app.domain.model.DietaryRuleKind, notify: Boolean) =
+        settingsRepository.setDietaryRuleNotify(kind, notify)
+    fun setDietaryRuleDefinition(kind: com.fitpal.app.domain.model.DietaryRuleKind, text: String) =
+        settingsRepository.setDietaryRuleDefinition(kind, text)
+
     // ---- Personal context / limitations for AI overviews ----
     val personalContext: StateFlow<String> = settingsRepository.personalContext
     fun setPersonalContext(value: String) = settingsRepository.setPersonalContext(value)

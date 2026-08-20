@@ -56,7 +56,8 @@ object DatabaseModule {
                 FitPalDatabase.MIGRATION_21_22,
                 FitPalDatabase.MIGRATION_22_23,
                 FitPalDatabase.MIGRATION_23_24,
-                FitPalDatabase.MIGRATION_24_25
+                FitPalDatabase.MIGRATION_24_25,
+                FitPalDatabase.MIGRATION_25_26
             )
             .build()
         // TODO: When USDA database is ready, use .createFromAsset("usda_foods.db")

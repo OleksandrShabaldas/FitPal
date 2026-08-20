@@ -69,6 +69,7 @@ import com.fitpal.app.ui.component.BackdropTheme
 import com.fitpal.app.ui.component.DatePickerDialog
 import com.fitpal.app.ui.component.EditWithAiDialog
 import com.fitpal.app.ui.component.GlassTopBar
+import com.fitpal.app.ui.component.DietaryWarningDialog
 import com.fitpal.app.ui.component.GradientBackdrop
 import com.fitpal.app.ui.component.logDateLabel
 import com.fitpal.app.ui.component.rememberFastingGuard
@@ -115,6 +116,14 @@ fun AnalysisScreen(
             android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_SHORT).show()
             viewModel.clearCopyConfirmation()
         }
+    }
+
+    state.dietaryWarning?.let { warning ->
+        DietaryWarningDialog(
+            warning = warning,
+            onConfirm = viewModel::confirmDietaryWarning,
+            onDismiss = viewModel::dismissDietaryWarning
+        )
     }
 
     if (showDatePicker) {

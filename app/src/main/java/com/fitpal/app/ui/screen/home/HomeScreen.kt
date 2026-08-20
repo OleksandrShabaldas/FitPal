@@ -129,6 +129,7 @@ import com.fitpal.app.ui.theme.CreamFaint
 import com.fitpal.app.ui.theme.CreamMuted
 import com.fitpal.app.ui.theme.Gold
 import com.fitpal.app.ui.theme.GoldLight
+import com.fitpal.app.ui.theme.MacroOver
 import com.fitpal.app.ui.theme.InkBlack
 import com.fitpal.app.ui.theme.ProteinColor
 import com.fitpal.app.ui.theme.ScorePoor
@@ -179,6 +180,7 @@ fun HomeScreen(
     val compactEmptyMeals by viewModel.compactEmptyMeals.collectAsStateWithLifecycle()
     val fitnessGoal by viewModel.fitnessGoal.collectAsStateWithLifecycle()
     val weeklyBalanceKcal by viewModel.weeklyBalanceKcal.collectAsStateWithLifecycle()
+    val dietaryStatuses by viewModel.dietaryStatuses.collectAsStateWithLifecycle()
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         viewModel.clearPendingMealType()
@@ -329,7 +331,8 @@ fun HomeScreen(
                                 protein = nutrition.protein, proteinTarget = targets?.proteinG?.toFloat() ?: 0f,
                                 fat = nutrition.fat, fatTarget = targets?.fatG?.toFloat() ?: 0f,
                                 carbs = nutrition.carbs, carbTarget = targets?.carbsG?.toFloat() ?: 0f,
-                                fiber = nutrition.fiber, fiberTarget = targets?.fiberG?.toFloat() ?: 0f
+                                fiber = nutrition.fiber, fiberTarget = targets?.fiberG?.toFloat() ?: 0f,
+                                dietaryStatuses = dietaryStatuses
                             )
                         }
 
@@ -616,7 +619,8 @@ private fun HeroCard(
     protein: Float, proteinTarget: Float,
     fat: Float, fatTarget: Float,
     carbs: Float, carbTarget: Float,
-    fiber: Float, fiberTarget: Float
+    fiber: Float, fiberTarget: Float,
+    dietaryStatuses: List<com.fitpal.app.domain.model.DietaryRuleStatus> = emptyList()
 ) {
     val pager = rememberPagerState(pageCount = { 2 })
     Column(modifier = Modifier.fillMaxWidth().glass().padding(vertical = 14.dp, horizontal = 16.dp)) {
@@ -624,6 +628,11 @@ private fun HeroCard(
         val fastingSchedule = LocalFastingSchedule.current
         if (fastingSchedule.enabled && isToday) {
             FastingStrip(fastingSchedule)
+        }
+        // A quiet dietary-rule line above the ring — only for today, and only for a rule you're
+        // near or over. With headroom it stays hidden, so the hero never clutters.
+        if (isToday) {
+            dietaryStatuses.filter { it.isRelevant }.forEach { DietaryStrip(it) }
         }
         HorizontalPager(state = pager, modifier = Modifier.fillMaxWidth().height(280.dp)) { page ->
             Column(
@@ -742,6 +751,50 @@ private fun FastingStrip(schedule: FastingSchedule) {
 }
 
 private fun currentMinutes(): Int = java.time.LocalTime.now().let { it.hour * 60 + it.minute }
+
+// ======================== DIETARY-RULE STRIP ========================
+
+/**
+ * A quiet one-line dietary-rule status that sits above the calorie ring — one per rule you're near
+ * or over (rules with headroom don't render at all, so the hero stays clean). Same slim grammar as
+ * [FastingStrip]: a coloured dot + a line + a thin bar. Amber when approaching, red when reached.
+ */
+@Composable
+private fun DietaryStrip(status: com.fitpal.app.domain.model.DietaryRuleStatus) {
+    val over = status.isOver
+    val accent = if (over) MacroOver else Gold
+    val noun = com.fitpal.app.ui.component.dietaryNoun(status.kind).replaceFirstChar { it.uppercase() }
+    Column(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(7.dp).clip(CircleShape).background(accent))
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = if (over) "$noun · limit reached" else "$noun · almost at your limit",
+                style = MaterialTheme.typography.labelLarge,
+                color = Cream,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = "${status.consumedKcal} / ${status.limitKcal} kcal",
+                style = MaterialTheme.typography.labelSmall,
+                color = accent
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        Box(
+            Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(50))
+                .background(Color.White.copy(alpha = 0.10f))
+        ) {
+            Box(
+                Modifier.fillMaxWidth(status.fraction.coerceIn(0f, 1f)).height(4.dp)
+                    .clip(RoundedCornerShape(50)).background(accent)
+            )
+        }
+    }
+}
 
 // ======================== MEAL CATEGORY SECTION ========================
 

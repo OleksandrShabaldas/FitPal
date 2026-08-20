@@ -60,14 +60,20 @@ class GeminiClient @Inject constructor(
         onProgress: (String) -> Unit = {},
         // Reports WHICH model finally answered — the cascade below may have moved past the first
         // one — so the UI can name it on the badge instead of just saying "online".
-        onModel: (String) -> Unit = {}
+        onModel: (String) -> Unit = {},
+        // Which models to cascade through. Null = the main analysis models; the dietary-rule check
+        // passes its own dedicated fast trio so it never eats the analysis models' free quota.
+        models: List<String>? = null,
+        // Fast mode for the lightweight dietary-rule check: a single attempt and short socket
+        // timeouts, so a slow network can't stall a log (it falls back to the offline heuristic).
+        fast: Boolean = false
     ): String {
         val key = settingsRepository.geminiApiKey.value?.trim()
         if (key.isNullOrBlank()) throw GeminiUnavailableException("No Gemini API key set")
 
         // Try each configured model in order, skipping ones already out of quota today. On a 429
         // mark that model spent and move to the next; only when all are spent do we report quota.
-        val candidates = settingsRepository.activeModels().filter { !settingsRepository.isModelQuotaExhaustedToday(it) }
+        val candidates = (models ?: settingsRepository.activeModels()).filter { !settingsRepository.isModelQuotaExhaustedToday(it) }
         if (candidates.isEmpty()) throw GeminiQuotaException("All AI models are out of free quota for today")
 
         var allQuota = true
@@ -75,7 +81,7 @@ class GeminiClient @Inject constructor(
         for ((index, model) in candidates.withIndex()) {
             if (index > 0) onProgress("Switching to fallback model: $model…")
             try {
-                val text = requestModel(model, prompt, images, temperature, jsonMode, thinkingLevel, key, onProgress)
+                val text = requestModel(model, prompt, images, temperature, jsonMode, thinkingLevel, key, onProgress, fast)
                 onModel(model)
                 return text
             } catch (e: GeminiQuotaException) {
@@ -119,7 +125,8 @@ class GeminiClient @Inject constructor(
         jsonMode: Boolean,
         thinkingLevel: String?,
         key: String,
-        onProgress: (String) -> Unit
+        onProgress: (String) -> Unit,
+        fast: Boolean = false
     ): String = withContext(Dispatchers.IO) {
         if (images.isNotEmpty()) onProgress("Compressing and encoding the photo…")
         // Rebuildable so we can drop thinkingConfig and retry if a model rejects it (see below).
@@ -128,19 +135,21 @@ class GeminiClient @Inject constructor(
         val url = URL("$BASE_URL/models/$model:generateContent")
         // Retry transient failures (503 "high demand", other 5xx, network blips) with back-off
         // before giving up — those usually clear in a second or two. A 429 (quota) or a 4xx
-        // (bad key/model/request) is definitive, so we don't waste retries on it.
+        // (bad key/model/request) is definitive, so we don't waste retries on it. Fast mode does a
+        // single attempt with short timeouts so it can't stall a log.
+        val attempts = if (fast) 1 else MAX_ATTEMPTS
         var lastFailure = "Gemini request failed"
-        repeat(MAX_ATTEMPTS) { attempt ->
+        repeat(attempts) { attempt ->
             var connection: HttpURLConnection? = null
             onProgress(if (attempt == 0) "Sending the request to the online AI…"
-                       else "Retrying online (attempt ${attempt + 1}/$MAX_ATTEMPTS)…")
+                       else "Retrying online (attempt ${attempt + 1}/$attempts)…")
             try {
                 connection = (url.openConnection() as HttpURLConnection).apply {
                     requestMethod = "POST"
-                    connectTimeout = 30_000
-                    // Generous: a multimodal "thinking" model analysing a photo can take a while.
-                    // Too short and we'd give up after Gemini already did (and billed) the work.
-                    readTimeout = 180_000
+                    connectTimeout = if (fast) 8_000 else 30_000
+                    // Generous for analysis: a multimodal "thinking" model analysing a photo can take
+                    // a while. Fast mode keeps it short so a bad network falls back quickly instead.
+                    readTimeout = if (fast) 12_000 else 180_000
                     doOutput = true
                     setRequestProperty("Content-Type", "application/json")
                     setRequestProperty("x-goog-api-key", key)
@@ -159,8 +168,8 @@ class GeminiClient @Inject constructor(
                         // Transient server overload — note it and let the loop retry.
                         val err = runCatching { connection.errorStream?.bufferedReader()?.use { it.readText() } }.getOrNull()
                         lastFailure = if (code == 503) "Gemini is busy right now (HTTP 503)" else "Gemini server error (HTTP $code)"
-                        if (attempt < MAX_ATTEMPTS - 1) onProgress("Online AI is busy (HTTP $code) — waiting to retry…")
-                        Log.w(TAG, "Transient HTTP $code (attempt ${attempt + 1}/$MAX_ATTEMPTS): ${err?.take(300)}")
+                        if (attempt < attempts - 1) onProgress("Online AI is busy (HTTP $code) — waiting to retry…")
+                        Log.w(TAG, "Transient HTTP $code (attempt ${attempt + 1}/$attempts): ${err?.take(300)}")
                     }
                     else -> {
                         // Definitive client error (400 bad request, 403 bad key, 404 bad model) — don't retry.
@@ -184,13 +193,13 @@ class GeminiClient @Inject constructor(
             } catch (e: Exception) {
                 // Network drop / timeout — transient, worth a retry.
                 lastFailure = e.message ?: "Network error"
-                if (attempt < MAX_ATTEMPTS - 1) onProgress("Connection issue — waiting to retry…")
-                Log.w(TAG, "Network error (attempt ${attempt + 1}/$MAX_ATTEMPTS): ${e.message}")
+                if (attempt < attempts - 1) onProgress("Connection issue — waiting to retry…")
+                Log.w(TAG, "Network error (attempt ${attempt + 1}/$attempts): ${e.message}")
             } finally {
                 connection?.disconnect()
             }
             // Back off before the next attempt (skip after the last one).
-            if (attempt < MAX_ATTEMPTS - 1) delay(RETRY_BACKOFF_MS * (attempt + 1))
+            if (attempt < attempts - 1) delay(RETRY_BACKOFF_MS * (attempt + 1))
         }
         throw GeminiUnavailableException(lastFailure)
     }

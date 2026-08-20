@@ -145,6 +145,22 @@ interface MealLogDao {
     @Query("SELECT * FROM meal_log_items WHERE mealLogId IN (SELECT id FROM meal_logs WHERE date = :date)")
     fun getAllItemsForDate(date: String): Flow<List<MealLogItemEntity>>
 
+    /** One-shot version of [getAllItemsForDate] — used by the dietary-rule gate at log time. */
+    @Query("SELECT * FROM meal_log_items WHERE mealLogId IN (SELECT id FROM meal_logs WHERE date = :date)")
+    suspend fun getItemsForDateOnce(date: String): List<MealLogItemEntity>
+
+    /**
+     * Total calories on [date] from items carrying a given dietary-rule tag. [tagPattern] is the
+     * comma-wrapped `LIKE` pattern for one kind, e.g. `"%,dessert,%"` — see
+     * [com.fitpal.app.domain.model.DietaryRuleKind.likePattern]. Live, for the Home strip.
+     */
+    @Query("""
+        SELECT COALESCE(SUM(calories), 0) FROM meal_log_items
+        WHERE mealLogId IN (SELECT id FROM meal_logs WHERE date = :date)
+          AND ruleTags LIKE :tagPattern
+    """)
+    fun getTaggedCaloriesForDate(date: String, tagPattern: String): Flow<Float>
+
     /**
      * The most recently logged real food per distinct name (newest first) — drives the
      * "Your usuals" one-tap re-log row on the Add screen. Skips water-only and zero-calorie rows;

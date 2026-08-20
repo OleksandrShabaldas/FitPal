@@ -9,10 +9,12 @@ import com.fitpal.app.data.repository.NutritionRepository
 import com.fitpal.app.data.repository.SettingsRepository
 import com.fitpal.app.domain.MealLogContext
 import com.fitpal.app.domain.model.DetectedFood
+import com.fitpal.app.domain.model.DietaryWarning
 import com.fitpal.app.domain.model.Ingredient
 import com.fitpal.app.domain.model.ServingPreset
 import com.fitpal.app.ml.AiSource
 import com.fitpal.app.ml.AnalysisJobManager
+import com.fitpal.app.ml.DietaryGate
 import com.fitpal.app.ml.FoodAnalysisPipeline
 import com.fitpal.app.ml.JobKind
 import com.fitpal.app.ml.JobStatus
@@ -48,7 +50,9 @@ data class DescribeFoodUiState(
     /** True while the "Add with AI" describe-an-ingredient call is running. */
     val isAiAddingIngredient: Boolean = false,
     /** Labels of results already saved to the collection (for the filled-bookmark state). */
-    val savedLabels: Set<String> = emptySet()
+    val savedLabels: Set<String> = emptySet(),
+    /** Pending dietary-rule warning shown before analysis; null when none. */
+    val dietaryWarning: DietaryWarning? = null
 ) {
     val totalCalories: Float get() = foods.sumOf { it.totalCalories.toDouble() }.toFloat()
 }
@@ -61,6 +65,7 @@ class DescribeFoodViewModel @Inject constructor(
     private val nutritionRepository: NutritionRepository,
     private val jobManager: AnalysisJobManager,
     private val pipeline: FoodAnalysisPipeline,
+    private val dietaryGate: DietaryGate,
     settingsRepository: SettingsRepository,
     mealLogContext: MealLogContext
 ) : ViewModel() {
@@ -145,8 +150,32 @@ class DescribeFoodViewModel @Inject constructor(
             _uiState.update { it.copy(needsModel = true) }
             return
         }
+        // Dietary-rule pre-check runs *before* the expensive analysis — so if the user's near a limit
+        // and this reads like a matching food, backing out never spends the analysis call.
+        viewModelScope.launch {
+            val isToday = _logDate.value == java.time.LocalDate.now()
+            val warning = dietaryGate.checkText(text, isToday)
+            if (warning != null) _uiState.update { it.copy(dietaryWarning = warning) }
+            else startAnalysisJob()
+        }
+    }
+
+    private fun startAnalysisJob() {
+        val text = _uiState.value.description
+        if (text.isBlank()) return
         _uiState.update { it.copy(isAnalyzing = true, noMatchesFound = false, needsModel = false) }
         jobManager.startTextJob(text, _mealType.value, logDateIso())
+    }
+
+    /** User chose to analyse despite the dietary-rule warning. */
+    fun confirmDietaryWarning() {
+        _uiState.update { it.copy(dietaryWarning = null) }
+        startAnalysisJob()
+    }
+
+    /** User backed out at the dietary-rule warning — stay on the description, spend nothing. */
+    fun dismissDietaryWarning() {
+        _uiState.update { it.copy(dietaryWarning = null) }
     }
 
     private fun observeJob() {

@@ -85,6 +85,7 @@ val SETTINGS_CATEGORIES = listOf(
     SettingsCategoryInfo("activity", "Activity & health", "Step calories and Samsung Health sync"),
     SettingsCategoryInfo("presets", "Quick-add & meal times", "Tap amounts for food and drinks, and meal time windows"),
     SettingsCategoryInfo("fasting", "Fasting", "Your eating window and the fasting log warning"),
+    SettingsCategoryInfo("rules", "Food rules", "Daily limits for dessert, fried food and sugary drinks"),
     SettingsCategoryInfo("ai", "AI", "Online Gemini key, models and on-device model"),
     SettingsCategoryInfo("personalize", "Personalize", "Reorder and show or hide cards on each screen"),
     SettingsCategoryInfo("data", "Data & about", "Back up, restore, clear data and app info")
@@ -128,6 +129,9 @@ fun SettingsCategoryScreen(
                 }
                 "fasting" -> {
                     FastingSection(viewModel)
+                }
+                "rules" -> {
+                    DietaryRulesSection(viewModel)
                 }
                 "ai" -> {
                     OnlineAiSection(viewModel)
@@ -461,6 +465,9 @@ private fun OnlineAiSection(viewModel: SettingsViewModel) {
     val geminiModel by viewModel.geminiModel.collectAsStateWithLifecycle()
     val geminiModel2 by viewModel.geminiModel2.collectAsStateWithLifecycle()
     val geminiModel3 by viewModel.geminiModel3.collectAsStateWithLifecycle()
+    val fastModel by viewModel.fastModel.collectAsStateWithLifecycle()
+    val fastModel2 by viewModel.fastModel2.collectAsStateWithLifecycle()
+    val fastModel3 by viewModel.fastModel3.collectAsStateWithLifecycle()
     val onlineTesting by viewModel.onlineTesting.collectAsStateWithLifecycle()
     val onlineTestStatus by viewModel.onlineTestStatus.collectAsStateWithLifecycle()
     val modelTesting by viewModel.modelTesting.collectAsStateWithLifecycle()
@@ -547,6 +554,54 @@ private fun OnlineAiSection(viewModel: SettingsViewModel) {
                 Text(
                     "When the primary model runs out of today's free quota, FitPal tries model 2, then model 3, then your " +
                         "on-device AI. Leave a field blank to skip it. Use each Test button to check that model on its own.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+                Text("Quick-check models", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "A separate, cheaper trio used only for the fast \"is this a dessert / fried / sugary drink?\" " +
+                        "check under Food rules — kept apart so it never eats the free quota your food analysis needs.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp, bottom = 8.dp)
+                )
+                var fast1Text by remember { mutableStateOf(fastModel) }
+                ModelFieldWithTest(
+                    label = "Quick model",
+                    value = fast1Text,
+                    onValueChange = { fast1Text = it; viewModel.setFastModel(it) },
+                    onTest = { viewModel.testModel(fast1Text) },
+                    testing = modelTesting == fast1Text.trim(),
+                    status = modelTestStatus[fast1Text.trim()],
+                    enabled = !geminiApiKey.isNullOrBlank()
+                )
+                Spacer(Modifier.height(8.dp))
+                var fast2Text by remember { mutableStateOf(fastModel2) }
+                ModelFieldWithTest(
+                    label = "Quick fallback 2",
+                    value = fast2Text,
+                    onValueChange = { fast2Text = it; viewModel.setFastModel2(it) },
+                    onTest = { viewModel.testModel(fast2Text) },
+                    testing = modelTesting == fast2Text.trim(),
+                    status = modelTestStatus[fast2Text.trim()],
+                    enabled = !geminiApiKey.isNullOrBlank()
+                )
+                Spacer(Modifier.height(8.dp))
+                var fast3Text by remember { mutableStateOf(fastModel3) }
+                ModelFieldWithTest(
+                    label = "Quick fallback 3",
+                    value = fast3Text,
+                    onValueChange = { fast3Text = it; viewModel.setFastModel3(it) },
+                    onTest = { viewModel.testModel(fast3Text) },
+                    testing = modelTesting == fast3Text.trim(),
+                    status = modelTestStatus[fast3Text.trim()],
+                    enabled = !geminiApiKey.isNullOrBlank()
+                )
+                Text(
+                    "Defaults use the flash-lite tier — quick and cheap, no \"thinking\". Leave blank to skip.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 4.dp)
@@ -1061,6 +1116,100 @@ private fun FastingSection(viewModel: SettingsViewModel) {
             }
         }
     }
+}
+
+/**
+ * Food rules: per-category daily calorie caps (dessert / fried & fast food / sugary drinks). Each is
+ * a card — enable it, set the cap, and choose whether to be warned before logging and notified when
+ * you pass it. An optional "what counts" note tunes the AI's judgement to your own idea of the food.
+ */
+@Composable
+private fun DietaryRulesSection(viewModel: SettingsViewModel) {
+    val rules by viewModel.dietaryRules.collectAsStateWithLifecycle()
+    Text(
+        "Set a daily calorie limit for a kind of food. FitPal quietly flags it on Home as you get " +
+            "close, asks before logging once you're near or over, and sends one reminder when you pass " +
+            "it. What counts is judged by the quick AI, with an offline word-match as a fallback.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    rules.forEach { rule -> DietaryRuleCard(rule, viewModel) }
+}
+
+@Composable
+private fun DietaryRuleCard(rule: com.fitpal.app.domain.model.DietaryRule, viewModel: SettingsViewModel) {
+    val kind = rule.kind
+    Box(modifier = Modifier.fillMaxWidth().glass()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(kind.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(kind.blurb, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Spacer(Modifier.width(12.dp))
+                Switch(checked = rule.enabled, onCheckedChange = { viewModel.setDietaryRuleEnabled(kind, it) })
+            }
+
+            if (rule.enabled) {
+                Spacer(Modifier.height(12.dp))
+                var limitText by remember(kind) { mutableStateOf(rule.dailyLimitKcal.toString()) }
+                OutlinedTextField(
+                    value = limitText,
+                    onValueChange = { t ->
+                        limitText = t.filter { it.isDigit() }.take(5)
+                        viewModel.setDietaryRuleLimit(kind, limitText.toIntOrNull() ?: 0)
+                    },
+                    label = { Text("Daily limit (kcal)") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(Modifier.height(10.dp))
+                var defText by remember(kind) { mutableStateOf(rule.definition) }
+                OutlinedTextField(
+                    value = defText,
+                    onValueChange = { defText = it; viewModel.setDietaryRuleDefinition(kind, it) },
+                    label = { Text("What counts (optional)") },
+                    placeholder = { Text(dietaryDefinitionHint(kind)) },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Ask before logging", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "Once you're near or over, confirm before adding a matching food.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Switch(checked = rule.warnOnLog, onCheckedChange = { viewModel.setDietaryRuleWarn(kind, it) })
+                }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Notify when I pass it", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "A single reminder the moment you go over for the day.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Switch(checked = rule.notify, onCheckedChange = { viewModel.setDietaryRuleNotify(kind, it) })
+                }
+            }
+        }
+    }
+}
+
+/** Placeholder hint for a rule's "what counts" note. */
+private fun dietaryDefinitionHint(kind: com.fitpal.app.domain.model.DietaryRuleKind): String = when (kind) {
+    com.fitpal.app.domain.model.DietaryRuleKind.DESSERT -> "e.g. fruit never counts; protein bars do"
+    com.fitpal.app.domain.model.DietaryRuleKind.FRIED -> "e.g. air-fried is fine; count crisps"
+    com.fitpal.app.domain.model.DietaryRuleKind.SUGARY_DRINK -> "e.g. diet soda doesn't count; count sweet lattes"
 }
 
 @Composable

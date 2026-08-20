@@ -42,6 +42,7 @@ import com.fitpal.app.ui.component.AiSourceBadge
 import com.fitpal.app.ui.component.BackdropTheme
 import com.fitpal.app.ui.component.DatePickerDialog
 import com.fitpal.app.ui.component.GlassTopBar
+import com.fitpal.app.ui.component.DietaryWarningDialog
 import com.fitpal.app.ui.component.GradientBackdrop
 import com.fitpal.app.ui.component.MealItemCard
 import com.fitpal.app.ui.component.MealTotalRow
@@ -82,6 +83,14 @@ fun DescribeFoodScreen(
             confirmLabel = "Log here",
             onConfirm = { date -> showDatePicker = false; viewModel.setLogDate(date) },
             onDismiss = { showDatePicker = false }
+        )
+    }
+
+    state.dietaryWarning?.let { warning ->
+        DietaryWarningDialog(
+            warning = warning,
+            onConfirm = viewModel::confirmDietaryWarning,
+            onDismiss = viewModel::dismissDietaryWarning
         )
     }
 

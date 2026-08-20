@@ -67,5 +67,11 @@ data class MealLogItemEntity(
     /** Which AI produced this item — "ONLINE" / "OFFLINE" (see [com.fitpal.app.ml.AiSource]); null if unknown. */
     val aiSource: String? = null,
     /** The exact model that produced it ("gemini-3-flash-preview", "Gemma 3n E4B"); null if unknown. */
-    val aiModel: String? = null
+    val aiModel: String? = null,
+    /**
+     * Which dietary-rule categories this item counts toward (dessert / fried / sugary drink), stored
+     * comma-wrapped like ",dessert,drink," so a `LIKE '%,dessert,%'` can't false-match. Null = none.
+     * See [com.fitpal.app.domain.model.DietaryRuleKind.tagsToDb].
+     */
+    val ruleTags: String? = null
 )

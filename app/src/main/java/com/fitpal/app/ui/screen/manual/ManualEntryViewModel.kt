@@ -8,8 +8,10 @@ import com.fitpal.app.data.repository.MealRepository
 import com.fitpal.app.data.repository.NutritionRepository
 import com.fitpal.app.data.repository.SettingsRepository
 import com.fitpal.app.domain.MealLogContext
+import com.fitpal.app.domain.model.DietaryWarning
 import com.fitpal.app.domain.model.Ingredient
 import com.fitpal.app.domain.model.ServingPreset
+import com.fitpal.app.ml.DietaryGate
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -50,7 +52,9 @@ data class ManualEntryUiState(
     val isSaving: Boolean = false,
     val saved: Boolean = false,
     /** Names of draft items already saved to the collection (for the filled-bookmark state). */
-    val savedNames: Set<String> = emptySet()
+    val savedNames: Set<String> = emptySet(),
+    /** Pending dietary-rule warning ("near your dessert limit — log anyway?"); null when none. */
+    val dietaryWarning: DietaryWarning? = null
 ) {
     val totalCalories: Float get() = draft.sumOf { it.total.calories.toDouble() }.toFloat()
 }
@@ -61,6 +65,7 @@ class ManualEntryViewModel @Inject constructor(
     private val mealRepository: MealRepository,
     private val galleryRepository: GalleryRepository,
     private val settingsRepository: SettingsRepository,
+    private val dietaryGate: DietaryGate,
     mealLogContext: MealLogContext
 ) : ViewModel() {
 
@@ -218,13 +223,33 @@ class ManualEntryViewModel @Inject constructor(
         val items = _uiState.value.draft
         if (items.isEmpty()) return
         viewModelScope.launch {
-            _uiState.update { it.copy(isSaving = true) }
-            try {
-                mealRepository.logItems(items.map { it.total }, _mealType.value, date = logDateIso())
-                _uiState.update { it.copy(isSaving = false, saved = true) }
-            } catch (e: Exception) {
-                _uiState.update { it.copy(isSaving = false) }
-            }
+            val isToday = _logDate.value == java.time.LocalDate.now()
+            val warning = dietaryGate.checkKnownFoods(items.map { it.total.name to it.total.calories }, isToday)
+            if (warning != null) _uiState.update { it.copy(dietaryWarning = warning) }
+            else performLog()
+        }
+    }
+
+    /** User confirmed the dietary-rule warning ("log anyway") — go ahead and save. */
+    fun confirmDietaryWarning() {
+        _uiState.update { it.copy(dietaryWarning = null) }
+        viewModelScope.launch { performLog() }
+    }
+
+    /** User backed out of the dietary-rule warning — abort the log. */
+    fun dismissDietaryWarning() {
+        _uiState.update { it.copy(dietaryWarning = null) }
+    }
+
+    private suspend fun performLog() {
+        val items = _uiState.value.draft
+        if (items.isEmpty()) return
+        _uiState.update { it.copy(isSaving = true) }
+        try {
+            mealRepository.logItems(items.map { it.total }, _mealType.value, date = logDateIso())
+            _uiState.update { it.copy(isSaving = false, saved = true) }
+        } catch (e: Exception) {
+            _uiState.update { it.copy(isSaving = false) }
         }
     }
 }

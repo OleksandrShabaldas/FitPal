@@ -7,8 +7,10 @@ import com.fitpal.app.data.repository.GalleryRepository
 import com.fitpal.app.data.repository.MealRepository
 import com.fitpal.app.data.repository.SettingsRepository
 import com.fitpal.app.domain.MealLogContext
+import com.fitpal.app.domain.model.DietaryWarning
 import com.fitpal.app.domain.model.Ingredient
 import com.fitpal.app.domain.model.ServingPreset
+import com.fitpal.app.ml.DietaryGate
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -25,7 +27,9 @@ data class BarcodeUiState(
     val isSaving: Boolean = false,
     val saved: Boolean = false,
     /** True once the scanned product has been saved to the collection (filled-bookmark state). */
-    val savedToGallery: Boolean = false
+    val savedToGallery: Boolean = false,
+    /** Pending dietary-rule warning before logging; null when none. */
+    val dietaryWarning: DietaryWarning? = null
 )
 
 @HiltViewModel
@@ -33,6 +37,7 @@ class BarcodeViewModel @Inject constructor(
     private val barcodeRepository: BarcodeRepository,
     private val mealRepository: MealRepository,
     private val galleryRepository: GalleryRepository,
+    private val dietaryGate: DietaryGate,
     settingsRepository: SettingsRepository,
     mealLogContext: MealLogContext
 ) : ViewModel() {
@@ -117,13 +122,30 @@ class BarcodeViewModel @Inject constructor(
     fun logMeal() {
         val product = _uiState.value.product ?: return
         viewModelScope.launch {
-            _uiState.update { it.copy(isSaving = true) }
-            try {
-                mealRepository.logItems(listOf(product), _mealType.value, date = logDateIso())
-                _uiState.update { it.copy(isSaving = false, saved = true) }
-            } catch (e: Exception) {
-                _uiState.update { it.copy(isSaving = false) }
-            }
+            val isToday = _logDate.value == java.time.LocalDate.now()
+            val warning = dietaryGate.checkKnownFoods(listOf(product.name to product.calories), isToday)
+            if (warning != null) _uiState.update { it.copy(dietaryWarning = warning) }
+            else performLog()
+        }
+    }
+
+    fun confirmDietaryWarning() {
+        _uiState.update { it.copy(dietaryWarning = null) }
+        viewModelScope.launch { performLog() }
+    }
+
+    fun dismissDietaryWarning() {
+        _uiState.update { it.copy(dietaryWarning = null) }
+    }
+
+    private suspend fun performLog() {
+        val product = _uiState.value.product ?: return
+        _uiState.update { it.copy(isSaving = true) }
+        try {
+            mealRepository.logItems(listOf(product), _mealType.value, date = logDateIso())
+            _uiState.update { it.copy(isSaving = false, saved = true) }
+        } catch (e: Exception) {
+            _uiState.update { it.copy(isSaving = false) }
         }
     }
 }

@@ -12,11 +12,13 @@ import com.fitpal.app.data.repository.NutritionRepository
 import com.fitpal.app.domain.MealLogContext
 import com.fitpal.app.domain.HealthScorer
 import com.fitpal.app.domain.model.DetectedFood
+import com.fitpal.app.domain.model.DietaryWarning
 import com.fitpal.app.domain.model.Micronutrients
 import com.fitpal.app.domain.model.Ingredient
 import com.fitpal.app.domain.model.MealInsights
 import com.fitpal.app.ml.AiSource
 import com.fitpal.app.ml.AnalysisJobManager
+import com.fitpal.app.ml.DietaryGate
 import com.fitpal.app.ml.FoodAnalysisPipeline
 import com.fitpal.app.ml.JobKind
 import com.fitpal.app.ml.JobStatus
@@ -76,7 +78,9 @@ data class AnalysisUiState(
     /** Which food card is being re-evaluated by "Edit with AI" (null = none) — drives its spinner. */
     val aiEditingFoodIndex: Int? = null,
     /** One-shot confirmation after "copy to another date" — shown as a toast, then cleared. */
-    val copyConfirmation: String? = null
+    val copyConfirmation: String? = null,
+    /** Pending dietary-rule warning shown before analysis; null when none. */
+    val dietaryWarning: DietaryWarning? = null
 )
 
 @HiltViewModel
@@ -89,6 +93,7 @@ class AnalysisViewModel @Inject constructor(
     private val modelManager: ModelManager,
     private val jobManager: AnalysisJobManager,
     private val pipeline: FoodAnalysisPipeline,
+    private val dietaryGate: DietaryGate,
     mealLogContext: MealLogContext
 ) : ViewModel() {
 
@@ -210,8 +215,31 @@ class AnalysisViewModel @Inject constructor(
     /** Hand the photo to the background service; it survives leaving the screen/app. */
     fun startAnalysis() {
         val uri = sourceImageUri ?: return
+        // Dietary-rule pre-check first (only when a rule is near/over). If the photo looks like a
+        // dessert etc. and the user backs out, the expensive analysis is never sent.
+        viewModelScope.launch {
+            val isToday = _logDate.value == java.time.LocalDate.now()
+            val warning = dietaryGate.checkPhoto(uri, _uiState.value.note, isToday)
+            if (warning != null) _uiState.update { it.copy(dietaryWarning = warning) }
+            else startAnalysisJob()
+        }
+    }
+
+    private fun startAnalysisJob() {
+        val uri = sourceImageUri ?: return
         _uiState.update { it.copy(readyToAnalyze = false, isAnalyzing = true, error = null, progressMessage = "Starting…") }
         jobManager.startImageJob(uri, _uiState.value.note, _mealType.value, logDateIso())
+    }
+
+    /** User chose to analyse despite the dietary-rule warning. */
+    fun confirmDietaryWarning() {
+        _uiState.update { it.copy(dietaryWarning = null) }
+        startAnalysisJob()
+    }
+
+    /** User backed out at the dietary-rule warning — stay on the photo, spend nothing. */
+    fun dismissDietaryWarning() {
+        _uiState.update { it.copy(dietaryWarning = null, readyToAnalyze = true) }
     }
 
     /** Mirror the background job's progress / result into the screen state. */
