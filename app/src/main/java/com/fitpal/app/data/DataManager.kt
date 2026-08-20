@@ -7,6 +7,7 @@ import android.database.sqlite.SQLiteDatabase
 import android.net.Uri
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.fitpal.app.data.local.FitPalDatabase
+import com.fitpal.app.data.repository.SettingsRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -25,7 +26,8 @@ import javax.inject.Singleton
 @Singleton
 class DataManager @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val database: FitPalDatabase
+    private val database: FitPalDatabase,
+    private val settings: SettingsRepository
 ) {
     private val userTables = listOf(
         "meal_logs", "meal_log_items", "weight_entries", "step_entries",
@@ -46,6 +48,8 @@ class DataManager @Inject constructor(
             for (table in userTables) root.put(table, dumpTable(db, table))
             // Custom barcode foods live in usda_foods (which we otherwise skip) — back up just those.
             root.put("custom_foods", dumpQuery(db, "SELECT * FROM usda_foods WHERE foodCategory = 'Custom'"))
+            // Foods hidden from search are a preferences flag, not a table — back them up alongside.
+            root.put("hidden_foods", JSONArray(settings.hiddenFoodIds.value.toList()))
             context.contentResolver.openOutputStream(uri)?.use { out ->
                 out.write(root.toString().toByteArray(Charsets.UTF_8))
             } ?: return@withContext false
@@ -83,6 +87,11 @@ class DataManager @Inject constructor(
                 db.setTransactionSuccessful()
             } finally {
                 db.endTransaction()
+            }
+            // Hidden-food flags live in preferences, not the DB — restore them after the DB import.
+            root.optJSONArray("hidden_foods")?.let { arr ->
+                val ids = (0 until arr.length()).mapNotNull { arr.optString(it).takeIf { s -> s.isNotBlank() } }.toSet()
+                settings.setHiddenFoodIds(ids)
             }
             true
         } catch (e: Exception) {

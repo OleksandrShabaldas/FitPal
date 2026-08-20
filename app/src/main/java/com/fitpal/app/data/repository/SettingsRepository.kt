@@ -329,6 +329,25 @@ class SettingsRepository @Inject constructor(
         _fastingSchedule.value = _fastingSchedule.value.copy(notify = notify)
     }
 
+    // --- Foods the user hid from the database search (fdcId strings; a local-only "don't show" flag,
+    // since the shared food DB can't be edited). Included in backup/restore. ---
+
+    private val _hiddenFoodIds = MutableStateFlow(
+        prefs.getStringSet(KEY_HIDDEN_FOODS, emptySet())?.toSet() ?: emptySet()
+    )
+    /** fdcIds the user removed from search — filtered out of every food-database search. */
+    val hiddenFoodIds: StateFlow<Set<String>> = _hiddenFoodIds
+
+    fun hideFood(fdcId: Int) = setHiddenFoodIds(_hiddenFoodIds.value + fdcId.toString())
+
+    fun setHiddenFoodIds(ids: Set<String>) {
+        // SharedPreferences returns a shared instance for a StringSet, so always store a fresh copy.
+        prefs.edit().putStringSet(KEY_HIDDEN_FOODS, HashSet(ids)).apply()
+        _hiddenFoodIds.value = ids.toSet()
+    }
+
+    fun restoreAllHiddenFoods() = setHiddenFoodIds(emptySet())
+
     // --- Per-macro target presets ("auto" = derive from goal + weight) ---
 
     private fun loadMacroSelection() = com.fitpal.app.domain.MacroSelection(
@@ -665,6 +684,7 @@ class SettingsRepository @Inject constructor(
         private const val KEY_FAST_EAT_END = "fasting_eat_end"
         private const val KEY_FASTING_WARN = "fasting_warn_on_log"
         private const val KEY_FASTING_NOTIFY = "fasting_notify"
+        private const val KEY_HIDDEN_FOODS = "hidden_food_ids"
         private const val KEY_MACRO_PROTEIN = "macro_protein"
         private const val KEY_MACRO_FAT = "macro_fat"
         private const val KEY_MACRO_CARBS = "macro_carbs"

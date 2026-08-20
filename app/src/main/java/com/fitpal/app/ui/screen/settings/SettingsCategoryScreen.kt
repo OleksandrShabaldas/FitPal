@@ -900,6 +900,47 @@ private fun minutesToLabel(minutes: Int): String {
     return "$hr12:${"%02d".format(m)} ${if (h < 12) "AM" else "PM"}"
 }
 
+/** The fast:eat ratio label, e.g. "16:8" or "13:11" (whole hours; one decimal only when needed). */
+private fun fastEatRatio(schedule: com.fitpal.app.domain.model.FastingSchedule): String {
+    fun h(min: Int): String {
+        val hrs = min / 60f
+        return if (hrs == hrs.toLong().toFloat()) hrs.toInt().toString() else "%.1f".format(hrs)
+    }
+    return "${h(schedule.fastingLengthMin())}:${h(schedule.eatingLengthMin())}"
+}
+
+/** Type the eating-window length in hours; the caller moves the "Until" time to match the "From" time. */
+@Composable
+private fun EatingHoursRow(schedule: com.fitpal.app.domain.model.FastingSchedule, onSetHours: (Float) -> Unit) {
+    val eatingHours = schedule.eatingLengthMin() / 60f
+    fun fmt(h: Float) = if (h == h.toLong().toFloat()) h.toInt().toString() else "%.1f".format(h)
+    var text by remember { mutableStateOf(fmt(eatingHours)) }
+    // Re-sync from the schedule only when it changed to something the field isn't already showing
+    // (the user moved From/Until, or tapped a preset) — so typing a decimal here isn't clobbered.
+    LaunchedEffect(schedule.eatStartMin, schedule.eatEndMin) {
+        if (text.toFloatOrNull() != eatingHours) text = fmt(eatingHours)
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text("Or set eating hours", style = MaterialTheme.typography.bodyLarge)
+        OutlinedTextField(
+            value = text,
+            onValueChange = { new ->
+                val cleaned = new.filter { it.isDigit() || it == '.' }
+                text = cleaned
+                cleaned.toFloatOrNull()?.let { h -> if (h in 0.5f..23.5f) onSetHours(h) }
+            },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            suffix = { Text("h") },
+            modifier = Modifier.width(120.dp)
+        )
+    }
+}
+
 /** #3 — editable breakfast/lunch/dinner time windows; outside them a logged food is a snack. */
 @Composable
 private fun MealTimesSection(viewModel: SettingsViewModel) {
@@ -966,9 +1007,16 @@ private fun FastingSection(viewModel: SettingsViewModel) {
                 )
 
                 Spacer(Modifier.height(8.dp))
-                Text("Eating window", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Eating window", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                    Text("${fastEatRatio(schedule)} · fast : eat", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 TimePickRow("From", schedule.eatStartMin) { viewModel.setFastingWindow(it, schedule.eatEndMin) }
                 TimePickRow("Until", schedule.eatEndMin) { viewModel.setFastingWindow(schedule.eatStartMin, it) }
+                // Type the eating-window length in hours; the "Until" time follows from the "From" time.
+                EatingHoursRow(schedule) { hours ->
+                    viewModel.setFastingWindow(schedule.eatStartMin, (schedule.eatStartMin + (hours * 60f).roundToInt()).mod(24 * 60))
+                }
 
                 Spacer(Modifier.height(8.dp))
                 Text("Quick presets", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
@@ -1197,6 +1245,7 @@ private fun UpdateProgressRow(label: String, progress: Float?) {
 @Composable
 private fun DataSection(viewModel: SettingsViewModel) {
     val dataMessage by viewModel.dataMessage.collectAsStateWithLifecycle()
+    val hiddenFoods by viewModel.hiddenFoodIds.collectAsStateWithLifecycle()
     var showClearConfirm by remember { mutableStateOf(false) }
 
     val exportLauncher = rememberLauncherForActivityResult(
@@ -1222,6 +1271,12 @@ private fun DataSection(viewModel: SettingsViewModel) {
             Spacer(Modifier.height(8.dp))
             OutlinedButton(onClick = { showClearConfirm = true }, modifier = Modifier.fillMaxWidth()) {
                 Text("Clear all data", color = MaterialTheme.colorScheme.error)
+            }
+            if (hiddenFoods.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(onClick = { viewModel.restoreHiddenFoods() }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Restore ${hiddenFoods.size} hidden food" + if (hiddenFoods.size == 1) "" else "s")
+                }
             }
             dataMessage?.let {
                 Spacer(Modifier.height(8.dp))

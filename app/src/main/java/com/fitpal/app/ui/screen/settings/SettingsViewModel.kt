@@ -75,6 +75,10 @@ class SettingsViewModel @Inject constructor(
     fun setFastingWarnOnLog(warn: Boolean) = settingsRepository.setFastingWarnOnLog(warn)
     fun setFastingNotify(notify: Boolean) { settingsRepository.setFastingNotify(notify); reminderManager.reschedule() }
 
+    // ---- Foods hidden from database search ----
+    val hiddenFoodIds: StateFlow<Set<String>> = settingsRepository.hiddenFoodIds
+    fun restoreHiddenFoods() = settingsRepository.restoreAllHiddenFoods()
+
     // ---- Per-macro target presets ----
     val macroSelection: StateFlow<com.fitpal.app.domain.MacroSelection> = settingsRepository.macroSelection
     fun setMacroTarget(macro: com.fitpal.app.domain.Macro, key: String) = settingsRepository.setMacroTarget(macro, key)

@@ -209,6 +209,12 @@ class AnalyticsViewModel @Inject constructor(
             schedule.adherenceByDay(times.map { it.date to minuteOfDay(it.timestamp) })
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
+    /** Per-day sorted minute-of-day of each non-water meal — lets the day dialog explain a broken fast. */
+    val fastingMealMinutesByDate: StateFlow<Map<String, List<Int>>> =
+        fastingMealTimes.map { rows ->
+            rows.groupBy({ it.date }, { minuteOfDay(it.timestamp) }).mapValues { it.value.sorted() }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
     /** Consecutive days up to today the fast was kept — over a 90-day lookback, independent of the view. */
     val fastingStreak: StateFlow<Int> = run {
         val recent = MutableStateFlow<List<com.fitpal.app.data.local.dao.MealTimeRow>>(emptyList())

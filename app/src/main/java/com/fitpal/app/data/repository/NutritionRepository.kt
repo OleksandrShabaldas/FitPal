@@ -16,8 +16,15 @@ import javax.inject.Singleton
 @Singleton
 class NutritionRepository @Inject constructor(
     private val nutritionDao: NutritionDao,
-    private val barcodeRepository: BarcodeRepository
+    private val barcodeRepository: BarcodeRepository,
+    private val settingsRepository: SettingsRepository
 ) {
+    /** Drop foods the user hid from search (a local-only flag; the shared food DB can't be edited). */
+    private fun List<UsdaFoodEntity>.notHidden(): List<UsdaFoodEntity> {
+        val hidden = settingsRepository.hiddenFoodIds.value
+        return if (hidden.isEmpty()) this else filterNot { it.fdcId.toString() in hidden }
+    }
+
     // Words to ignore when matching a free-text description against the food database.
     private val stopWords = setOf(
         "and", "the", "with", "some", "for", "plus", "had", "ate", "was", "were",
@@ -76,7 +83,7 @@ class NutritionRepository @Inject constructor(
      */
     suspend fun searchBasicFoods(query: String, limit: Int = 30): List<UsdaFoodEntity> {
         ensureBasicSeeded()
-        return nutritionDao.searchBasicFoods(query.trim(), limit)
+        return nutritionDao.searchBasicFoods(query.trim(), limit).notHidden()
     }
 
     /**
@@ -94,13 +101,13 @@ class NutritionRepository @Inject constructor(
         val q = query.trim()
         if (q.isEmpty()) return emptyList()
         val tokens = tokenize(q)
-        if (tokens.isEmpty()) return nutritionDao.searchFoods(q, limit)
+        if (tokens.isEmpty()) return nutritionDao.searchFoods(q, limit).notHidden()
 
         var pool = ftsCandidates(tokens, POOL_SIZE)        // null = FTS index missing
         if (pool == null) pool = likeCandidates(tokens, POOL_SIZE)
         if (pool.isEmpty()) pool = fuzzyFallbackCandidates(tokens, POOL_SIZE)
 
-        return rankByFuzzy(pool, tokens).take(limit)
+        return rankByFuzzy(pool, tokens).notHidden().take(limit)
     }
 
     private fun tokenize(s: String): List<String> =
@@ -275,7 +282,7 @@ class NutritionRepository @Inject constructor(
             val nameKey = food.description.lowercase()
             if (seenIds.add(food.fdcId) && seenNames.add(nameKey)) merged.add(food)
         }
-        return merged.take(limit)
+        return merged.notHidden().take(limit)
     }
 
     suspend fun getFoodById(fdcId: Int): UsdaFoodEntity? =

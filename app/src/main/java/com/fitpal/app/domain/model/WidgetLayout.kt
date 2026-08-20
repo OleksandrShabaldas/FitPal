@@ -39,7 +39,6 @@ object ScreenWidgets {
             WidgetDef("tiles", "Summary tiles"),
             WidgetDef("balance", "Balance score ring"),
             WidgetDef("heatmap", "Logged days"),
-            WidgetDef("fasting", "Fasting"),
             WidgetDef("score", "Balance score chart"),
             WidgetDef("calories", "Calories"),
             WidgetDef("macros", "Macro balance"),
@@ -47,6 +46,7 @@ object ScreenWidgets {
             WidgetDef("activity", "Activity"),
             WidgetDef("water", "Water"),
             WidgetDef("weight", "Weight"),
+            WidgetDef("fasting", "Fasting"),
             WidgetDef("maintenance", "Maintenance estimate"),
             WidgetDef("averages", "Averages"),
             WidgetDef("ai", "AI reviews")

@@ -60,7 +60,7 @@ class ManualEntryViewModel @Inject constructor(
     private val nutritionRepository: NutritionRepository,
     private val mealRepository: MealRepository,
     private val galleryRepository: GalleryRepository,
-    settingsRepository: SettingsRepository,
+    private val settingsRepository: SettingsRepository,
     mealLogContext: MealLogContext
 ) : ViewModel() {
 
@@ -105,6 +105,12 @@ class ManualEntryViewModel @Inject constructor(
             val results = nutritionRepository.searchFoodsOnline(query, limit = 30)
             _uiState.update { it.copy(searchResults = results) }
         }
+    }
+
+    /** Hide a food from every future database search (a local flag), and drop it from the current results. */
+    fun hideFood(food: UsdaFoodEntity) {
+        settingsRepository.hideFood(food.fdcId)
+        _uiState.update { s -> s.copy(searchResults = s.searchResults.filterNot { it.fdcId == food.fdcId }) }
     }
 
     /**

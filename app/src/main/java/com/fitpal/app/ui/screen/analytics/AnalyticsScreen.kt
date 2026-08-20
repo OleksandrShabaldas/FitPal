@@ -65,6 +65,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -73,6 +74,8 @@ import com.fitpal.app.data.local.dao.DailyNutritionRow
 import com.fitpal.app.domain.DayScore
 import com.fitpal.app.ui.component.BackdropTheme
 import com.fitpal.app.ui.component.BarTrendChart
+import com.fitpal.app.ui.component.fastingClockLabel
+import com.fitpal.app.ui.component.fastingCountdownLabel
 import com.fitpal.app.ui.component.GradientBackdrop
 import com.fitpal.app.ui.component.swipeNavigation
 import com.fitpal.app.ui.component.MacroBar
@@ -145,13 +148,16 @@ fun AnalyticsScreen(
     val fastingSchedule by viewModel.fastingSchedule.collectAsStateWithLifecycle()
     val fastingAdherence by viewModel.fastingAdherence.collectAsStateWithLifecycle()
     val fastingStreak by viewModel.fastingStreak.collectAsStateWithLifecycle()
+    val fastingMealMinutes by viewModel.fastingMealMinutesByDate.collectAsStateWithLifecycle()
     var showWeightDialog by remember { mutableStateOf(false) }
+    // A fasting square opens its own explainer (not the score popup); this holds which day.
+    var selectedFastingDay by remember { mutableStateOf<LocalDate?>(null) }
     var selectedDay by remember { mutableStateOf<LocalDate?>(null) }
     // The day square you last tapped stays ringed while its dialog is open and for a moment
     // after it closes, so it's obvious which day you just looked at.
     var flashedDay by remember { mutableStateOf<LocalDate?>(null) }
-    LaunchedEffect(selectedDay, flashedDay) {
-        if (selectedDay == null && flashedDay != null) {
+    LaunchedEffect(selectedDay, selectedFastingDay, flashedDay) {
+        if (selectedDay == null && selectedFastingDay == null && flashedDay != null) {
             delay(1400)
             flashedDay = null
         }
@@ -462,6 +468,8 @@ fun AnalyticsScreen(
                                     }
                                 }
                                 Spacer(Modifier.height(12.dp))
+                                Text("Tap a day for details", style = MaterialTheme.typography.labelSmall, color = CreamFaint)
+                                Spacer(Modifier.height(8.dp))
                                 LoggedHeatmap(
                                     dates = weekDates,
                                     colorFor = { d ->
@@ -472,14 +480,8 @@ fun AnalyticsScreen(
                                         }
                                     },
                                     selected = flashedDay,
-                                    onDayClick = tapDay
+                                    onDayClick = { d -> selectedFastingDay = d; flashedDay = d }
                                 )
-                                Spacer(Modifier.height(10.dp))
-                                Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                                    LegendRow(AccentGarden, "Kept")
-                                    LegendRow(ScorePoor, "Broke fast")
-                                    LegendRow(Color.White.copy(alpha = 0.08f), "No log")
-                                }
                             }
                         }
                     }
@@ -801,6 +803,16 @@ fun AnalyticsScreen(
             onDismiss = { selectedDay = null }
         )
     }
+
+    selectedFastingDay?.let { day ->
+        FastingDayDialog(
+            day = day,
+            schedule = fastingSchedule,
+            mealMinutes = fastingMealMinutes[day.format(iso)],
+            onJump = { openDay(day); selectedFastingDay = null },
+            onDismiss = { selectedFastingDay = null }
+        )
+    }
 }
 
 // ======================== PIECES ========================
@@ -854,9 +866,17 @@ private fun ChartCard(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.Bottom
         ) {
-            Text(title, style = MaterialTheme.typography.titleMedium, color = Cream, modifier = Modifier.weight(1f, fill = false))
+            // The title takes priority and never wraps; the subtitle yields and ellipsises if space is tight.
+            Text(
+                title, style = MaterialTheme.typography.titleMedium, color = Cream,
+                maxLines = 1, overflow = TextOverflow.Ellipsis
+            )
             if (subtitle.isNotEmpty()) {
-                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = CreamMuted, modifier = Modifier.padding(start = 12.dp))
+                Text(
+                    subtitle, style = MaterialTheme.typography.bodySmall, color = CreamMuted,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.End,
+                    modifier = Modifier.weight(1f).padding(start = 12.dp)
+                )
             }
             if (trailing != null) {
                 Spacer(Modifier.width(10.dp))
@@ -1176,9 +1196,9 @@ private fun LoggedScoreTile(
         }
         Spacer(Modifier.height(8.dp))
         // Fixed-height mini heatmap that auto-packs however many days into the same box, so the tile
-        // stays the same size as the other summary tiles whether it's a 7-day week or a 30-day month.
+        // stays the same height as the other summary tiles whether it's a 7-day week or a 30-day month.
         MiniHeatmap(
-            modifier = Modifier.fillMaxWidth().height(40.dp),
+            modifier = Modifier.fillMaxWidth().height(32.dp),
             dates = dates,
             colorFor = colorFor,
             selected = selected,
@@ -1348,6 +1368,62 @@ private fun HeatCell(
             .background(color ?: Color.White.copy(alpha = 0.05f))
             .then(if (lift > 0.01f) Modifier.border(2.dp, Cream.copy(alpha = lift.coerceIn(0f, 1f)), shape) else Modifier)
             .clickable(onClick = onClick)
+    )
+}
+
+/**
+ * What a fasting-heatmap square means: the day's eating window and fast length, whether you kept or
+ * broke the fast, and — if you broke it — when, and how much of the fast was still left. Keeps the
+ * same "jump to this day" action as the score popup.
+ */
+@Composable
+private fun FastingDayDialog(
+    day: LocalDate,
+    schedule: com.fitpal.app.domain.model.FastingSchedule,
+    mealMinutes: List<Int>?,
+    onJump: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val breaks = mealMinutes?.filter { !schedule.isEatingAt(it) }.orEmpty()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(day.format(DateTimeFormatter.ofPattern("EEE, d MMM"))) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "Eating window ${fastingClockLabel(schedule.eatStartMin)} – ${fastingClockLabel(schedule.eatEndMin)}",
+                    style = MaterialTheme.typography.bodyMedium, color = Cream
+                )
+                Text(
+                    "${fastingCountdownLabel(schedule.fastingLengthMin())} fast · ${fastingCountdownLabel(schedule.eatingLengthMin())} eating window",
+                    style = MaterialTheme.typography.bodySmall, color = CreamMuted
+                )
+                when {
+                    mealMinutes.isNullOrEmpty() -> Text(
+                        "No food logged this day, so there's nothing to check.",
+                        style = MaterialTheme.typography.bodyMedium, color = CreamMuted
+                    )
+                    breaks.isEmpty() -> Text(
+                        "You kept your fast — every meal was inside your eating window.",
+                        style = MaterialTheme.typography.bodyMedium, color = AccentGarden
+                    )
+                    else -> {
+                        val first = breaks.min()
+                        val s = schedule.stateAt(first)
+                        Text(
+                            "You broke your fast at ${fastingClockLabel(first)}.",
+                            style = MaterialTheme.typography.bodyMedium, color = ScorePoor
+                        )
+                        Text(
+                            "That was ${fastingCountdownLabel(s.minutesLeftInPhase)} before your window opened at ${fastingClockLabel(s.nextChangeMin)}.",
+                            style = MaterialTheme.typography.bodySmall, color = CreamMuted
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onJump) { Text("Jump to this day") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } }
     )
 }
 

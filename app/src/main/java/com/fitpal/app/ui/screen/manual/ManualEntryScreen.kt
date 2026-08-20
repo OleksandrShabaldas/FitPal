@@ -1,7 +1,9 @@
 package com.fitpal.app.ui.screen.manual
 
 import android.widget.Toast
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +23,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -28,6 +31,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -70,8 +74,20 @@ fun ManualEntryScreen(
     val fastingGuard = rememberFastingGuard()
     val context = androidx.compose.ui.platform.LocalContext.current
     var showDatePicker by remember { mutableStateOf(false) }
+    // A search result the user long-pressed and is confirming they want to hide from search.
+    var foodToHide by remember { mutableStateOf<UsdaFoodEntity?>(null) }
 
     LaunchedEffect(state.saved) { if (state.saved) onLogged() }
+
+    foodToHide?.let { food ->
+        AlertDialog(
+            onDismissRequest = { foodToHide = null },
+            title = { Text("Hide from search?") },
+            text = { Text("\"${food.description}\" won't show up in food search again. You can restore hidden foods in Settings → Data & about.") },
+            confirmButton = { TextButton(onClick = { viewModel.hideFood(food); foodToHide = null }) { Text("Hide") } },
+            dismissButton = { TextButton(onClick = { foodToHide = null }) { Text("Cancel") } }
+        )
+    }
 
     if (showDatePicker) {
         DatePickerDialog(
@@ -124,7 +140,8 @@ fun ManualEntryScreen(
                             SearchResultRow(
                                 food = food,
                                 addedCount = state.draft.count { it.base.name == food.description },
-                                onClick = { viewModel.pickFood(food) }
+                                onClick = { viewModel.pickFood(food) },
+                                onLongClick = { foodToHide = food }
                             )
                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                         }
@@ -203,9 +220,12 @@ fun ManualEntryScreen(
 }
 
 @Composable
-private fun SearchResultRow(food: UsdaFoodEntity, addedCount: Int, onClick: () -> Unit) {
+@OptIn(ExperimentalFoundationApi::class)
+private fun SearchResultRow(food: UsdaFoodEntity, addedCount: Int, onClick: () -> Unit, onLongClick: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 12.dp),
+        modifier = Modifier.fillMaxWidth()
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(horizontal = 20.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
