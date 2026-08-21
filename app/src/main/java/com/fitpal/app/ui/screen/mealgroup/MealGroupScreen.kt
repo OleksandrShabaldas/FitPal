@@ -49,9 +49,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.fitpal.app.ui.component.AiSourceBadge
 import com.fitpal.app.ui.component.BackdropTheme
+import com.fitpal.app.ui.component.CoachingTipCard
 import com.fitpal.app.ui.component.DatePickerDialog
 import com.fitpal.app.ui.component.GlassTopBar
 import com.fitpal.app.ui.component.GradientBackdrop
+import com.fitpal.app.ui.component.MealContextSelector
 import com.fitpal.app.ui.component.MealItemCard
 import com.fitpal.app.ui.component.MealItemContent
 import com.fitpal.app.ui.component.MealTypeSelector
@@ -211,7 +213,17 @@ fun MealGroupScreen(
                                 }
                                 Spacer(Modifier.height(12.dp))
                                 MealTypeSelector(selected = state.mealType, onSelected = viewModel::setMealType)
+                                Spacer(Modifier.height(14.dp))
+                                Text(
+                                    "Where was this meal? (optional)",
+                                    style = MaterialTheme.typography.labelMedium, color = CreamMuted
+                                )
+                                Spacer(Modifier.height(6.dp))
+                                MealContextSelector(selected = state.context, onSelected = viewModel::setMealContext)
                             }
+                        }
+                        state.coachingTip?.let { tip ->
+                            item { CoachingTipCard(tip) }
                         }
                         itemsIndexed(state.dishes, key = { _, dish -> dish.item.id }) { _, dish ->
                             MealItemCard(

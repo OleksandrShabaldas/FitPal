@@ -5,6 +5,7 @@ import androidx.room.Room
 import com.fitpal.app.data.local.FitPalDatabase
 import com.fitpal.app.data.local.dao.AiReviewDao
 import com.fitpal.app.data.local.dao.ChallengeDao
+import com.fitpal.app.data.local.dao.ContextNoteDao
 import com.fitpal.app.data.local.dao.ExerciseDao
 import com.fitpal.app.data.local.dao.GalleryDao
 import com.fitpal.app.data.local.dao.InsightsCacheDao
@@ -57,7 +58,8 @@ object DatabaseModule {
                 FitPalDatabase.MIGRATION_22_23,
                 FitPalDatabase.MIGRATION_23_24,
                 FitPalDatabase.MIGRATION_24_25,
-                FitPalDatabase.MIGRATION_25_26
+                FitPalDatabase.MIGRATION_25_26,
+                FitPalDatabase.MIGRATION_26_27
             )
             .build()
         // TODO: When USDA database is ready, use .createFromAsset("usda_foods.db")
@@ -69,6 +71,9 @@ object DatabaseModule {
 
     @Provides
     fun provideChallengeDao(db: FitPalDatabase): ChallengeDao = db.challengeDao()
+
+    @Provides
+    fun provideContextNoteDao(db: FitPalDatabase): ContextNoteDao = db.contextNoteDao()
 
     @Provides
     fun provideGalleryDao(db: FitPalDatabase): GalleryDao = db.galleryDao()

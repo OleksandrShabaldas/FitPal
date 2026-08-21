@@ -50,6 +50,8 @@ class DataManager @Inject constructor(
             root.put("custom_foods", dumpQuery(db, "SELECT * FROM usda_foods WHERE foodCategory = 'Custom'"))
             // Foods hidden from search are a preferences flag, not a table — back them up alongside.
             root.put("hidden_foods", JSONArray(settings.hiddenFoodIds.value.toList()))
+            // "I ate earlier" fasting grace days are also a preferences flag.
+            root.put("fasting_grace", JSONObject().apply { settings.fastingGrace.value.forEach { (k, v) -> put(k, v) } })
             context.contentResolver.openOutputStream(uri)?.use { out ->
                 out.write(root.toString().toByteArray(Charsets.UTF_8))
             } ?: return@withContext false
@@ -92,6 +94,10 @@ class DataManager @Inject constructor(
             root.optJSONArray("hidden_foods")?.let { arr ->
                 val ids = (0 until arr.length()).mapNotNull { arr.optString(it).takeIf { s -> s.isNotBlank() } }.toSet()
                 settings.setHiddenFoodIds(ids)
+            }
+            root.optJSONObject("fasting_grace")?.let { obj ->
+                val grace = buildMap { obj.keys().forEach { k -> put(k, obj.optInt(k)) } }
+                settings.setFastingGrace(grace)
             }
             true
         } catch (e: Exception) {

@@ -83,9 +83,17 @@ enum class FastingDayResult { HELD, BROKE }
  * BROKE; a day with meals all inside the eating window is HELD. Days with no logged food don't appear
  * (we can't tell whether you fasted or just didn't track). Returns empty when fasting is off.
  */
-fun FastingSchedule.adherenceByDay(meals: List<Pair<String, Int>>): Map<String, FastingDayResult> {
+fun FastingSchedule.adherenceByDay(
+    meals: List<Pair<String, Int>>,
+    graceDays: Set<String> = emptySet()
+): Map<String, FastingDayResult> {
     if (!enabled) return emptyMap()
-    return meals.groupBy({ it.first }, { it.second }).mapValues { (_, minutes) ->
-        if (minutes.any { !isEatingAt(it) }) FastingDayResult.BROKE else FastingDayResult.HELD
+    return meals.groupBy({ it.first }, { it.second }).mapValues { (date, minutes) ->
+        when {
+            // The user attested (via "I ate earlier") that they ate within the window that day.
+            date in graceDays -> FastingDayResult.HELD
+            minutes.any { !isEatingAt(it) } -> FastingDayResult.BROKE
+            else -> FastingDayResult.HELD
+        }
     }
 }

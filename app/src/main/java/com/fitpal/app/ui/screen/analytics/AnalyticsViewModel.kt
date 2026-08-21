@@ -203,10 +203,14 @@ class AnalyticsViewModel @Inject constructor(
     private val fastingMealTimes: StateFlow<List<com.fitpal.app.data.local.dao.MealTimeRow>> =
         rangeDriven { from, to -> mealRepository.getMealTimesInRange(from, to) }
 
+    /** Days the user marked "I ate earlier" (dateIso -> attested eating time) — count as kept. */
+    val fastingGrace: StateFlow<Map<String, Int>> = settingsRepository.fastingGrace
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
     /** Per-day HELD/BROKE over the viewed window (empty when fasting is off). */
     val fastingAdherence: StateFlow<Map<String, com.fitpal.app.domain.model.FastingDayResult>> =
-        combine(fastingMealTimes, settingsRepository.fastingSchedule) { times, schedule ->
-            schedule.adherenceByDay(times.map { it.date to minuteOfDay(it.timestamp) })
+        combine(fastingMealTimes, settingsRepository.fastingSchedule, settingsRepository.fastingGrace) { times, schedule, grace ->
+            schedule.adherenceByDay(times.map { it.date to minuteOfDay(it.timestamp) }, grace.keys)
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
     /** Per-day sorted minute-of-day of each non-water meal — lets the day dialog explain a broken fast. */
@@ -222,8 +226,8 @@ class AnalyticsViewModel @Inject constructor(
             mealRepository.getMealTimesInRange(today.minusDays(90).format(dateFormat), today.format(dateFormat))
                 .collect { recent.value = it }
         }
-        combine(recent, settingsRepository.fastingSchedule) { times, schedule ->
-            fastingStreakOf(schedule.adherenceByDay(times.map { it.date to minuteOfDay(it.timestamp) }))
+        combine(recent, settingsRepository.fastingSchedule, settingsRepository.fastingGrace) { times, schedule, grace ->
+            fastingStreakOf(schedule.adherenceByDay(times.map { it.date to minuteOfDay(it.timestamp) }, grace.keys))
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
     }
 

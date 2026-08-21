@@ -4,11 +4,14 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fitpal.app.data.repository.AiReviewRepository
+import com.fitpal.app.data.repository.ContextNoteRepository
 import com.fitpal.app.data.repository.MealRepository
 import com.fitpal.app.data.repository.SettingsRepository
 import com.fitpal.app.data.repository.WeightRepository
 import com.fitpal.app.domain.BmrCalculator
+import com.fitpal.app.domain.model.ContextQuestion
 import com.fitpal.app.ml.AiSource
+import com.fitpal.app.ml.ContextQuestionGenerator
 import com.fitpal.app.ml.FoodAnalysisPipeline
 import com.fitpal.app.ml.ModelManager
 import com.fitpal.app.ui.navigation.Screen
@@ -35,7 +38,9 @@ data class AiReviewUiState(
     /** Which engine produced this overview — for the online / on-device badge. */
     val aiSource: AiSource? = null,
     /** Live stage shown while generating (gathering data → sending → waiting → …). */
-    val progress: String = ""
+    val progress: String = "",
+    /** A check-in question to ask before generating; when non-null, shown instead of the review. */
+    val contextQuestion: ContextQuestion? = null
 )
 
 @HiltViewModel
@@ -45,6 +50,8 @@ class AiReviewViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val weightRepository: WeightRepository,
     private val aiReviewRepository: AiReviewRepository,
+    private val contextNoteRepository: ContextNoteRepository,
+    private val contextQuestionGenerator: ContextQuestionGenerator,
     private val pipeline: FoodAnalysisPipeline,
     private val modelManager: ModelManager,
     private val reviewGenerator: com.fitpal.app.ml.ReviewGenerator
@@ -80,16 +87,44 @@ class AiReviewViewModel @Inject constructor(
                 }
                 return@launch
             }
+            // When the day/week looks unusual, ask one AI-generated check-in question first; its
+            // answer feeds the review. Any failure just falls through to generating directly.
+            val question = runCatching { contextQuestionGenerator.maybeGenerate(period, periodKey) }.getOrNull()
+            if (question != null) {
+                _uiState.update { it.copy(isLoading = false, contextQuestion = question) }
+                return@launch
+            }
             generate()
         }
     }
 
-    /** Allow the user to discard and regenerate. */
+    /** User picked an answer chip (or typed one) — remember it, then generate with it in context. */
+    fun answerQuestion(answer: String) {
+        val q = _uiState.value.contextQuestion ?: return
+        val clean = answer.trim().ifBlank { return }
+        viewModelScope.launch {
+            runCatching { contextNoteRepository.save(periodKey, period, q.question, clean) }
+            _uiState.update { it.copy(contextQuestion = null, isLoading = true, progress = "") }
+            generate()
+        }
+    }
+
+    /** User dismissed the question — record the skip (so we don't re-ask) and generate anyway. */
+    fun skipQuestion() {
+        val q = _uiState.value.contextQuestion ?: return
+        viewModelScope.launch {
+            runCatching { contextNoteRepository.save(periodKey, period, q.question, "skipped") }
+            _uiState.update { it.copy(contextQuestion = null, isLoading = true, progress = "") }
+            generate()
+        }
+    }
+
+    /** Allow the user to discard and regenerate. Skips the check-in question (already handled once). */
     fun regenerate() {
         if (!reviewGenerator.canGenerate()) return
         viewModelScope.launch {
             aiReviewRepository.delete(period, periodKey)
-            _uiState.update { it.copy(isLoading = true, review = null, error = null) }
+            _uiState.update { it.copy(isLoading = true, review = null, error = null, contextQuestion = null) }
             generate()
         }
     }

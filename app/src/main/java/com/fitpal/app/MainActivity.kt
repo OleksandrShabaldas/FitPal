@@ -9,11 +9,14 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.core.content.IntentCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fitpal.app.data.repository.SettingsRepository
+import com.fitpal.app.ui.component.FastingBackdate
 import com.fitpal.app.ui.component.LocalAiModelSlots
+import com.fitpal.app.ui.component.LocalFastingBackdate
 import com.fitpal.app.ui.component.LocalFastingSchedule
 import com.fitpal.app.ui.component.UpdatePromptDialog
 import com.fitpal.app.ui.navigation.FitPalNavHost
@@ -48,9 +51,20 @@ class MainActivity : ComponentActivity() {
                 val model3 by settingsRepository.geminiModel3.collectAsStateWithLifecycle()
                 // Fasting schedule, so the Home strip and the log-time warning share one source.
                 val fastingSchedule by settingsRepository.fastingSchedule.collectAsStateWithLifecycle()
+                // The "I ate earlier" allowance for the fasting warning — remembered so a MainActivity
+                // recomposition doesn't hand the guard a fresh instance and dismiss an open dialog.
+                val fastingGrace by settingsRepository.fastingGrace.collectAsStateWithLifecycle()
+                val fastingBackdate = remember(fastingGrace) {
+                    val month = java.time.LocalDate.now().toString().take(7)
+                    val used = fastingGrace.keys.count { it.take(7) == month }
+                    FastingBackdate((SettingsRepository.FASTING_BACKDATE_LIMIT - used).coerceAtLeast(0)) { date, min ->
+                        settingsRepository.recordFastingGrace(date, min)
+                    }
+                }
                 CompositionLocalProvider(
                     LocalAiModelSlots provides listOf(model1, model2, model3),
-                    LocalFastingSchedule provides fastingSchedule
+                    LocalFastingSchedule provides fastingSchedule,
+                    LocalFastingBackdate provides fastingBackdate
                 ) {
                     FitPalNavHost(
                         pendingRoute = pendingRoute,

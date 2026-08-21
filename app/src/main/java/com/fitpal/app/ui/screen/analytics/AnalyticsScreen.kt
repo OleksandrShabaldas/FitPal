@@ -149,6 +149,7 @@ fun AnalyticsScreen(
     val fastingAdherence by viewModel.fastingAdherence.collectAsStateWithLifecycle()
     val fastingStreak by viewModel.fastingStreak.collectAsStateWithLifecycle()
     val fastingMealMinutes by viewModel.fastingMealMinutesByDate.collectAsStateWithLifecycle()
+    val fastingGrace by viewModel.fastingGrace.collectAsStateWithLifecycle()
     var showWeightDialog by remember { mutableStateOf(false) }
     // A fasting square opens its own explainer (not the score popup); this holds which day.
     var selectedFastingDay by remember { mutableStateOf<LocalDate?>(null) }
@@ -809,6 +810,7 @@ fun AnalyticsScreen(
             day = day,
             schedule = fastingSchedule,
             mealMinutes = fastingMealMinutes[day.format(iso)],
+            graceMinute = fastingGrace[day.format(iso)],
             onJump = { openDay(day); selectedFastingDay = null },
             onDismiss = { selectedFastingDay = null }
         )
@@ -1381,6 +1383,7 @@ private fun FastingDayDialog(
     day: LocalDate,
     schedule: com.fitpal.app.domain.model.FastingSchedule,
     mealMinutes: List<Int>?,
+    graceMinute: Int?,
     onJump: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -1399,6 +1402,10 @@ private fun FastingDayDialog(
                     style = MaterialTheme.typography.bodySmall, color = CreamMuted
                 )
                 when {
+                    graceMinute != null -> Text(
+                        "You logged this late and marked it eaten at ${fastingClockLabel(graceMinute)}, inside your window — so it still counts as kept.",
+                        style = MaterialTheme.typography.bodyMedium, color = AccentGarden
+                    )
                     mealMinutes.isNullOrEmpty() -> Text(
                         "No food logged this day, so there's nothing to check.",
                         style = MaterialTheme.typography.bodyMedium, color = CreamMuted

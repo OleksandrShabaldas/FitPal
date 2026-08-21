@@ -5,9 +5,12 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.fitpal.app.data.local.MealJson
 import com.fitpal.app.data.local.entity.MealLogItemEntity
+import com.fitpal.app.domain.BmrCalculator
 import com.fitpal.app.wear.WearWorkerEntryPoint
 import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.first
+import kotlin.math.roundToInt
 
 /**
  * Generates the AI overview for every item of a just-logged meal, in the background — so it happens
@@ -35,7 +38,8 @@ class InsightsWorker(
         val generator = entry.insightsGenerator()
 
         return try {
-            mealRepo.itemsForMeal(mealLogId).forEach { item ->
+            val items = mealRepo.itemsForMeal(mealLogId)
+            items.forEach { item ->
                 // Already has an overview (e.g. carried from the photo/describe analysis) — leave it.
                 if (!item.insightsJson.isNullOrBlank()) return@forEach
 
@@ -62,6 +66,8 @@ class InsightsWorker(
                 // A saved food keeps its own copy so the collection detail reuses it too.
                 item.galleryFoodId?.let { galleryRepo.saveInsights(it, insights, source) }
             }
+            // One meal-level coaching tip, judged against the day so far — only when useful.
+            runCatching { generateCoachingTip(mealLogId, items) }
             Result.success()
         } catch (e: CancellationException) {
             throw e
@@ -70,6 +76,62 @@ class InsightsWorker(
             // detail screen can still generate on demand.
             if (runAttemptCount >= 3) Result.success() else Result.retry()
         }
+    }
+
+    /**
+     * Generate ONE meal-level coaching tip for [mealLogId] and cache it on the meal. Deliberately
+     * conservative: only for a real meal (>200 kcal) and only online (the tip needs the capable
+     * model to be specific and safe); the prompt itself returns nothing for a meal that's fine.
+     */
+    private suspend fun generateCoachingTip(mealLogId: Long, items: List<MealLogItemEntity>) {
+        val mealRepo = entry.mealRepository()
+        val meal = mealRepo.getMealLog(mealLogId) ?: return
+        // Don't overwrite one already present (e.g. re-run), and never tip a water quick-add.
+        if (!meal.coachingTipJson.isNullOrBlank() || meal.mealType == "water") return
+
+        val mealKcal = items.sumOf { it.calories.toDouble() }.toFloat()
+        if (mealKcal <= 200f) return
+
+        val pipeline = entry.pipeline()
+        if (!pipeline.canUseOnline()) return
+
+        val settings = entry.settingsRepository()
+        val profile = settings.userProfile.value
+        val weightKg = entry.weightRepository().getLatest().first()?.weightKg
+        val targets = weightKg?.let {
+            BmrCalculator.dailyTargets(profile, it, settings.dailyCalorieGoal.value, settings.macroSelection.value)
+        }
+
+        val before = mealRepo.macrosBefore(meal.date, meal.timestamp)
+
+        fun macroStr(kcal: Float, p: Float, f: Float, c: Float, fib: Float) =
+            "${kcal.roundToInt()} kcal, P${p.roundToInt()}g F${f.roundToInt()}g C${c.roundToInt()}g Fiber ${fib.roundToInt()}g"
+
+        val mealFoods = items.joinToString("; ") {
+            "${it.name} (${it.calories.roundToInt()} kcal, P${it.protein.roundToInt()} F${it.fat.roundToInt()} C${it.carbs.roundToInt()} Fiber ${it.fiber.roundToInt()})"
+        }
+        val todayBefore = if (before.calories < 50f) "nothing substantial logged earlier today"
+            else macroStr(before.calories, before.protein, before.fat, before.carbs, before.fiber)
+        val mealP = items.sumOf { it.protein.toDouble() }.toFloat()
+        val mealF = items.sumOf { it.fat.toDouble() }.toFloat()
+        val mealC = items.sumOf { it.carbs.toDouble() }.toFloat()
+        val mealFib = items.sumOf { it.fiber.toDouble() }.toFloat()
+        val remaining = if (targets != null) {
+            macroStr(
+                targets.calories - before.calories - mealKcal,
+                targets.proteinG - before.protein - mealP,
+                targets.fatG - before.fat - mealF,
+                targets.carbsG - before.carbs - mealC,
+                targets.fiberG - before.fiber - mealFib
+            ) + " remaining"
+        } else "daily targets not set"
+        val goal = "${profile.fitnessGoal.label} — ${profile.fitnessGoal.description}"
+
+        val prompt = FoodPrompts.mealCoachingTip(mealFoods, todayBefore, remaining, goal)
+        val (response, _) = pipeline.generateRawTextWithSource(prompt)
+        val tip = FoodJsonParser.parseCoachingTip(response)
+        // Save the result (a tip, or null when the model declined — leaving no card).
+        mealRepo.saveCoachingTip(mealLogId, tip)
     }
 
     /** Portion-independent key: name + per-100 g macros, so the same food matches at any amount. */

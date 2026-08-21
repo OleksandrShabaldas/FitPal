@@ -1,6 +1,7 @@
 package com.fitpal.app.ml
 
 import com.fitpal.app.data.repository.AiReviewRepository
+import com.fitpal.app.data.repository.ContextNoteRepository
 import com.fitpal.app.data.repository.ExerciseRepository
 import com.fitpal.app.data.repository.MealRepository
 import com.fitpal.app.data.repository.SettingsRepository
@@ -27,6 +28,8 @@ class ReviewGenerator @Inject constructor(
     private val exerciseRepository: ExerciseRepository,
     private val stepRepository: StepRepository,
     private val aiReviewRepository: AiReviewRepository,
+    private val contextNoteRepository: ContextNoteRepository,
+    private val nutritionAnalytics: NutritionAnalytics,
     private val pipeline: FoodAnalysisPipeline,
     private val modelManager: ModelManager
 ) {
@@ -50,10 +53,19 @@ class ReviewGenerator @Inject constructor(
             onProgress("Gathering your meals and totals…")
             val (from, to, totalDays) = rangeFor(period, key)
             val rows = mealRepository.getDailyNutritionRange(from, to).first()
+            // Group items back into their meals so each line carries the meal category and the
+            // user's situation tag ([Restaurant]/[Family meal]/…) — context the coach reasons from.
             val foodLog = mealRepository.getLoggedFoodsInRange(from, to)
+                .filter { it.mealType != "water" }
                 .groupBy { it.date }
-                .entries.joinToString("\n") { (date, items) ->
-                    "$date: " + items.joinToString(", ") { "${it.name} (${it.calories.toInt()} kcal)" }
+                .entries.joinToString("\n") { (date, dayItems) ->
+                    val meals = dayItems.groupBy { it.mealLogId }.values.joinToString("; ") { meal ->
+                        val head = meal.first()
+                        val ctx = head.context?.takeIf { it.isNotBlank() }?.let { " [$it]" } ?: ""
+                        val type = head.mealType.replaceFirstChar { it.uppercase() }
+                        "$type$ctx: " + meal.joinToString(", ") { "${it.name} (${it.calories.toInt()} kcal)" }
+                    }
+                    "$date — $meals"
                 }
             val profile = settingsRepository.userProfile.value
             val manualGoal = settingsRepository.dailyCalorieGoal.value
@@ -115,13 +127,35 @@ class ReviewGenerator @Inject constructor(
                 appendLine()
                 appendLine("LONG-TERM HABIT NOTES (what we've learned about this user over time): $it")
             }
+
+            // Pre-computed pattern/trend brief — lets the coach judge "is this unusual / does it matter".
+            runCatching { nutritionAnalytics.computeBrief(to, isDaily) }.getOrNull()
+                ?.toPromptBlock()?.takeIf { it.isNotBlank() }?.let {
+                    appendLine()
+                    appendLine(it)
+                }
+
+            // The user's own answers to earlier check-in questions — context the numbers can't show.
+            val since = runCatching { LocalDate.parse(to).minusDays(30).toString() }.getOrDefault(to)
+            val notes = runCatching { contextNoteRepository.getRecentAnswers(since) }.getOrDefault(emptyList())
+            if (notes.isNotEmpty()) {
+                appendLine()
+                appendLine("RECENT CHECK-IN NOTES (the user's own words on days/weeks that looked unusual — weigh these heavily when explaining WHY):")
+                notes.forEach { appendLine("- ${it.date} (${it.period}): \"${it.question}\" → \"${it.answer}\"") }
+            }
+
             if (!isDaily) {
                 appendLine()
                 append(
                     "AT THE VERY END, on a new line starting exactly with \"HABITS:\", output an updated, " +
-                        "concise (<=70 words) running profile of this user's eating habits, patterns, triggers " +
-                        "and what works for them — merging the notes above with what this period shows. That " +
-                        "single line is internal memory; keep it out of the review the user reads."
+                        "concise (<=200 words) running profile of this user. Cover, in plain sentences: " +
+                        "eating PATTERNS (meal timing, frequency, consistency); common TRIGGERS (stress, " +
+                        "weekends, social/family meals, boredom); STRENGTHS they show consistently; recurring " +
+                        "PROBLEM AREAS (nutrients chronically low, portion control); typical meal CONTEXTS " +
+                        "(home vs restaurant vs on-the-go, from the tags); and anything learned from their " +
+                        "check-in answers. Merge the existing notes above with what this period shows — keep " +
+                        "what's still true, update what changed. That single line is internal memory; keep it " +
+                        "out of the review the user reads."
                 )
             }
         }.trim()

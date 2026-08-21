@@ -23,7 +23,11 @@ data class LoggedFoodRow(
     val date: String,
     val name: String,
     val calories: Float,
-    val mealType: String
+    val mealType: String,
+    /** The parent meal-log id, so callers can regroup items back into their meal. */
+    val mealLogId: Long = 0,
+    /** The situation tag the user set on that meal ("Restaurant"/…), or null if untagged. */
+    val context: String? = null
 )
 
 /** One representative logged food per distinct name (its latest version) + the day last logged. */
@@ -46,6 +50,23 @@ data class DailyNutritionRow(
 data class DailyWaterRow(
     val date: String,
     val water: Float
+)
+
+/** Protein summed per meal category over a range, with the count of days that had that meal —
+ *  so the coach can see protein distribution (e.g. backloaded to dinner). */
+data class MealTypeProteinRow(
+    val mealType: String,
+    val protein: Float,
+    val days: Int
+)
+
+/** Summed macros (no date) — for "the day so far" before a given meal. */
+data class MacroSums(
+    val calories: Float,
+    val protein: Float,
+    val fat: Float,
+    val carbs: Float,
+    val fiber: Float
 )
 
 /** One row per day — water split by source (clear drinks vs. water in food). */
@@ -242,6 +263,22 @@ interface MealLogDao {
     @Query("SELECT name FROM meal_logs WHERE id = :mealLogId")
     suspend fun getMealName(mealLogId: Long): String?
 
+    /** Set (or clear) the one-tap situation tag on a whole meal ("Home"/"Restaurant"/…). */
+    @Query("UPDATE meal_logs SET context = :context WHERE id = :mealLogId")
+    suspend fun updateMealContext(mealLogId: Long, context: String?)
+
+    /** Save (or clear) the cached meal-level coaching tip JSON on a whole meal. */
+    @Query("UPDATE meal_logs SET coachingTipJson = :coachingTipJson WHERE id = :mealLogId")
+    suspend fun updateCoachingTip(mealLogId: Long, coachingTipJson: String?)
+
+    /** The whole meal row (for its context tag + cached coaching tip). */
+    @Query("SELECT * FROM meal_logs WHERE id = :mealLogId LIMIT 1")
+    suspend fun getMealLogById(mealLogId: Long): MealLogEntity?
+
+    /** Live meal row — so the meal-group screen picks up the coaching tip the background worker writes. */
+    @Query("SELECT * FROM meal_logs WHERE id = :mealLogId LIMIT 1")
+    fun observeMealLogById(mealLogId: Long): Flow<MealLogEntity?>
+
     /**
      * Update an item's ingredient list and all the totals derived from it.
      * Used by the meal-detail editor when the user changes/removes/adds ingredients.
@@ -385,12 +422,36 @@ interface MealLogDao {
 
     /** Every logged food in a date range (so the AI review can see WHAT was eaten, not just totals). */
     @Query("""
-        SELECT m.date AS date, i.name AS name, i.calories AS calories, m.mealType AS mealType
+        SELECT m.date AS date, i.name AS name, i.calories AS calories, m.mealType AS mealType,
+               m.id AS mealLogId, m.context AS context
         FROM meal_log_items i JOIN meal_logs m ON i.mealLogId = m.id
         WHERE m.date BETWEEN :from AND :to
         ORDER BY m.date ASC, m.id ASC
     """)
     suspend fun getLoggedFoodsInRange(from: String, to: String): List<LoggedFoodRow>
+
+    /** Protein per meal category over a range + how many days each occurred — protein distribution. */
+    @Query("""
+        SELECT m.mealType AS mealType,
+               COALESCE(SUM(i.protein), 0) AS protein,
+               COUNT(DISTINCT m.date) AS days
+        FROM meal_log_items i JOIN meal_logs m ON i.mealLogId = m.id
+        WHERE m.date BETWEEN :from AND :to AND m.mealType != 'water'
+        GROUP BY m.mealType
+    """)
+    suspend fun getProteinByMealTypeInRange(from: String, to: String): List<MealTypeProteinRow>
+
+    /** Macros already eaten on [date] before [beforeTs] (excludes water) — "the day so far". */
+    @Query("""
+        SELECT COALESCE(SUM(i.calories), 0) AS calories,
+               COALESCE(SUM(i.protein), 0)  AS protein,
+               COALESCE(SUM(i.fat), 0)      AS fat,
+               COALESCE(SUM(i.carbs), 0)    AS carbs,
+               COALESCE(SUM(i.fiber), 0)    AS fiber
+        FROM meal_log_items i JOIN meal_logs m ON i.mealLogId = m.id
+        WHERE m.date = :date AND m.timestamp < :beforeTs AND m.mealType != 'water'
+    """)
+    suspend fun getMacrosBefore(date: String, beforeTs: Long): MacroSums
 
     /** Per-day pure-water totals for a date range — drives the analytics water chart. */
     @Query("""

@@ -108,6 +108,14 @@ class MealRepository @Inject constructor(
     suspend fun getLoggedFoodsInRange(from: String, to: String): List<LoggedFoodRow> =
         mealLogDao.getLoggedFoodsInRange(from, to)
 
+    /** Protein summed per meal category over a range (+ days seen) — protein-distribution analysis. */
+    suspend fun getProteinByMealTypeInRange(from: String, to: String): List<com.fitpal.app.data.local.dao.MealTypeProteinRow> =
+        mealLogDao.getProteinByMealTypeInRange(from, to)
+
+    /** Macros already eaten on [date] before [beforeTs] — "the day so far" for the meal coaching tip. */
+    suspend fun macrosBefore(date: String, beforeTs: Long): com.fitpal.app.data.local.dao.MacroSums =
+        mealLogDao.getMacrosBefore(date, beforeTs)
+
     /** Live item row — lets the detail screen show the AI overview the moment the background worker writes it. */
     fun observeItem(itemId: Long): Flow<MealLogItemEntity?> = mealLogDao.observeItemById(itemId)
 
@@ -416,10 +424,37 @@ class MealRepository @Inject constructor(
         val items = mealLogDao.getItemsForMeal(mealLogId)
         if (items.isEmpty()) return
         val type = mealType ?: mealLogDao.getMealTypeForMeal(mealLogId) ?: defaultMealType()
-        // Carry the meal's name too — a copy of "Sunday roast" is still Sunday roast.
-        val mealLog = MealLogEntity(date = date, mealType = type, name = mealLogDao.getMealName(mealLogId))
+        // Carry the meal's name + situation tag too — a copy of "Sunday roast" is still Sunday roast.
+        val original = mealLogDao.getMealLogById(mealLogId)
+        val mealLog = MealLogEntity(
+            date = date,
+            mealType = type,
+            name = mealLogDao.getMealName(mealLogId),
+            context = original?.context
+        )
         mealLogDao.logMealWithItems(mealLog, items.map { it.copy(id = 0, mealLogId = 0) })
     }
+
+    // ---- Meal situation tag ("Home"/"Restaurant"/…) + cached meal-level coaching tip ----
+
+    /** Live meal row — the group screen watches it for the coaching tip the worker writes. */
+    fun observeMealLog(mealLogId: Long): Flow<MealLogEntity?> =
+        mealLogDao.observeMealLogById(mealLogId)
+
+    /** One-shot meal row, for reading its context / coaching tip. */
+    suspend fun getMealLog(mealLogId: Long): MealLogEntity? = mealLogDao.getMealLogById(mealLogId)
+
+    /** Set (or clear, with null) the one-tap situation tag on a whole meal. */
+    suspend fun updateMealContext(mealLogId: Long, context: String?) =
+        mealLogDao.updateMealContext(mealLogId, context?.takeIf { it.isNotBlank() })
+
+    /** Save (or clear) the cached meal-level coaching tip. */
+    suspend fun saveCoachingTip(mealLogId: Long, tip: com.fitpal.app.domain.model.CoachingTip?) =
+        mealLogDao.updateCoachingTip(mealLogId, tip?.let { MealJson.encodeCoachingTip(it) })
+
+    /** Decode a meal's cached coaching tip, or null if none / unparseable. */
+    fun coachingTipFor(meal: MealLogEntity): com.fitpal.app.domain.model.CoachingTip? =
+        MealJson.decodeCoachingTip(meal.coachingTipJson)
 
     // ---- Ingredient breakdown + cached AI insights (meal detail screen) ----
 

@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fitpal.app.data.local.entity.MealLogItemEntity
 import com.fitpal.app.data.repository.MealRepository
+import com.fitpal.app.domain.model.CoachingTip
 import com.fitpal.app.domain.model.Ingredient
 import com.fitpal.app.ml.AiSource
 import com.fitpal.app.ui.component.logDateLabel
@@ -29,6 +30,10 @@ data class MealGroupUiState(
     val mealType: String = "",
     /** The name the user gave this whole meal, or null while it's unnamed. */
     val mealName: String? = null,
+    /** The one-tap situation tag on this meal ("Home"/"Restaurant"/…), or null if untagged. */
+    val context: String? = null,
+    /** A meal-aware coaching note the background worker may attach; null when there's nothing useful. */
+    val coachingTip: CoachingTip? = null,
     /** The day this meal is logged on — so "copy to date" can center on it. */
     val date: LocalDate = LocalDate.now(),
     val isLoading: Boolean = true,
@@ -81,6 +86,26 @@ class MealGroupViewModel @Inject constructor(
                 _uiState.update { it.copy(dishes = dishes, isLoading = false) }
             }
         }
+        // Watch the meal row so the situation tag and the coaching tip (written later by the
+        // background worker) both stay live. Only these two fields are taken here, so name/type
+        // edits made optimistically elsewhere aren't clobbered.
+        viewModelScope.launch {
+            mealRepository.observeMealLog(mealLogId).collect { meal ->
+                _uiState.update {
+                    it.copy(
+                        context = meal?.context,
+                        coachingTip = meal?.let { m -> mealRepository.coachingTipFor(m) }
+                    )
+                }
+            }
+        }
+    }
+
+    /** Set (or clear, by re-tapping) the one-tap situation tag on this whole meal. */
+    fun setMealContext(context: String?) {
+        val next = if (context == _uiState.value.context) null else context
+        _uiState.update { it.copy(context = next) }
+        viewModelScope.launch { mealRepository.updateMealContext(mealLogId, next) }
     }
 
     // ---- Inline editing (per dish), persisted to the DB; the Flow reconciles totals ----

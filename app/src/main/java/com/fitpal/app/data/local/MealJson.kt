@@ -1,10 +1,12 @@
 package com.fitpal.app.data.local
 
+import com.fitpal.app.domain.model.CoachingTip
 import com.fitpal.app.domain.model.HealthSwap
 import com.fitpal.app.domain.model.Ingredient
 import com.fitpal.app.domain.model.MealInsights
 import com.fitpal.app.domain.model.Micronutrients
 import com.fitpal.app.domain.model.ScoreFactor
+import com.fitpal.app.domain.model.TipType
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -151,6 +153,26 @@ object MealJson {
                 energyScore = o.optInt("energyScore", 0),
                 moodScore = o.optInt("moodScore", 0)
             )
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    // ---------------- Coaching tip ----------------
+
+    fun encodeCoachingTip(tip: CoachingTip): String =
+        JSONObject().apply {
+            put("type", tip.type.name)
+            put("message", tip.message)
+        }.toString()
+
+    fun decodeCoachingTip(json: String?): CoachingTip? {
+        if (json.isNullOrBlank()) return null
+        return try {
+            val o = JSONObject(json)
+            val message = o.optString("message").trim()
+            if (message.isBlank()) null
+            else CoachingTip(type = TipType.fromString(o.optString("type")), message = message)
         } catch (e: Exception) {
             null
         }

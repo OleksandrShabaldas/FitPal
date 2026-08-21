@@ -210,7 +210,8 @@ class SettingsRepository @Inject constructor(
     val habitSummary: StateFlow<String> = _habitSummary
 
     fun setHabitSummary(value: String) {
-        val clean = value.trim().take(1200)
+        // ~200 words of structured habit notes; 1600 chars leaves headroom so it isn't cut mid-sentence.
+        val clean = value.trim().take(1600)
         prefs.edit().putString(KEY_HABIT_SUMMARY, clean).apply()
         _habitSummary.value = clean
     }
@@ -420,6 +421,42 @@ class SettingsRepository @Inject constructor(
     }
 
     fun restoreAllHiddenFoods() = setHiddenFoodIds(emptySet())
+
+    // --- "I ate earlier" fasting grace: days the user attested were within-window (dateIso -> the
+    // eating time), forcing that day's fast to count as kept. Capped at FASTING_BACKDATE_LIMIT new
+    // days per calendar month; kept ~120 days for the heatmap. Included in backup/restore. ---
+
+    private val _fastingGrace = MutableStateFlow(fastingGraceMap().toMap())
+    val fastingGrace: StateFlow<Map<String, Int>> = _fastingGrace
+
+    /** Record a grace day (idempotent per date). No-op once this month's limit is used up. */
+    fun recordFastingGrace(dateIso: String, eatenMinute: Int) {
+        val map = fastingGraceMap()
+        if (dateIso !in map) {
+            val month = dateIso.take(7)
+            if (map.keys.count { it.take(7) == month } >= FASTING_BACKDATE_LIMIT) return
+        }
+        map[dateIso] = eatenMinute
+        val cutoff = java.time.LocalDate.now().minusDays(120).toString()
+        setFastingGrace(map.filterKeys { it >= cutoff })
+    }
+
+    fun setFastingGrace(map: Map<String, Int>) {
+        val obj = JSONObject()
+        map.forEach { (k, v) -> obj.put(k, v) }
+        prefs.edit().putString(KEY_FASTING_GRACE, obj.toString()).apply()
+        _fastingGrace.value = map.toMap()
+    }
+
+    private fun fastingGraceMap(): MutableMap<String, Int> {
+        val raw = prefs.getString(KEY_FASTING_GRACE, null) ?: return mutableMapOf()
+        return try {
+            val o = JSONObject(raw)
+            buildMap { o.keys().forEach { k -> put(k, o.optInt(k)) } }.toMutableMap()
+        } catch (e: Exception) {
+            mutableMapOf()
+        }
+    }
 
     // --- Per-macro target presets ("auto" = derive from goal + weight) ---
 
@@ -799,6 +836,10 @@ class SettingsRepository @Inject constructor(
         private const val KEY_FASTING_WARN = "fasting_warn_on_log"
         private const val KEY_FASTING_NOTIFY = "fasting_notify"
         private const val KEY_HIDDEN_FOODS = "hidden_food_ids"
+        private const val KEY_FASTING_GRACE = "fasting_grace"
+
+        /** How many "I ate earlier" fasting corrections are allowed per calendar month. */
+        const val FASTING_BACKDATE_LIMIT = 3
         private const val KEY_MACRO_PROTEIN = "macro_protein"
         private const val KEY_MACRO_FAT = "macro_fat"
         private const val KEY_MACRO_CARBS = "macro_carbs"

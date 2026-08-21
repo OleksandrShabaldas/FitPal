@@ -1,6 +1,8 @@
 package com.fitpal.app.ml
 
 import android.graphics.RectF
+import com.fitpal.app.domain.model.CoachingTip
+import com.fitpal.app.domain.model.ContextQuestion
 import com.fitpal.app.domain.model.DetectedFood
 import com.fitpal.app.domain.model.FoodVariation
 import com.fitpal.app.domain.model.HealthSwap
@@ -8,6 +10,7 @@ import com.fitpal.app.domain.model.Ingredient
 import com.fitpal.app.domain.model.MealInsights
 import com.fitpal.app.domain.model.Micronutrients
 import com.fitpal.app.domain.model.ScoreFactor
+import com.fitpal.app.domain.model.TipType
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -196,6 +199,34 @@ object FoodJsonParser {
             energyScore = json.optInt("energyScore", 0).coerceIn(0, 5),
             moodScore = json.optInt("moodScore", 0).coerceIn(0, 5)
         )
+    }
+
+    /**
+     * Parse a meal coaching tip: `{"type":..,"message":..}` → [CoachingTip], or null when the model
+     * declines (a bare "null", empty object, or blank message). Lenient about extra prose around it.
+     */
+    fun parseCoachingTip(raw: String): CoachingTip? {
+        val json = extractJsonObject(raw) ?: return null
+        val message = json.optString("message").trim()
+        if (message.isBlank() || message.equals("null", ignoreCase = true)) return null
+        return CoachingTip(type = TipType.fromString(json.optString("type")), message = message)
+    }
+
+    /**
+     * Parse a check-in question: `{"question":..,"options":[..]}` → [ContextQuestion], or null if the
+     * question is blank or there are fewer than two usable options.
+     */
+    fun parseContextQuestion(raw: String): ContextQuestion? {
+        val json = extractJsonObject(raw) ?: return null
+        val question = json.optString("question").trim()
+        if (question.isBlank()) return null
+        val options = json.optJSONArray("options")
+            ?.let { arr -> (0 until arr.length()).mapNotNull { arr.optString(it)?.trim()?.takeIf(String::isNotEmpty) } }
+            ?.distinct()
+            ?.take(5)
+            ?: emptyList()
+        if (options.size < 2) return null
+        return ContextQuestion(question = question, options = options)
     }
 
     // ========================== HELPERS ==========================

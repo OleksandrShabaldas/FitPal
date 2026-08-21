@@ -6,6 +6,7 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.fitpal.app.data.local.dao.AiReviewDao
 import com.fitpal.app.data.local.dao.ChallengeDao
+import com.fitpal.app.data.local.dao.ContextNoteDao
 import com.fitpal.app.data.local.dao.ExerciseDao
 import com.fitpal.app.data.local.dao.GalleryDao
 import com.fitpal.app.data.local.dao.InsightsCacheDao
@@ -16,6 +17,7 @@ import com.fitpal.app.data.local.dao.TrailDao
 import com.fitpal.app.data.local.dao.WeightDao
 import com.fitpal.app.data.local.entity.AiReviewEntity
 import com.fitpal.app.data.local.entity.ChallengeEntity
+import com.fitpal.app.data.local.entity.ContextNoteEntity
 import com.fitpal.app.data.local.entity.ExerciseEntryEntity
 import com.fitpal.app.data.local.entity.FoodInsightsCacheEntity
 import com.fitpal.app.data.local.entity.GalleryCategoryEntity
@@ -35,6 +37,7 @@ import com.fitpal.app.data.local.entity.WeightEntryEntity
     entities = [
         AiReviewEntity::class,
         ChallengeEntity::class,
+        ContextNoteEntity::class,
         ExerciseEntryEntity::class,
         FoodInsightsCacheEntity::class,
         GalleryCategoryEntity::class,
@@ -50,12 +53,13 @@ import com.fitpal.app.data.local.entity.WeightEntryEntity
         UsdaFoodEntity::class,
         WeightEntryEntity::class
     ],
-    version = 26,
+    version = 27,
     exportSchema = true
 )
 abstract class FitPalDatabase : RoomDatabase() {
     abstract fun aiReviewDao(): AiReviewDao
     abstract fun challengeDao(): ChallengeDao
+    abstract fun contextNoteDao(): ContextNoteDao
     abstract fun exerciseDao(): ExerciseDao
     abstract fun galleryDao(): GalleryDao
     abstract fun insightsCacheDao(): InsightsCacheDao
@@ -424,6 +428,34 @@ abstract class FitPalDatabase : RoomDatabase() {
         val MIGRATION_25_26 = object : Migration(25, 26) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE meal_log_items ADD COLUMN ruleTags TEXT")
+            }
+        }
+
+        /**
+         * v26 -> v27: the AI-coach upgrade.
+         *  - `meal_logs.context`: an optional one-tap situation tag ("Home"/"Restaurant"/…) so the
+         *    review can see WHERE a meal happened, not just what it was.
+         *  - `meal_logs.coachingTipJson`: a cached, meal-aware coaching tip (one green note per meal).
+         *  - `context_notes`: the user's answers to the AI's per-period check-in questions, fed back
+         *    into later reviews as remembered context.
+         */
+        val MIGRATION_26_27 = object : Migration(26, 27) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE meal_logs ADD COLUMN context TEXT")
+                db.execSQL("ALTER TABLE meal_logs ADD COLUMN coachingTipJson TEXT")
+                // No column DEFAULTs — matches the entity (defaults are applied in Kotlin), so the
+                // schema hash lines up with what Room generates (cf. weight_entries / ai_reviews).
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS context_notes (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        date TEXT NOT NULL,
+                        period TEXT NOT NULL,
+                        question TEXT NOT NULL,
+                        answer TEXT NOT NULL,
+                        timestamp INTEGER NOT NULL
+                    )
+                """)
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_context_notes_date ON context_notes(date)")
             }
         }
     }

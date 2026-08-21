@@ -2,6 +2,7 @@ package com.fitpal.app.wear
 
 import com.fitpal.app.data.repository.ExerciseRepository
 import com.fitpal.app.data.repository.MealRepository
+import com.fitpal.app.data.repository.SettingsRepository
 import com.fitpal.app.data.repository.WeightRepository
 import com.fitpal.app.ml.AnalysisJobManager
 import com.fitpal.app.ml.AppForegroundState
@@ -28,6 +29,7 @@ interface WearWorkerEntryPoint {
     fun mealRepository(): MealRepository
     fun exerciseRepository(): ExerciseRepository
     fun weightRepository(): WeightRepository
+    fun settingsRepository(): SettingsRepository
     fun appForegroundState(): AppForegroundState
     fun statsPublisher(): WearStatsPublisher
 }
