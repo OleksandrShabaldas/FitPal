@@ -19,15 +19,15 @@ import javax.inject.Singleton
 class ContextQuestionGenerator @Inject constructor(
     private val nutritionAnalytics: NutritionAnalytics,
     private val contextNoteRepository: ContextNoteRepository,
-    private val pipeline: FoodAnalysisPipeline
+    private val aux: AuxAiGenerator
 ) {
     /**
      * Return a question to ask before generating the [period]/[periodKey] review, or null to skip
      * straight to the review. Never throws — any failure just means "don't ask".
      */
     suspend fun maybeGenerate(period: String, periodKey: String): ContextQuestion? {
-        // The prompt needs the capable cloud model to produce specific, safe questions.
-        if (!pipeline.canUseOnline()) return null
+        // Runs on the cheap lite trio (off the analysis models' quota) — needs online for that.
+        if (!aux.canUseOnline()) return null
 
         val isDaily = period.equals("daily", ignoreCase = true)
         val isWeekly = period.equals("weekly", ignoreCase = true)
@@ -48,8 +48,7 @@ class ContextQuestionGenerator @Inject constructor(
 
         val summary = brief.toPromptBlock().ifBlank { return null }
         val prompt = FoodPrompts.contextQuestion(summary, if (isDaily) "day" else "week")
-        val response = runCatching { pipeline.generateRawTextWithSource(prompt) }.getOrNull()?.first
-            ?: return null
+        val response = aux.generate(prompt, jsonMode = true) ?: return null
         return FoodJsonParser.parseContextQuestion(response)
     }
 

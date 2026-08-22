@@ -159,7 +159,19 @@ class GeminiClient @Inject constructor(
                 onProgress("Waiting for the AI to reply…")
                 val code = connection.responseCode
                 when {
-                    code == 429 -> throw GeminiQuotaException("Gemini free quota exhausted")
+                    code == 429 -> {
+                        val err = runCatching { connection.errorStream?.bufferedReader()?.use { it.readText() } }.getOrNull()
+                        // A per-DAY 429 is genuinely done until midnight — report quota so the caller
+                        // benches this model for today. A per-MINUTE (RPM/TPM) 429 just means "too
+                        // fast": treat it as transient so the model is NOT benched — the caller
+                        // cascades to the next model (a separate per-minute bucket) or falls back for
+                        // this one call, and the model is usable again the next minute. On the free
+                        // tier (≈5 req/min) the per-minute limit is easy to hit in a burst, so wrongly
+                        // benching for the whole day was making every later call fall to a fallback.
+                        if (isPerDayQuota(err)) throw GeminiQuotaException("Gemini daily free quota exhausted")
+                        Log.w(TAG, "Per-minute rate limit on $model (transient): ${err?.take(200)}")
+                        throw GeminiUnavailableException("Gemini rate-limited (per-minute)")
+                    }
                     code in 200..299 -> {
                         val responseText = connection.inputStream.bufferedReader().use { it.readText() }
                         return@withContext extractText(responseText)
@@ -202,6 +214,18 @@ class GeminiClient @Inject constructor(
             if (attempt < attempts - 1) delay(RETRY_BACKOFF_MS * (attempt + 1))
         }
         throw GeminiUnavailableException(lastFailure)
+    }
+
+    /**
+     * Tell a per-DAY quota 429 (bench this model till midnight) from a per-MINUTE one (transient).
+     * Google's 429 body names the quota it hit, e.g. `...RequestsPerDay...` vs `...PerMinute...`.
+     * When the body is missing/unclear we assume per-minute — the safer guess, since benching a good
+     * model for a whole day on a momentary rate limit is exactly the failure we're avoiding.
+     */
+    private fun isPerDayQuota(errorBody: String?): Boolean {
+        if (errorBody.isNullOrBlank()) return false
+        val s = errorBody.lowercase().replace(" ", "")
+        return s.contains("perday") || s.contains("requestsperday")
     }
 
     private fun buildRequest(

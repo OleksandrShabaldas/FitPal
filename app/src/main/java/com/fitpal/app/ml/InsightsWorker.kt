@@ -92,8 +92,9 @@ class InsightsWorker(
         val mealKcal = items.sumOf { it.calories.toDouble() }.toFloat()
         if (mealKcal <= 200f) return
 
-        val pipeline = entry.pipeline()
-        if (!pipeline.canUseOnline()) return
+        // Runs on the cheap lite trio (off the analysis models' quota), not the main models.
+        val aux = entry.auxAiGenerator()
+        if (!aux.canUseOnline()) return
 
         val settings = entry.settingsRepository()
         val profile = settings.userProfile.value
@@ -128,7 +129,7 @@ class InsightsWorker(
         val goal = "${profile.fitnessGoal.label} — ${profile.fitnessGoal.description}"
 
         val prompt = FoodPrompts.mealCoachingTip(mealFoods, todayBefore, remaining, goal)
-        val (response, _) = pipeline.generateRawTextWithSource(prompt)
+        val response = aux.generate(prompt, jsonMode = true) ?: return
         val tip = FoodJsonParser.parseCoachingTip(response)
         // Save the result (a tip, or null when the model declined — leaving no card).
         mealRepo.saveCoachingTip(mealLogId, tip)

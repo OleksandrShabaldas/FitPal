@@ -16,8 +16,8 @@ android {
         minSdk = 30
         targetSdk = 35
         // Must increase every release, same as the phone app — see :app's build file.
-        versionCode = 16
-        versionName = "1.9.0"
+        versionCode = 17
+        versionName = "1.9.1"
     }
 
     buildTypes {
