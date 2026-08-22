@@ -68,8 +68,10 @@ import com.fitpal.app.ui.component.AddIngredientDialog
 import com.fitpal.app.ui.component.AiInsightsArea
 import com.fitpal.app.ui.component.AiSourceBadge
 import com.fitpal.app.ui.component.BackdropTheme
+import com.fitpal.app.ui.component.CoachingTipCard
 import com.fitpal.app.ui.component.EditWithAiDialog
 import com.fitpal.app.ui.component.GlassTopBar
+import com.fitpal.app.ui.component.MealContextSelector
 import com.fitpal.app.ui.component.GradientBackdrop
 import com.fitpal.app.ui.component.IngredientsCard
 import com.fitpal.app.ui.component.MealInsightsSection
@@ -221,6 +223,19 @@ fun EntryDetailScreen(
                                     onMealTypeSelected = viewModel::setMealType,
                                     onRename = { showRename = true }
                                 )
+                            }
+                            state.coachingTip?.let { tip ->
+                                item { CoachingTipCard(tip) }
+                            }
+                            item {
+                                Column(modifier = Modifier.fillMaxWidth().glass().padding(16.dp)) {
+                                    Text(
+                                        "Where was this meal? (optional)",
+                                        style = MaterialTheme.typography.labelMedium, color = CreamMuted
+                                    )
+                                    Spacer(Modifier.height(10.dp))
+                                    MealContextSelector(selected = state.context, onSelected = viewModel::setMealContext)
+                                }
                             }
                             item {
                                 IngredientsCard(

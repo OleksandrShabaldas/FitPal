@@ -35,6 +35,10 @@ data class EntryDetailUiState(
     /** The day this entry is logged on — so "copy to date" can center on it. */
     val entryDate: java.time.LocalDate = java.time.LocalDate.now(),
     val ingredients: List<Ingredient> = emptyList(),
+    /** The one-tap situation tag on this entry's meal ("Home"/"Restaurant"/…), or null. */
+    val context: String? = null,
+    /** A meal-aware coaching note the background worker may attach; null when there's nothing useful. */
+    val coachingTip: com.fitpal.app.domain.model.CoachingTip? = null,
     val isLoading: Boolean = true,
     val error: String? = null,
     // AI insights — full detail, cached in the DB so we don't regenerate.
@@ -77,6 +81,30 @@ class EntryDetailViewModel @Inject constructor(
     init {
         loadEntry()
         observeGeneratedInsights()
+        observeMealContextAndTip()
+    }
+
+    /** Keep the meal's situation tag and coaching tip live (the tip is written later by the worker). */
+    private fun observeMealContextAndTip() {
+        viewModelScope.launch {
+            val item = mealRepository.getItemById(entryId) ?: return@launch
+            mealRepository.observeMealLog(item.mealLogId).collect { meal ->
+                _uiState.update {
+                    it.copy(
+                        context = meal?.context,
+                        coachingTip = meal?.let { m -> mealRepository.coachingTipFor(m) }
+                    )
+                }
+            }
+        }
+    }
+
+    /** Set (or clear, by re-tapping) the one-tap situation tag on this entry's meal. */
+    fun setMealContext(context: String?) {
+        val item = _uiState.value.item ?: return
+        val next = if (context == _uiState.value.context) null else context
+        _uiState.update { it.copy(context = next) }
+        viewModelScope.launch { mealRepository.updateMealContext(item.mealLogId, next) }
     }
 
     /**

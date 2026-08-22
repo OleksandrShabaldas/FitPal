@@ -93,12 +93,32 @@ class CustomFoodViewModel @Inject constructor(
         }
     }
 
-    // Typing a value by hand drops the label basis, so a later amount change won't overwrite it.
-    fun onCalories(v: String) { per100Basis = null; _uiState.update { it.copy(calories = v.decimals(), savedToGallery = false) } }
-    fun onProtein(v: String) { per100Basis = null; _uiState.update { it.copy(protein = v.decimals(), savedToGallery = false) } }
-    fun onFat(v: String) { per100Basis = null; _uiState.update { it.copy(fat = v.decimals(), savedToGallery = false) } }
-    fun onCarbs(v: String) { per100Basis = null; _uiState.update { it.copy(carbs = v.decimals(), savedToGallery = false) } }
-    fun onFiber(v: String) { per100Basis = null; _uiState.update { it.copy(fiber = v.decimals(), savedToGallery = false) } }
+    /**
+     * Editing a macro after a snap **re-bases** that macro (from the value + current amount) instead
+     * of throwing the label basis away — so correcting one number doesn't stop the amount field from
+     * rescaling everything. A value typed from scratch (no basis) stays exact, as before.
+     */
+    fun onCalories(v: String) = editMacro(v, { s, x -> s.copy(calories = x) }) { b, p -> b.copy(calories = p) }
+    fun onProtein(v: String) = editMacro(v, { s, x -> s.copy(protein = x) }) { b, p -> b.copy(protein = p) }
+    fun onFat(v: String) = editMacro(v, { s, x -> s.copy(fat = x) }) { b, p -> b.copy(fat = p) }
+    fun onCarbs(v: String) = editMacro(v, { s, x -> s.copy(carbs = x) }) { b, p -> b.copy(carbs = p) }
+    fun onFiber(v: String) = editMacro(v, { s, x -> s.copy(fiber = x) }) { b, p -> b.copy(fiber = p) }
+
+    private fun editMacro(
+        raw: String,
+        setField: (CustomFoodUiState, String) -> CustomFoodUiState,
+        reBase: (Per100, Float) -> Per100
+    ) {
+        val v = raw.decimals()
+        val basis = per100Basis
+        val amount = _uiState.value.amount.toFloatOrNull()
+        // With a label basis, re-derive this macro's per-100 g from the edited value so the amount
+        // field keeps rescaling. Without one (hand-typed food), leave the basis null → exact values.
+        if (basis != null && amount != null && amount > 0f) {
+            per100Basis = reBase(basis, (v.toFloatOrNull() ?: 0f) / amount * 100f)
+        }
+        _uiState.update { setField(it, v).copy(savedToGallery = false) }
+    }
 
     private fun String.decimals() = filter { it.isDigit() || it == '.' }
 
@@ -128,29 +148,32 @@ class CustomFoodViewModel @Inject constructor(
                 return@launch
             }
             val food = runCatching { pipeline.analyze(bitmap, note = LABEL_NOTE) }.getOrNull()?.firstOrNull()
-            val g = food?.totalGrams ?: 0f
-            if (food == null || g <= 0f || food.totalCalories <= 0f) {
+            // The model sets grams to the serving / package size it read — the amount you likely ate.
+            val serving = food?.totalGrams ?: 0f
+            if (food == null || serving <= 0f || food.totalCalories <= 0f) {
                 _uiState.update { it.copy(isReadingLabel = false, labelError = "Couldn't read that label — try again, or type the values in.") }
                 return@launch
             }
+            // Keep a per-100 g basis so changing the amount rescales; pre-fill the amount + values for
+            // the serving size straight from the label, so you rarely have to type or recalc anything.
             val basis = Per100(
-                calories = food.totalCalories / g * 100f,
-                protein = food.totalProtein / g * 100f,
-                fat = food.totalFat / g * 100f,
-                carbs = food.totalCarbs / g * 100f,
-                fiber = food.totalFiber / g * 100f
+                calories = food.totalCalories / serving * 100f,
+                protein = food.totalProtein / serving * 100f,
+                fat = food.totalFat / serving * 100f,
+                carbs = food.totalCarbs / serving * 100f,
+                fiber = food.totalFiber / serving * 100f
             )
             per100Basis = basis
             _uiState.update {
                 it.copy(
                     isReadingLabel = false,
                     name = food.label.ifBlank { it.name },
-                    amount = "100",
-                    calories = clean(basis.calories),
-                    protein = clean(basis.protein),
-                    fat = clean(basis.fat),
-                    carbs = clean(basis.carbs),
-                    fiber = clean(basis.fiber),
+                    amount = clean(serving),
+                    calories = clean(food.totalCalories),
+                    protein = clean(food.totalProtein),
+                    fat = clean(food.totalFat),
+                    carbs = clean(food.totalCarbs),
+                    fiber = clean(food.totalFiber),
                     savedToGallery = false
                 )
             }
@@ -189,7 +212,9 @@ class CustomFoodViewModel @Inject constructor(
                 "plate of prepared food. Ignore any 'identify the foods on the plate' instructions. Read the " +
                 "label and return EXACTLY ONE food item whose per-100 g values (kcalPer100g, proteinPer100g, " +
                 "fatPer100g, carbsPer100g, fiberPer100g) come straight from the label. If the label lists " +
-                "values per serving, convert to per 100 g using the serving size printed on it. Use the " +
+                "values per serving, convert to per 100 g using the serving size printed on it. Set \"grams\" " +
+                "to the amount a person most likely ate: the serving size printed on the label, or the net " +
+                "package weight if it's a single-serving pack; if no serving size is given, use 100. Use the " +
                 "product's name from the label."
     }
 

@@ -382,6 +382,10 @@ object FoodPrompts {
               snack earlier in the day", not "eat brand-X curd at 6pm").
             - If nothing needs changing, say so and stop. Do not manufacture a problem.
             - Judge intake NET of the ACTIVITY & CALORIES BURNED above — credit training days.
+            - Read weight change against training: weight lost during a stretch with little or no
+              exercise (especially resistance training) may be muscle, not just fat — say so. Weight
+              holding steady on a real deficit while training hard can be recomposition (fat down,
+              muscle up), not failure. Use the activity data to judge whether the calorie target fits.
             - Respect the PERSONAL CONTEXT / LIMITATIONS above; never suggest what it rules out.
             - Keep advice realistic and SUSTAINABLE — never a monotonous or extreme diet.
             - ${if (isDaily) "Under 200 words." else "Under 350 words."} Short paragraphs, no bullet lists, no headings.
@@ -449,9 +453,12 @@ object FoodPrompts {
             $framework
 
             Cite the real numbers and foods above; never generic "stick to your goal" advice. Judge
-            intake NET of the activity/calories burned (credit training days). Respect the personal
-            context/limitations (never suggest what it rules out). Keep advice realistic and
-            SUSTAINABLE. Recommend STRATEGIES, not branded products or exact clock-times.
+            intake NET of the activity/calories burned (credit training days). Read weight change
+            against training: weight lost with little/no exercise (especially resistance training) may
+            be muscle, not just fat — flag it; steady weight on a real deficit while training hard can
+            be recomposition, not failure; use the activity data to judge whether the target fits.
+            Respect the personal context/limitations (never suggest what it rules out). Keep advice
+            realistic and SUSTAINABLE. Recommend STRATEGIES, not branded products or exact clock-times.
 
             TONE: a calm, knowledgeable friend — not a fitness influencer, robot, or therapist. Be
             emotionally neutral about food (no moral judgments; calorie-dense ≠ "bad"). NEVER use:

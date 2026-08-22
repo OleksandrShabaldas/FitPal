@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
@@ -13,6 +14,8 @@ import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,9 +29,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -41,6 +46,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -85,6 +91,27 @@ fun BarcodeScreen(
     val fastingGuard = rememberFastingGuard()
     val context = LocalContext.current
     var showDatePicker by remember { mutableStateOf(false) }
+
+    // Pick a photo of a barcode from the gallery and decode it with the same ML Kit scanner the
+    // live camera uses — so a barcode you already have a picture of still works.
+    val pickBarcode = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) {
+            val image = runCatching { InputImage.fromFilePath(context, uri) }.getOrNull()
+            if (image == null) {
+                Toast.makeText(context, "Couldn't open that image", Toast.LENGTH_SHORT).show()
+            } else {
+                BarcodeScanning.getClient().process(image)
+                    .addOnSuccessListener { barcodes ->
+                        val code = barcodes.firstOrNull()?.rawValue
+                        if (!code.isNullOrBlank()) viewModel.onBarcodeScanned(code)
+                        else Toast.makeText(context, "No barcode found in that image", Toast.LENGTH_SHORT).show()
+                    }
+                    .addOnFailureListener {
+                        Toast.makeText(context, "Couldn't read that image", Toast.LENGTH_SHORT).show()
+                    }
+            }
+        }
+    }
 
     LaunchedEffect(state.saved) { if (state.saved) onLogged() }
 
@@ -170,7 +197,12 @@ fun BarcodeScreen(
                         OutlinedButton(onClick = { viewModel.scanAgain() }) { Text("Scan again") }
                     }
 
-                    else -> ScannerCamera(onBarcode = viewModel::onBarcodeScanned)
+                    else -> ScannerCamera(
+                        onBarcode = viewModel::onBarcodeScanned,
+                        onPickFromGallery = {
+                            pickBarcode.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                        }
+                    )
                 }
             }
 
@@ -207,7 +239,7 @@ private fun CenteredMessage(text: String) {
 }
 
 @Composable
-private fun ScannerCamera(onBarcode: (String) -> Unit) {
+private fun ScannerCamera(onBarcode: (String) -> Unit, onPickFromGallery: () -> Unit) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val previewView = remember { PreviewView(context) }
@@ -245,6 +277,15 @@ private fun ScannerCamera(onBarcode: (String) -> Unit) {
         CameraControlEffect(camera, camControl)
         FlashToggle(camControl, hasFlash, Modifier.align(Alignment.TopEnd).padding(16.dp))
         ZoomSlider(camControl, Modifier.align(Alignment.BottomCenter).padding(bottom = 32.dp))
+
+        // Pick an existing photo of a barcode instead of scanning live.
+        IconButton(
+            onClick = onPickFromGallery,
+            modifier = Modifier.align(Alignment.BottomStart).padding(start = 24.dp, bottom = 24.dp).size(52.dp)
+                .background(Color.Black.copy(alpha = 0.4f), CircleShape)
+        ) {
+            Icon(Icons.Default.PhotoLibrary, contentDescription = "Pick barcode from gallery", tint = Color.White, modifier = Modifier.size(26.dp))
+        }
     }
 }
 

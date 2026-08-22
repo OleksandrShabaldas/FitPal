@@ -25,7 +25,6 @@ import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.PhotoCamera
-import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -136,26 +135,16 @@ fun CustomFoodScreen(
                     )
                 }
 
-                // Snap the product's nutrition label — or pick a photo of it — and let the AI fill the values below.
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(
-                        onClick = { showLabelCamera = true },
-                        modifier = Modifier.weight(1f),
-                        enabled = !state.isReadingLabel
-                    ) {
-                        Icon(Icons.Default.PhotoCamera, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text(if (state.isReadingLabel) "Reading…" else "Snap label")
-                    }
-                    OutlinedButton(
-                        onClick = { pickLabel.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-                        modifier = Modifier.weight(1f),
-                        enabled = !state.isReadingLabel
-                    ) {
-                        Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("Gallery")
-                    }
+                // Snap the product's nutrition label (or pick a photo of it from inside the camera)
+                // and let the AI fill the values below.
+                OutlinedButton(
+                    onClick = { showLabelCamera = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !state.isReadingLabel
+                ) {
+                    Icon(Icons.Default.PhotoCamera, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (state.isReadingLabel) "Reading…" else "Snap label")
                 }
 
                 Column(
@@ -222,7 +211,11 @@ fun CustomFoodScreen(
             PhotoCaptureOverlay(
                 tip = "Point at the product's nutrition facts label",
                 onCaptured = { path -> showLabelCamera = false; viewModel.readLabel(path) },
-                onClose = { showLabelCamera = false }
+                onClose = { showLabelCamera = false },
+                onPickFromGallery = {
+                    showLabelCamera = false
+                    pickLabel.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                }
             )
         }
         if (state.isReadingLabel) {

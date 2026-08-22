@@ -1417,12 +1417,21 @@ private fun FastingDayDialog(
                     else -> {
                         val first = breaks.min()
                         val s = schedule.stateAt(first)
+                        // Frame the slip against whichever window edge is nearer: just after the
+                        // window closed reads as a small overrun ("1h after it closed"), while a
+                        // pre-dawn meal reads as time before it reopens ("4h before it opened").
+                        val day = com.fitpal.app.domain.model.FastingSchedule.DAY
+                        val sinceClose = ((first - schedule.eatEndMin) % day + day) % day
+                        val untilOpen = s.minutesLeftInPhase
                         Text(
                             "You broke your fast at ${fastingClockLabel(first)}.",
                             style = MaterialTheme.typography.bodyMedium, color = ScorePoor
                         )
                         Text(
-                            "That was ${fastingCountdownLabel(s.minutesLeftInPhase)} before your window opened at ${fastingClockLabel(s.nextChangeMin)}.",
+                            text = if (sinceClose <= untilOpen)
+                                "That was ${fastingCountdownLabel(sinceClose)} after your window closed at ${fastingClockLabel(schedule.eatEndMin)}."
+                            else
+                                "That was ${fastingCountdownLabel(untilOpen)} before your window opened at ${fastingClockLabel(s.nextChangeMin)}.",
                             style = MaterialTheme.typography.bodySmall, color = CreamMuted
                         )
                     }

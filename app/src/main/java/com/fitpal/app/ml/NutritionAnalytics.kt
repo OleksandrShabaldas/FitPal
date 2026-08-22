@@ -2,6 +2,7 @@ package com.fitpal.app.ml
 
 import com.fitpal.app.data.local.dao.DailyNutritionRow
 import com.fitpal.app.data.local.dao.LoggedFoodRow
+import com.fitpal.app.data.repository.ExerciseRepository
 import com.fitpal.app.data.repository.MealRepository
 import com.fitpal.app.data.repository.SettingsRepository
 import com.fitpal.app.data.repository.WeightRepository
@@ -60,6 +61,15 @@ data class NutritionTargets(
 data class TopFood(val name: String, val count: Int, val avgCalories: Int)
 data class TopMeal(val date: String, val label: String, val totalCalories: Int)
 
+/** Training picture, so the coach can read weight change against effort (fat vs muscle). */
+data class ActivitySummary(
+    val sessionsLast7: Int,
+    val sessionsPrev7: Int,
+    val activeDaysLast7: Int,
+    val avgBurnPerDay: Int,
+    val trend: TrendDirection
+)
+
 /**
  * The pre-computed pattern/trend picture handed to the AI coach so it can reason about whether a
  * day/period is *unusual* and whether it *matters* — questions the raw daily totals can't answer.
@@ -86,7 +96,8 @@ data class NutritionBrief(
     val calorieStreak: Int,
     val todayOutlier: Boolean,
     val consecutiveUnloggedBeforeToday: Int,
-    val targets: NutritionTargets?
+    val targets: NutritionTargets?,
+    val activity: ActivitySummary?
 ) {
     /** True when there's essentially nothing to reason about (brand-new user). */
     val isSparse: Boolean get() = daysWithData < 3
@@ -146,6 +157,13 @@ data class NutritionBrief(
             sb.appendLine("• Streak: $calorieStreak days in a row at/under the calorie target.")
         }
 
+        activity?.let {
+            sb.appendLine(
+                "• Training: ${it.sessionsLast7} session(s) in the last 7 days (${it.activeDaysLast7} active day(s)), " +
+                    "vs ${it.sessionsPrev7} the week before (${it.trend}); avg exercise burn ~${it.avgBurnPerDay} kcal/day."
+            )
+        }
+
         return sb.toString().trim()
     }
 
@@ -167,6 +185,7 @@ data class NutritionBrief(
 class NutritionAnalytics @Inject constructor(
     private val mealRepository: MealRepository,
     private val weightRepository: WeightRepository,
+    private val exerciseRepository: ExerciseRepository,
     private val settingsRepository: SettingsRepository
 ) {
     /**
@@ -213,6 +232,7 @@ class NutritionAnalytics @Inject constructor(
         val streak = calorieStreak(byDate, ref, targets)
         val outlier = if (isDaily && today != null) isOutlier(today.calories, rows, ref) else false
         val unlogged = consecutiveUnloggedBefore(byDate, ref)
+        val activity = computeActivity(from, to, ref)
 
         return NutritionBrief(
             isDaily = isDaily,
@@ -232,7 +252,35 @@ class NutritionAnalytics @Inject constructor(
             calorieStreak = streak,
             todayOutlier = outlier,
             consecutiveUnloggedBeforeToday = unlogged,
-            targets = targets
+            targets = targets,
+            activity = activity
+        )
+    }
+
+    /** Workout sessions this week vs last, active days, and average exercise burn — the effort side. */
+    private suspend fun computeActivity(from: String, to: String, ref: LocalDate): ActivitySummary? {
+        val entries = runCatching { exerciseRepository.entriesInRange(from, to) }.getOrDefault(emptyList())
+        if (entries.isEmpty()) return null
+        fun inRange(dateStr: String, startInclusive: LocalDate, endInclusive: LocalDate): Boolean {
+            val d = runCatching { LocalDate.parse(dateStr) }.getOrNull() ?: return false
+            return !d.isBefore(startInclusive) && !d.isAfter(endInclusive)
+        }
+        val last7 = entries.filter { inRange(it.date, ref.minusDays(6), ref) }
+        val prev7 = entries.filter { inRange(it.date, ref.minusDays(13), ref.minusDays(7)) }
+        val windowDays = (ChronoUnit.DAYS.between(LocalDate.parse(from), ref) + 1).coerceAtLeast(1)
+        val avgBurnPerDay = (entries.sumOf { it.caloriesBurned.toDouble() } / windowDays).roundToInt()
+        val diff = last7.size - prev7.size
+        val trend = when {
+            diff >= 2 -> TrendDirection.RISING
+            diff <= -2 -> TrendDirection.FALLING
+            else -> TrendDirection.STABLE
+        }
+        return ActivitySummary(
+            sessionsLast7 = last7.size,
+            sessionsPrev7 = prev7.size,
+            activeDaysLast7 = last7.map { it.date }.distinct().size,
+            avgBurnPerDay = avgBurnPerDay,
+            trend = trend
         )
     }
 

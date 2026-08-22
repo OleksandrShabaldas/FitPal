@@ -194,14 +194,28 @@ fun MealGroupScreen(
                         item {
                             Column {
                                 val n = state.dishes.size
-                                Text(
-                                    if (n == 1) "1 dish" else "$n dishes",
-                                    style = MaterialTheme.typography.titleMedium, color = Cream
-                                )
-                                Text(
-                                    "${state.totalCalories.toInt()} kcal total",
-                                    style = MaterialTheme.typography.bodySmall, color = CreamMuted
-                                )
+                                val totalGrams = state.dishes.sumOf { it.item.grams.toDouble() }.toFloat()
+                                // Prominent summary: the day-relevant totals big on the right, not buried.
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().glass().padding(16.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            if (n == 1) "1 dish" else "$n dishes",
+                                            style = MaterialTheme.typography.titleMedium, color = Cream
+                                        )
+                                        Text(
+                                            "${totalGrams.toInt()} g total",
+                                            style = MaterialTheme.typography.bodyMedium, color = CreamMuted
+                                        )
+                                    }
+                                    Text(
+                                        "${state.totalCalories.toInt()} kcal",
+                                        style = MaterialTheme.typography.titleLarge, color = GoldLight
+                                    )
+                                }
+                                Spacer(Modifier.height(8.dp))
                                 Text(
                                     "Tap a dish to edit it, or its name to rename it.",
                                     style = MaterialTheme.typography.bodySmall, color = CreamMuted

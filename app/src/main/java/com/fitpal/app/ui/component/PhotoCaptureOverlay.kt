@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Camera
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material3.Button
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -57,7 +58,10 @@ import java.io.File
 fun PhotoCaptureOverlay(
     tip: String,
     onCaptured: (photoPath: String) -> Unit,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    /** When set, a "pick from gallery" button appears next to the shutter so the user can choose an
+     *  existing photo instead of taking one. The caller launches its own image picker here. */
+    onPickFromGallery: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -150,6 +154,18 @@ fun PhotoCaptureOverlay(
                 contentColor = Color(0xFF3A2406)
             ) {
                 Icon(Icons.Default.Camera, contentDescription = "Capture", modifier = Modifier.size(36.dp))
+            }
+
+            // Optional "pick from gallery" — sits beside the shutter so choosing an existing photo
+            // lives in the same place as taking one (no separate button on the screen behind).
+            if (onPickFromGallery != null) {
+                IconButton(
+                    onClick = onPickFromGallery,
+                    modifier = Modifier.align(Alignment.BottomStart).padding(start = 28.dp, bottom = 54.dp).size(52.dp)
+                        .background(Color.Black.copy(alpha = 0.4f), CircleShape)
+                ) {
+                    Icon(Icons.Default.PhotoLibrary, contentDescription = "Pick from gallery", tint = Color.White, modifier = Modifier.size(26.dp))
+                }
             }
         } else {
             Column(
