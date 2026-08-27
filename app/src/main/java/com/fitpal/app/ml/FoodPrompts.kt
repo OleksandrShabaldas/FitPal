@@ -497,6 +497,30 @@ object FoodPrompts {
         PAIR: <one food or drink that complements it nutritionally>
     """.trimIndent()
 
+    /**
+     * Per-item insights for a WHOLE meal in ONE call: a JSON array with one object per food, in the
+     * given order. Replaces N separate [itemInsights] calls (one per dish) so a multi-dish meal costs
+     * a single request instead of hammering the free-tier per-minute limit. [itemsBlock] is the
+     * numbered list of foods; [count] is how many objects the array must contain.
+     */
+    fun batchItemInsights(itemsBlock: String, count: Int): String = """
+        Analyse EACH of these $count foods on its own and return ONE JSON array of exactly $count
+        objects, in the SAME order as listed:
+        $itemsBlock
+
+        Each object has this shape:
+        {"swaps":[{"from":"<the food or one of ITS ingredients>","to":"<healthier option>","why":"<short benefit>"}],
+         "energy":"<one sentence on energy over the next few hours>","energyScore":<1-5>,
+         "mood":"<one sentence on mood impact>","moodScore":<1-5>,
+         "pairings":["<one food or drink that complements it nutritionally>"]}
+        Rules:
+        - Judge each food on its own — do NOT merge them or analyse the meal as a whole.
+        - Every swap's "from" MUST be that food or one of ITS listed ingredients — never something
+          that isn't there; use [] when nothing is worth swapping.
+        - energyScore: 1=heavy/crash → 5=light & energizing. moodScore: 1=drags → 5=lifts.
+        - Reply with ONLY the JSON array of $count objects, same order, nothing else.
+    """.trimIndent()
+
     /** Exercise calorie estimate (used by the exercise screen via raw text). Shared by both engines. */
     fun exerciseEstimate(activity: String, weightKg: Int): String = """
         The user did this exercise: "$activity". Body weight: $weightKg kg.

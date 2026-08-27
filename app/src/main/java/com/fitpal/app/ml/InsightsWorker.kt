@@ -39,32 +39,35 @@ class InsightsWorker(
 
         return try {
             val items = mealRepo.itemsForMeal(mealLogId)
+            // Fill from cache first; collect everything still missing so ALL of it is generated in
+            // ONE batched call (a 4-dish meal = 1 request, not 4 — kinder to the free-tier limit).
+            val toGenerate = mutableListOf<MealLogItemEntity>()
             items.forEach { item ->
                 // Already has an overview (e.g. carried from the photo/describe analysis) — leave it.
                 if (!item.insightsJson.isNullOrBlank()) return@forEach
-
-                val signature = signatureFor(item)
-                val cached = mealRepo.cachedInsights(signature)
+                val cached = mealRepo.cachedInsights(signatureFor(item))
                 if (cached != null) {
                     MealJson.decodeInsights(cached.insightsJson)?.let { mealRepo.saveInsights(item.id, it) }
-                    return@forEach
+                } else {
+                    toGenerate.add(item)
                 }
-
-                val (insights, source) = generator.generate(
-                    name = item.name,
-                    grams = item.grams,
-                    calories = item.calories,
-                    protein = item.protein,
-                    fat = item.fat,
-                    carbs = item.carbs,
-                    fiber = item.fiber,
-                    isDrink = item.isDrink,
-                    ingredients = mealRepo.ingredientsForItem(item).map { it.name }
-                )
-                mealRepo.saveInsights(item.id, insights)
-                mealRepo.cacheInsights(signature, MealJson.encodeInsights(insights))
-                // A saved food keeps its own copy so the collection detail reuses it too.
-                item.galleryFoodId?.let { galleryRepo.saveInsights(it, insights, source) }
+            }
+            if (toGenerate.isNotEmpty()) {
+                val specs = toGenerate.map { item ->
+                    InsightsGenerator.ItemSpec(
+                        name = item.name, grams = item.grams, calories = item.calories,
+                        protein = item.protein, fat = item.fat, carbs = item.carbs, fiber = item.fiber,
+                        isDrink = item.isDrink, ingredients = mealRepo.ingredientsForItem(item).map { it.name }
+                    )
+                }
+                val (insightsList, source) = generator.generateBatch(specs)
+                toGenerate.forEachIndexed { i, item ->
+                    val insights = insightsList.getOrNull(i) ?: return@forEachIndexed
+                    mealRepo.saveInsights(item.id, insights)
+                    mealRepo.cacheInsights(signatureFor(item), MealJson.encodeInsights(insights))
+                    // A saved food keeps its own copy so the collection detail reuses it too.
+                    item.galleryFoodId?.let { galleryRepo.saveInsights(it, insights, source) }
+                }
             }
             // One meal-level coaching tip, judged against the day so far — only when useful.
             runCatching { generateCoachingTip(mealLogId, items) }

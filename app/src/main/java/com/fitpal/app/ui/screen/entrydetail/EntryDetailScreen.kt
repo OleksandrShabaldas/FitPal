@@ -79,7 +79,6 @@ import com.fitpal.app.ui.component.MicronutrientCard
 import com.fitpal.app.ui.component.MicronutrientBars
 import com.fitpal.app.ui.component.RenameDialog
 import com.fitpal.app.ui.component.SegmentedPills
-import com.fitpal.app.ui.theme.CalorieColor
 import com.fitpal.app.ui.theme.CarbColor
 import com.fitpal.app.ui.theme.Cream
 import com.fitpal.app.ui.theme.CreamMuted
@@ -378,10 +377,17 @@ private fun HeaderCard(
                 modifier = Modifier.size(18.dp)
             )
         }
-        Spacer(Modifier.height(6.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Text("${item.grams.toInt()} ${if (item.isDrink) "ml" else "g"}", style = MaterialTheme.typography.bodyLarge, color = CreamMuted)
-            Text("${item.calories.toInt()} kcal", style = MaterialTheme.typography.bodyLarge, color = CalorieColor)
+        Spacer(Modifier.height(8.dp))
+        // Prominent weight + calories, matching the multi-dish meal screen's summary card.
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "${item.grams.toInt()} ${if (item.isDrink) "ml" else "g"}",
+                style = MaterialTheme.typography.bodyMedium, color = CreamMuted, modifier = Modifier.weight(1f)
+            )
+            Text(
+                "${item.calories.toInt()} kcal",
+                style = MaterialTheme.typography.titleLarge, color = GoldLight
+            )
         }
         // Meal category, compact and on one line, right in the header.
         Spacer(Modifier.height(14.dp))

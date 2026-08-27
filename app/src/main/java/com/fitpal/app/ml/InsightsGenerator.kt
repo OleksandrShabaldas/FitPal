@@ -67,4 +67,56 @@ class InsightsGenerator @Inject constructor(
         )
         return insights to source
     }
+
+    /** One food to analyse in a batch. */
+    data class ItemSpec(
+        val name: String,
+        val grams: Float,
+        val calories: Float,
+        val protein: Float,
+        val fat: Float,
+        val carbs: Float,
+        val fiber: Float,
+        val isDrink: Boolean,
+        val ingredients: List<String>
+    )
+
+    /**
+     * Generate per-item insights for a whole meal in ONE model call (see
+     * [FoodPrompts.batchItemInsights]) instead of one call per dish — the health score/factors stay
+     * deterministic per item, only the coaching text is batched. Returns one [MealInsights] per input
+     * (aligned to [specs]) plus the engine that answered. Empty input returns empty.
+     */
+    suspend fun generateBatch(specs: List<ItemSpec>): Pair<List<MealInsights>, AiSource> {
+        if (specs.isEmpty()) return emptyList<MealInsights>() to AiSource.offline()
+        val scored = specs.map {
+            HealthScorer.score(it.calories, it.protein, it.fat, it.carbs, it.fiber, it.grams, it.isDrink)
+        }
+        val itemsBlock = specs.mapIndexed { i, s ->
+            val unit = if (s.isDrink) "ml" else "g"
+            val ing = if (s.ingredients.isEmpty()) "" else " — made of: ${s.ingredients.joinToString(", ")}"
+            "${i + 1}. ${s.name}, ${s.grams.toInt()}$unit, ${s.calories.toInt()} kcal " +
+                "(P${s.protein.toInt()}g F${s.fat.toInt()}g C${s.carbs.toInt()}g Fiber ${s.fiber.toInt()}g)$ing"
+        }.joinToString("\n")
+
+        val prompt = FoodPrompts.batchItemInsights(itemsBlock, specs.size)
+        val (response, source) = pipeline.generateRawTextWithSource(prompt)
+        val present = specs.map { listOf(it.name) + it.ingredients }
+        val parsed = FoodJsonParser.parseBatchItemInsights(response, present)
+
+        val out = specs.indices.map { i ->
+            val ai = parsed.getOrElse(i) { FoodJsonParser.ItemAiText.EMPTY }
+            MealInsights(
+                healthScore = scored[i].score,
+                scoreFactors = scored[i].factors,
+                healthSwaps = ai.swaps,
+                energyImpact = ai.energy,
+                moodImpact = ai.mood,
+                pairingRecommendations = ai.pairings,
+                energyScore = ai.energyScore,
+                moodScore = ai.moodScore
+            )
+        }
+        return out to source
+    }
 }

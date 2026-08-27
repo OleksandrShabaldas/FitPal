@@ -229,6 +229,58 @@ object FoodJsonParser {
         return ContextQuestion(question = question, options = options)
     }
 
+    /** One food's AI text from a batch reply — the score itself is computed deterministically elsewhere. */
+    data class ItemAiText(
+        val swaps: List<HealthSwap>,
+        val energy: String,
+        val energyScore: Int,
+        val mood: String,
+        val moodScore: Int,
+        val pairings: List<String>
+    ) {
+        companion object { val EMPTY = ItemAiText(emptyList(), "", 0, "", 0, emptyList()) }
+    }
+
+    /**
+     * Parse the JSON array from [batchItemInsights][FoodPrompts.batchItemInsights] into one
+     * [ItemAiText] per food, aligned to [presentPerItem] (each item's food name + its ingredients,
+     * for grounding swaps). Always returns exactly `presentPerItem.size` entries — a missing/short
+     * reply yields [ItemAiText.EMPTY] for the gaps, so the deterministic score still shows.
+     */
+    fun parseBatchItemInsights(raw: String, presentPerItem: List<List<String>>): List<ItemAiText> {
+        val arr = firstJsonArray(raw)
+        return presentPerItem.indices.map { i ->
+            val o = arr?.optJSONObject(i) ?: return@map ItemAiText.EMPTY
+            val swaps = o.optJSONArray("swaps")?.let { s ->
+                (0 until s.length()).mapNotNull { j ->
+                    val sw = s.optJSONObject(j) ?: return@mapNotNull null
+                    val from = sw.optString("from").trim()
+                    val to = sw.optString("to").trim()
+                    if (from.isNotEmpty() && to.isNotEmpty()) HealthSwap(from, to, sw.optString("why").trim()) else null
+                }
+            } ?: emptyList()
+            val pairings = o.optJSONArray("pairings")?.let { p ->
+                (0 until p.length()).mapNotNull { j -> p.optString(j).trim().takeIf { it.isNotEmpty() } }
+            } ?: emptyList()
+            ItemAiText(
+                swaps = groundSwaps(swaps, presentPerItem[i]),
+                energy = o.optString("energy").trim(),
+                energyScore = o.optInt("energyScore", 0).coerceIn(0, 5),
+                mood = o.optString("mood").trim(),
+                moodScore = o.optInt("moodScore", 0).coerceIn(0, 5),
+                pairings = pairings
+            )
+        }
+    }
+
+    /** First top-level `[ … ]` in the text, tolerant of prose/code fences around it. */
+    private fun firstJsonArray(raw: String): JSONArray? {
+        val start = raw.indexOf('[')
+        val end = raw.lastIndexOf(']')
+        if (start < 0 || end <= start) return null
+        return runCatching { JSONArray(raw.substring(start, end + 1)) }.getOrNull()
+    }
+
     // ========================== HELPERS ==========================
 
     private fun foodFromObject(obj: JSONObject): DetectedFood? {

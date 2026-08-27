@@ -248,8 +248,23 @@ class HomeViewModel @Inject constructor(
         val today = LocalDate.now()
         val from = today.minusDays(7).format(dateFormat)
         val to = today.minusDays(1).format(dateFormat)
-        mealRepository.getDailyNutritionRange(from, to).map { rows ->
-            HomeCoachTip.weeklyBalance(rows.map { it.calories }, target)
+        // Net of activity, exactly like the Analytics balance card: eaten − burned − target. Ignoring
+        // the burn made an active week (steps + workouts) read as a surplus while it was a deficit.
+        combine(
+            mealRepository.getDailyNutritionRange(from, to),
+            exerciseRepository.getDailyBurnRange(from, to),
+            stepRepository.getDailySteps(from, to),
+            settingsRepository.stepCalorieReductionPercent
+        ) { rows, exBurn, stepRows, trim ->
+            val exMap = exBurn.associate { it.date to it.burned }
+            val stepMap = stepRows.associate { it.date to it.caloriesBurned * (100 - trim) / 100f }
+            val days = rows.map { r ->
+                HomeCoachTip.DayEnergy(
+                    consumed = r.calories,
+                    burned = (exMap[r.date] ?: 0f) + (stepMap[r.date] ?: 0f)
+                )
+            }
+            HomeCoachTip.weeklyBalance(days, target)
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 

@@ -122,25 +122,30 @@ object HomeCoachTip {
     // Weekly balance (pure helper the ViewModel feeds with the trailing week's per-day calories).
     // ----------------------------------------------------------------------------------------------
 
+    /** One prior day's energy: what was eaten and what was burned by steps + workouts. */
+    data class DayEnergy(val consumed: Float, val burned: Float)
+
     /**
-     * Net kcal vs [dailyTarget] across [priorDayCalories] (one entry per logged day in the trailing
-     * window, today excluded). Positive = ran a surplus; negative = banked a deficit.
+     * Net kcal vs [dailyTarget] across [priorDays] (one entry per logged day in the trailing window,
+     * today excluded). Net counts activity: `eaten − burned − target`, summed — the SAME arithmetic
+     * as the Analytics "Calorie balance" card, so the two never disagree. Positive = ran a surplus;
+     * negative = banked a deficit.
      *
-     * Days under [completeFraction] of target are dropped: a half-logged day reads as a huge fake
-     * deficit, which would wrongly tell the user they've "earned" room. Returns `null` until at
-     * least [minDays] reasonably-complete days exist, so the weekly tip only fires on data worth
-     * trusting.
+     * Completeness is judged on FOOD logged (gross [DayEnergy.consumed]) — a day under
+     * [completeFraction] of target is dropped as half-logged — so a genuinely active day (lots of
+     * burn, net low) is NOT mistaken for an incomplete one. Returns `null` until at least [minDays]
+     * reasonably-complete days exist, so the weekly tip only fires on data worth trusting.
      */
     fun weeklyBalance(
-        priorDayCalories: List<Float>,
+        priorDays: List<DayEnergy>,
         dailyTarget: Int,
         minDays: Int = 3,
         completeFraction: Float = 0.4f
     ): Int? {
         if (dailyTarget <= 0) return null
-        val complete = priorDayCalories.filter { it >= dailyTarget * completeFraction }
+        val complete = priorDays.filter { it.consumed >= dailyTarget * completeFraction }
         if (complete.size < minDays) return null
-        return complete.sumOf { (it - dailyTarget).toDouble() }.roundToInt()
+        return complete.sumOf { (it.consumed - it.burned - dailyTarget).toDouble() }.roundToInt()
     }
 
     // ----------------------------------------------------------------------------------------------
