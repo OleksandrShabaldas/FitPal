@@ -6,9 +6,11 @@ import androidx.lifecycle.viewModelScope
 import android.graphics.RectF
 import com.fitpal.app.data.local.entity.MealLogItemEntity
 import com.fitpal.app.data.local.entity.UsdaFoodEntity
+import com.fitpal.app.data.repository.BarcodeRepository
 import com.fitpal.app.data.repository.GalleryRepository
 import com.fitpal.app.data.repository.MealRepository
 import com.fitpal.app.data.repository.NutritionRepository
+import com.fitpal.app.domain.Drinks
 import com.fitpal.app.domain.HealthScorer
 import com.fitpal.app.domain.model.DetectedFood
 import com.fitpal.app.domain.model.Ingredient
@@ -19,14 +21,18 @@ import com.fitpal.app.ml.FoodAnalysisPipeline
 import com.fitpal.app.ml.FoodJsonParser
 import com.fitpal.app.ml.FoodPrompts
 import com.fitpal.app.ml.ModelManager
+import com.fitpal.app.ml.NUTRITION_LABEL_PROMPT
+import com.fitpal.app.ml.decodeUprightBitmap
 import com.fitpal.app.ui.navigation.Screen
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 data class EntryDetailUiState(
@@ -58,6 +64,10 @@ data class EntryDetailUiState(
     val refineError: String? = null,
     /** True once this meal has been saved to the collection (for a confirmation). */
     val savedToCollection: Boolean = false,
+    /** True while a scanned barcode (in the Add-ingredient popup) is being looked up. */
+    val barcodeLookingUp: Boolean = false,
+    /** One-shot toast after adding an ingredient by custom/barcode (e.g. "Added Cola"); then cleared. */
+    val addMessage: String? = null,
     /** One-shot confirmation after "copy to another date" — shown as a toast, then cleared. */
     val copyConfirmation: String? = null,
     val deleted: Boolean = false
@@ -70,7 +80,8 @@ class EntryDetailViewModel @Inject constructor(
     private val nutritionRepository: NutritionRepository,
     private val galleryRepository: GalleryRepository,
     private val pipeline: FoodAnalysisPipeline,
-    private val modelManager: ModelManager
+    private val modelManager: ModelManager,
+    private val barcodeRepository: BarcodeRepository
 ) : ViewModel() {
 
     private val entryId: Long = savedStateHandle.get<Long>(Screen.EntryDetail.ARG_ENTRY_ID) ?: 0L
@@ -264,6 +275,50 @@ class EntryDetailViewModel @Inject constructor(
             _uiState.update { it.copy(searchQuery = "", searchResults = emptyList(), isAiAddingIngredient = false) }
             persistIngredients(current)
         }
+    }
+
+    fun clearAddMessage() = _uiState.update { it.copy(addMessage = null) }
+
+    /** Add a hand-entered ingredient (typed values, or read from a snapped label) to this meal. */
+    fun addCustomIngredient(ingredient: Ingredient) {
+        if (ingredient.name.isBlank()) return
+        persistIngredients(_uiState.value.ingredients + ingredient)
+        _uiState.update { it.copy(addMessage = "Added ${ingredient.name}") }
+    }
+
+    /** Look up a scanned barcode and add the product to this meal as an ingredient. */
+    fun scanBarcodeIngredient(code: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(barcodeLookingUp = true) }
+            val product = runCatching { barcodeRepository.lookup(code) }.getOrNull()
+            _uiState.update { it.copy(barcodeLookingUp = false) }
+            if (product == null) {
+                _uiState.update { it.copy(addMessage = "That barcode isn't in any database — add it on the Custom tab.") }
+                return@launch
+            }
+            val drink = Drinks.isDrink(product.description, product.foodCategory)
+            addCustomIngredient(
+                Ingredient(
+                    name = product.description,
+                    grams = product.commonServingGrams ?: 100f,
+                    caloriesPer100g = product.caloriesPer100g,
+                    proteinPer100g = product.proteinPer100g,
+                    fatPer100g = product.fatPer100g,
+                    carbsPer100g = product.carbsPer100g,
+                    waterMlPer100g = if (drink) Drinks.estimateWaterPer100(product.carbsPer100g, product.proteinPer100g, product.fatPer100g) else 0f,
+                    isDrink = drink
+                )
+            )
+        }
+    }
+
+    /**
+     * Read a snapped nutrition-facts label with the AI (Custom tab) and return the single food it read,
+     * or null if it couldn't. Shares the decode + prompt with the Custom food screen (NutritionLabel.kt).
+     */
+    suspend fun readNutritionLabel(path: String): DetectedFood? {
+        val bitmap = withContext(Dispatchers.IO) { decodeUprightBitmap(path) } ?: return null
+        return runCatching { pipeline.analyze(bitmap, note = NUTRITION_LABEL_PROMPT) }.getOrNull()?.firstOrNull()
     }
 
     /**

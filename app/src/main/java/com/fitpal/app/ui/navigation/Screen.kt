@@ -13,17 +13,7 @@ sealed class Screen(val route: String) {
     data object Search : Screen("search")
     data object Camera : Screen("camera")
     data object Gallery : Screen("gallery")
-
-    /**
-     * The meal builder — search/AI-describe, custom values, or barcode, all as tabs, building a meal
-     * of one or more foods. [startTab] picks which tab it opens on (SEARCH/CUSTOM/BARCODE) so the
-     * "Search foods" and "Custom food" entry tiles each land on their own method.
-     */
-    data object ManualEntry : Screen("manual_entry?startTab={startTab}") {
-        const val ARG_START_TAB = "startTab"
-        fun buildRoute(startTab: String? = null): String =
-            if (startTab == null) "manual_entry" else "manual_entry?startTab=$startTab"
-    }
+    data object ManualEntry : Screen("manual_entry")
     data object CustomFood : Screen("custom_food?barcode={barcode}") {
         const val ARG_BARCODE = "barcode"
         /** Optionally pre-link the custom food to a scanned barcode (so the next scan finds it). */

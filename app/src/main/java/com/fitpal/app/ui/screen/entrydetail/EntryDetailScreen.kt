@@ -88,6 +88,24 @@ import com.fitpal.app.ui.theme.GoldLight
 import com.fitpal.app.ui.theme.ProteinColor
 import com.fitpal.app.ui.theme.glass
 import com.fitpal.app.ui.theme.glassSoft
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.core.content.ContextCompat
+import com.fitpal.app.ui.component.AddIngredientTab
+import com.fitpal.app.ui.component.AddIngredientTabsDialog
+import com.fitpal.app.ui.component.BarcodeScannerView
+import com.fitpal.app.ui.component.CustomEntryState
+import com.fitpal.app.ui.component.PhotoCaptureOverlay
+import com.fitpal.app.ui.component.copyLabelToCache
+import com.google.mlkit.vision.barcode.BarcodeScanning
+import com.google.mlkit.vision.common.InputImage
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun EntryDetailScreen(
@@ -105,6 +123,61 @@ fun EntryDetailScreen(
     var showCopyPicker by remember { mutableStateOf(false) }
     var showEditWithAi by remember { mutableStateOf(false) }
     var showRename by remember { mutableStateOf(false) }
+
+    // "Add ingredient" popup: which tab, the Custom form, and the two full-screen cameras (barcode
+    // scan + label snap). The form/tab are hoisted so they survive the popup closing while a camera
+    // is open, then reopening. The cameras are rendered at the screen root (below), so the popup is
+    // closed while one is up and reopened after.
+    val scope = rememberCoroutineScope()
+    val customForm = remember { CustomEntryState() }
+    var addTab by remember { mutableStateOf(AddIngredientTab.DATABASE) }
+    var showScanner by remember { mutableStateOf(false) }
+    var showLabelCamera by remember { mutableStateOf(false) }
+    var hasCamera by remember {
+        mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
+    }
+    val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        hasCamera = granted
+        if (granted) showScanner = true
+    }
+    fun openScanner() { if (hasCamera) showScanner = true else cameraPermission.launch(Manifest.permission.CAMERA) }
+    fun readLabel(path: String) {
+        scope.launch {
+            customForm.isReadingLabel = true
+            val food = viewModel.readNutritionLabel(path)
+            customForm.isReadingLabel = false
+            if (food != null && food.totalGrams > 0f && food.totalCalories > 0f) customForm.fillFromLabel(food)
+            else android.widget.Toast.makeText(context, "Couldn't read that label — try again, or type the values in.", android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
+    val pickLabel = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) scope.launch {
+            val path = withContext(Dispatchers.IO) { copyLabelToCache(context, uri) }
+            showAddDialog = true
+            if (path != null) readLabel(path)
+            else android.widget.Toast.makeText(context, "Couldn't open that image", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+    val pickBarcode = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) {
+            val image = runCatching { InputImage.fromFilePath(context, uri) }.getOrNull()
+            if (image == null) android.widget.Toast.makeText(context, "Couldn't open that image", android.widget.Toast.LENGTH_SHORT).show()
+            else BarcodeScanning.getClient().process(image)
+                .addOnSuccessListener { codes ->
+                    val code = codes.firstOrNull()?.rawValue
+                    if (!code.isNullOrBlank()) viewModel.scanBarcodeIngredient(code)
+                    else android.widget.Toast.makeText(context, "No barcode found in that image", android.widget.Toast.LENGTH_SHORT).show()
+                }
+                .addOnFailureListener { android.widget.Toast.makeText(context, "Couldn't read that image", android.widget.Toast.LENGTH_SHORT).show() }
+        }
+    }
+
+    LaunchedEffect(state.addMessage) {
+        state.addMessage?.let {
+            android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_SHORT).show()
+            viewModel.clearAddMessage()
+        }
+    }
 
     // Close the AI-edit dialog once the re-check lands (or report that it came back empty).
     LaunchedEffect(state.isRefiningWithAi) {
@@ -139,6 +212,7 @@ fun EntryDetailScreen(
         )
     }
 
+    Box(modifier = Modifier.fillMaxSize()) {
     GradientBackdrop(theme = BackdropTheme.TODAY) {
         Column(modifier = Modifier.fillMaxSize()) {
             GlassTopBar(
@@ -271,6 +345,39 @@ fun EntryDetailScreen(
         }
     }
 
+        // Full-screen cameras for the Add-ingredient popup (barcode scan + label snap). Rendered here,
+        // above the content, while the popup is closed; the popup reopens afterward.
+        if (showScanner) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                BarcodeScannerView(
+                    onBarcode = { code -> showScanner = false; viewModel.scanBarcodeIngredient(code) },
+                    onPickFromGallery = {
+                        showScanner = false
+                        pickBarcode.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                    }
+                )
+                IconButton(
+                    onClick = { showScanner = false; showAddDialog = true },
+                    modifier = Modifier.align(Alignment.TopStart).padding(16.dp).size(48.dp)
+                        .background(Color.Black.copy(alpha = 0.4f), CircleShape)
+                ) {
+                    Icon(Icons.Default.Close, contentDescription = "Close scanner", tint = Color.White)
+                }
+            }
+        }
+        if (showLabelCamera) {
+            PhotoCaptureOverlay(
+                tip = "Point at the product's nutrition facts label",
+                onCaptured = { path -> showLabelCamera = false; showAddDialog = true; readLabel(path) },
+                onClose = { showLabelCamera = false; showAddDialog = true },
+                onPickFromGallery = {
+                    showLabelCamera = false
+                    pickLabel.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                }
+            )
+        }
+    }
+
     if (showRename) {
         RenameDialog(
             currentName = state.item?.name.orEmpty(),
@@ -311,7 +418,9 @@ fun EntryDetailScreen(
             if (state.isAiAddingIngredient) aiStarted = true
             else if (aiStarted) { aiStarted = false; showAddDialog = false }
         }
-        AddIngredientDialog(
+        AddIngredientTabsDialog(
+            selectedTab = addTab,
+            onTabChange = { addTab = it },
             query = state.searchQuery,
             results = state.searchResults,
             isDrink = state.item?.isDrink == true,
@@ -319,6 +428,11 @@ fun EntryDetailScreen(
             onQueryChange = viewModel::onSearchQueryChange,
             onPick = { food -> viewModel.addIngredient(food); showAddDialog = false },
             onAiAdd = { text -> viewModel.addIngredientWithAi(text) },
+            customForm = customForm,
+            onAddCustom = { viewModel.addCustomIngredient(it); showAddDialog = false },
+            onSnapLabel = { showAddDialog = false; showLabelCamera = true },
+            barcodeLookingUp = state.barcodeLookingUp,
+            onScanBarcode = { showAddDialog = false; openScanner() },
             onDismiss = { viewModel.clearSearch(); showAddDialog = false }
         )
     }
