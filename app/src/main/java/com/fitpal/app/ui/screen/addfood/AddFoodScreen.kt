@@ -138,8 +138,8 @@ fun AddFoodScreen(
 
                 SectionLabel("More ways")
                 WideTile(Icons.Default.Bookmark, "Saved foods", "Your bookmarked collection", onClick = onSelectSaved)
-                WideTile(Icons.Default.Search, "Search foods", "Find any food — online & imported", onClick = onManualEntry)
-                WideTile(Icons.Default.Edit, "Custom food", "Type in your own calories & macros", onClick = onCustomFood)
+                WideTile(Icons.Default.Search, "Search foods", "Search, describe or scan — build a meal", onClick = onManualEntry)
+                WideTile(Icons.Default.Edit, "Custom food", "Type your own values or snap a label", onClick = onCustomFood)
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),

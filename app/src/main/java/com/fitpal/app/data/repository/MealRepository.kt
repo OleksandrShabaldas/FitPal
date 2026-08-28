@@ -379,7 +379,11 @@ class MealRepository @Inject constructor(
      */
     suspend fun copyItemToDate(item: MealLogItemEntity, date: String, mealType: String? = null) {
         val type = mealType ?: mealLogDao.getMealTypeForItem(item.id) ?: defaultMealType()
-        val mealLog = MealLogEntity(date = date, mealType = type)
+        // Carry the coach's note from the item's meal onto the copy — copying is to a nearby day, so a
+        // day-relative note stays sensible, and losing it on every copy was the complaint. (Copies go
+        // straight to the DAO without enqueueing InsightsWorker, so nothing regenerates over it.)
+        val coachingTipJson = mealLogDao.getMealLogById(item.mealLogId)?.coachingTipJson
+        val mealLog = MealLogEntity(date = date, mealType = type, coachingTipJson = coachingTipJson)
         mealLogDao.logMealWithItems(mealLog, listOf(item.copy(id = 0, mealLogId = 0)))
     }
 
@@ -430,7 +434,11 @@ class MealRepository @Inject constructor(
             date = date,
             mealType = type,
             name = mealLogDao.getMealName(mealLogId),
-            context = original?.context
+            context = original?.context,
+            // Carry the coach's note too — a copy of the meal keeps its note (it's judged against the
+            // day, and a copy lands on a nearby day, so it stays relevant). Copies bypass
+            // InsightsWorker, so nothing overwrites it.
+            coachingTipJson = original?.coachingTipJson
         )
         mealLogDao.logMealWithItems(mealLog, items.map { it.copy(id = 0, mealLogId = 0) })
     }

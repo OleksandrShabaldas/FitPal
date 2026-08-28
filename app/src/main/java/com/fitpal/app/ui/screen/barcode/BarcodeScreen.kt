@@ -6,16 +6,6 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.camera.core.Camera
-import androidx.camera.core.CameraSelector
-import androidx.camera.core.ExperimentalGetImage
-import androidx.camera.core.ImageAnalysis
-import androidx.camera.core.ImageProxy
-import androidx.camera.core.Preview
-import androidx.camera.lifecycle.ProcessCameraProvider
-import androidx.camera.view.PreviewView
-import androidx.compose.foundation.background
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,16 +19,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -46,21 +33,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fitpal.app.ui.component.BackdropTheme
-import com.fitpal.app.ui.component.CameraControlEffect
-import com.fitpal.app.ui.component.FlashToggle
-import com.fitpal.app.ui.component.ZoomSlider
-import com.fitpal.app.ui.component.pinchZoom
-import com.fitpal.app.ui.component.rememberCameraControlState
+import com.fitpal.app.ui.component.BarcodeScannerView
 import com.fitpal.app.ui.component.DatePickerDialog
 import com.fitpal.app.ui.component.EditableFoodItemRow
 import com.fitpal.app.ui.component.GlassTopBar
@@ -74,7 +54,6 @@ import com.fitpal.app.ui.theme.Cream
 import com.fitpal.app.ui.theme.CreamMuted
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
-import java.util.concurrent.Executors
 
 @Composable
 fun BarcodeScreen(
@@ -197,7 +176,7 @@ fun BarcodeScreen(
                         OutlinedButton(onClick = { viewModel.scanAgain() }) { Text("Scan again") }
                     }
 
-                    else -> ScannerCamera(
+                    else -> BarcodeScannerView(
                         onBarcode = viewModel::onBarcodeScanned,
                         onPickFromGallery = {
                             pickBarcode.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
@@ -238,85 +217,3 @@ private fun CenteredMessage(text: String) {
     }
 }
 
-@Composable
-private fun ScannerCamera(onBarcode: (String) -> Unit, onPickFromGallery: () -> Unit) {
-    val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
-    val previewView = remember { PreviewView(context) }
-    val camControl = rememberCameraControlState()
-    var camera by remember { mutableStateOf<Camera?>(null) }
-    var hasFlash by remember { mutableStateOf(false) }
-
-    Box(modifier = Modifier.fillMaxSize()) {
-        AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize().pinchZoom(camControl))
-
-        DisposableEffect(Unit) {
-            val executor = Executors.newSingleThreadExecutor()
-            val analysis = ImageAnalysis.Builder()
-                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                .build()
-            analysis.setAnalyzer(executor, BarcodeAnalyzer(onBarcode))
-            val providerFuture = ProcessCameraProvider.getInstance(context)
-            providerFuture.addListener({
-                val provider = providerFuture.get()
-                val preview = Preview.Builder().build().also { it.setSurfaceProvider(previewView.surfaceProvider) }
-                try {
-                    provider.unbindAll()
-                    val cam = provider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis)
-                    camera = cam
-                    hasFlash = cam.cameraInfo.hasFlashUnit()
-                } catch (_: Exception) {
-                }
-            }, ContextCompat.getMainExecutor(context))
-            onDispose {
-                executor.shutdown()
-                try { providerFuture.get().unbindAll() } catch (_: Exception) {}
-            }
-        }
-
-        CameraControlEffect(camera, camControl)
-        FlashToggle(camControl, hasFlash, Modifier.align(Alignment.TopEnd).padding(16.dp))
-        ZoomSlider(camControl, Modifier.align(Alignment.BottomCenter).padding(bottom = 32.dp))
-
-        // Pick an existing photo of a barcode instead of scanning live.
-        IconButton(
-            onClick = onPickFromGallery,
-            modifier = Modifier.align(Alignment.BottomStart).padding(start = 24.dp, bottom = 24.dp).size(52.dp)
-                .background(Color.Black.copy(alpha = 0.4f), CircleShape)
-        ) {
-            Icon(Icons.Default.PhotoLibrary, contentDescription = "Pick barcode from gallery", tint = Color.White, modifier = Modifier.size(26.dp))
-        }
-    }
-}
-
-@OptIn(ExperimentalGetImage::class)
-private class BarcodeAnalyzer(
-    private val onBarcode: (String) -> Unit
-) : ImageAnalysis.Analyzer {
-    private val scanner = BarcodeScanning.getClient()
-
-    @Volatile
-    private var done = false
-
-    override fun analyze(imageProxy: ImageProxy) {
-        if (done) {
-            imageProxy.close()
-            return
-        }
-        val mediaImage = imageProxy.image
-        if (mediaImage == null) {
-            imageProxy.close()
-            return
-        }
-        val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
-        scanner.process(image)
-            .addOnSuccessListener { barcodes ->
-                val code = barcodes.firstOrNull()?.rawValue
-                if (!code.isNullOrBlank() && !done) {
-                    done = true
-                    onBarcode(code)
-                }
-            }
-            .addOnCompleteListener { imageProxy.close() }
-    }
-}

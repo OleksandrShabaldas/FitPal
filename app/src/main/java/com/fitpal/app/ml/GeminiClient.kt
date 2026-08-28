@@ -5,7 +5,10 @@ import android.util.Base64
 import android.util.Log
 import com.fitpal.app.data.repository.SettingsRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -156,8 +159,14 @@ class GeminiClient @Inject constructor(
                 }
                 connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
 
-                onProgress("Waiting for the AI to reply…")
-                val code = connection.responseCode
+                // Fetching the response code blocks until the model has finished thinking + answering
+                // — that's the long, silent minute(s) the user stares at. Tick a live elapsed timer +
+                // rotating reassurance on a *separate* thread while this thread is blocked, so the UI
+                // shows something is actually happening instead of one frozen "waiting…" line.
+                // (Bind to a non-null local first — the heartbeat lambda captures it, and a captured
+                // nullable `var` can't be smart-cast.)
+                val conn = connection
+                val code = awaitWithHeartbeat(onProgress) { conn.responseCode }
                 when {
                     code == 429 -> {
                         val err = runCatching { connection.errorStream?.bufferedReader()?.use { it.readText() } }.getOrNull()
@@ -226,6 +235,41 @@ class GeminiClient @Inject constructor(
         if (errorBody.isNullOrBlank()) return false
         val s = errorBody.lowercase().replace(" ", "")
         return s.contains("perday") || s.contains("requestsperday")
+    }
+
+    /**
+     * Run a blocking [block] (the `connection.responseCode` wait) while a heartbeat ticks progress on
+     * a *separate* thread. The network read blocks its IO thread the whole time; the ticker runs on
+     * [Dispatchers.Default] so it keeps updating an elapsed-time message regardless. Cancelled the
+     * instant [block] returns (or throws), so it never outlives the wait.
+     */
+    private suspend fun <T> awaitWithHeartbeat(onProgress: (String) -> Unit, block: () -> T): T = coroutineScope {
+        val start = System.currentTimeMillis()
+        onProgress(waitingMessage(0))
+        val ticker = launch(Dispatchers.Default) {
+            while (isActive) {
+                delay(HEARTBEAT_MS)
+                onProgress(waitingMessage(((System.currentTimeMillis() - start) / 1000).toInt()))
+            }
+        }
+        try {
+            block()
+        } finally {
+            ticker.cancel()
+        }
+    }
+
+    /**
+     * The live "still working" line during the wait: a real elapsed-seconds count plus a phrase that
+     * escalates with time, so a long wait reads as steady progress (and sets the expectation that a
+     * deep look can take a minute) instead of a single frozen "waiting…".
+     */
+    private fun waitingMessage(seconds: Int): String = when {
+        seconds < 8 -> "Waiting for the AI to reply… (${seconds}s)"
+        seconds < 22 -> "The AI is working through it… (${seconds}s)"
+        seconds < 45 -> "Still going — a careful look takes a moment… (${seconds}s)"
+        seconds < 90 -> "Deep analysis — nearly there… (${seconds}s)"
+        else -> "Almost done — thanks for hanging on… (${seconds}s)"
     }
 
     private fun buildRequest(
@@ -319,5 +363,8 @@ class GeminiClient @Inject constructor(
         // of extra waiting before we fall back to the on-device model).
         private const val MAX_ATTEMPTS = 3
         private const val RETRY_BACKOFF_MS = 1_500L
+
+        // How often the "still working…" progress line refreshes its elapsed count during the wait.
+        private const val HEARTBEAT_MS = 2_000L
     }
 }

@@ -8,6 +8,8 @@ import com.fitpal.app.data.repository.MealRepository
 import com.fitpal.app.data.repository.NutritionRepository
 import com.fitpal.app.domain.MealLogContext
 import com.fitpal.app.domain.model.Ingredient
+import com.fitpal.app.ml.NUTRITION_LABEL_PROMPT
+import com.fitpal.app.ml.decodeUprightBitmap
 import com.fitpal.app.ui.navigation.Screen
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -142,12 +144,12 @@ class CustomFoodViewModel @Inject constructor(
     fun readLabel(photoPath: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isReadingLabel = true, labelError = null) }
-            val bitmap = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { decodeUpright(photoPath) }
+            val bitmap = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { decodeUprightBitmap(photoPath) }
             if (bitmap == null) {
                 _uiState.update { it.copy(isReadingLabel = false, labelError = "Couldn't read that photo — try again.") }
                 return@launch
             }
-            val food = runCatching { pipeline.analyze(bitmap, note = LABEL_NOTE) }.getOrNull()?.firstOrNull()
+            val food = runCatching { pipeline.analyze(bitmap, note = NUTRITION_LABEL_PROMPT) }.getOrNull()?.firstOrNull()
             // The model sets grams to the serving / package size it read — the amount you likely ate.
             val serving = food?.totalGrams ?: 0f
             if (food == null || serving <= 0f || food.totalCalories <= 0f) {
@@ -178,44 +180,6 @@ class CustomFoodViewModel @Inject constructor(
                 )
             }
         }
-    }
-
-    /** Decode a captured photo file, downsampled and rotated upright (from its EXIF orientation). */
-    private fun decodeUpright(path: String, maxDim: Int = 1600): android.graphics.Bitmap? {
-        val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        android.graphics.BitmapFactory.decodeFile(path, bounds)
-        if (bounds.outWidth <= 0) return null
-        var sample = 1
-        while (bounds.outWidth / (sample * 2) >= maxDim || bounds.outHeight / (sample * 2) >= maxDim) sample *= 2
-        val bmp = android.graphics.BitmapFactory.decodeFile(
-            path, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample }
-        ) ?: return null
-        val orientation = runCatching {
-            android.media.ExifInterface(path).getAttributeInt(
-                android.media.ExifInterface.TAG_ORIENTATION, android.media.ExifInterface.ORIENTATION_NORMAL
-            )
-        }.getOrDefault(android.media.ExifInterface.ORIENTATION_NORMAL)
-        val degrees = when (orientation) {
-            android.media.ExifInterface.ORIENTATION_ROTATE_90 -> 90f
-            android.media.ExifInterface.ORIENTATION_ROTATE_180 -> 180f
-            android.media.ExifInterface.ORIENTATION_ROTATE_270 -> 270f
-            else -> 0f
-        }
-        if (degrees == 0f) return bmp
-        val m = android.graphics.Matrix().apply { postRotate(degrees) }
-        return android.graphics.Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, true)
-    }
-
-    private companion object {
-        const val LABEL_NOTE =
-            "IMPORTANT: this photo is the NUTRITION FACTS panel of ONE packaged product — it is NOT a " +
-                "plate of prepared food. Ignore any 'identify the foods on the plate' instructions. Read the " +
-                "label and return EXACTLY ONE food item whose per-100 g values (kcalPer100g, proteinPer100g, " +
-                "fatPer100g, carbsPer100g, fiberPer100g) come straight from the label. If the label lists " +
-                "values per serving, convert to per 100 g using the serving size printed on it. Set \"grams\" " +
-                "to the amount a person most likely ate: the serving size printed on the label, or the net " +
-                "package weight if it's a single-serving pack; if no serving size is given, use 100. Use the " +
-                "product's name from the label."
     }
 
     /**

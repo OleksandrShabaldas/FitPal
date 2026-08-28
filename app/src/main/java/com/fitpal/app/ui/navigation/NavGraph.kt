@@ -220,8 +220,8 @@ fun FitPalNavHost(
                     onDescribeToAI = { navController.navigate(Screen.DescribeFood.route) },
                     onScanBarcode = { navController.navigate(Screen.Barcode.route) },
                     onSelectSaved = { navController.navigate(Screen.Gallery.route) },
-                    onManualEntry = { navController.navigate(Screen.ManualEntry.route) },
-                    onCustomFood = { navController.navigate(Screen.CustomFood.buildRoute()) },
+                    onManualEntry = { navController.navigate(Screen.ManualEntry.buildRoute("SEARCH")) },
+                    onCustomFood = { navController.navigate(Screen.ManualEntry.buildRoute("CUSTOM")) },
                     onLogExercise = { navController.navigate(Screen.LogExercise.route) },
                     onLogged = goHome,
                     onBack = safeBack
@@ -271,7 +271,16 @@ fun FitPalNavHost(
                 GalleryFoodDetailScreen(onBack = safeBack, onLogged = goHome)
             }
 
-            composable(Screen.ManualEntry.route) {
+            composable(
+                route = Screen.ManualEntry.route,
+                arguments = listOf(
+                    navArgument(Screen.ManualEntry.ARG_START_TAB) {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    }
+                )
+            ) {
                 ManualEntryScreen(
                     onLogged = goHome,
                     onBack = safeBack
@@ -297,7 +306,7 @@ fun FitPalNavHost(
             composable(Screen.DescribeFood.route) {
                 DescribeFoodScreen(
                     onLogged = goHome,
-                    onGoToManual = { navController.navigate(Screen.ManualEntry.route) },
+                    onGoToManual = { navController.navigate(Screen.ManualEntry.buildRoute()) },
                     onSetupModel = { navController.navigate(Screen.ModelSetup.route) },
                     onBack = safeBack
                 )

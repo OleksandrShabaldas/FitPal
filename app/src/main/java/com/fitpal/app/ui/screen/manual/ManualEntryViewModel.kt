@@ -1,24 +1,34 @@
 package com.fitpal.app.ui.screen.manual
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fitpal.app.data.local.entity.UsdaFoodEntity
+import com.fitpal.app.data.repository.BarcodeRepository
 import com.fitpal.app.data.repository.GalleryRepository
 import com.fitpal.app.data.repository.MealRepository
 import com.fitpal.app.data.repository.NutritionRepository
 import com.fitpal.app.data.repository.SettingsRepository
+import com.fitpal.app.domain.Drinks
 import com.fitpal.app.domain.MealLogContext
+import com.fitpal.app.domain.model.DetectedFood
 import com.fitpal.app.domain.model.DietaryWarning
 import com.fitpal.app.domain.model.Ingredient
 import com.fitpal.app.domain.model.ServingPreset
 import com.fitpal.app.ml.DietaryGate
+import com.fitpal.app.ml.FoodAnalysisPipeline
+import com.fitpal.app.ml.NUTRITION_LABEL_PROMPT
+import com.fitpal.app.ml.decodeUprightBitmap
+import com.fitpal.app.ui.navigation.Screen
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 /**
@@ -45,6 +55,9 @@ data class DraftItem(
     }
 }
 
+/** The three ways to add a food to the meal, shown as tabs in the builder. */
+enum class AddTab { SEARCH, CUSTOM, BARCODE }
+
 data class ManualEntryUiState(
     val query: String = "",
     val searchResults: List<UsdaFoodEntity> = emptyList(),
@@ -54,23 +67,48 @@ data class ManualEntryUiState(
     /** Names of draft items already saved to the collection (for the filled-bookmark state). */
     val savedNames: Set<String> = emptySet(),
     /** Pending dietary-rule warning ("near your dessert limit — log anyway?"); null when none. */
-    val dietaryWarning: DietaryWarning? = null
+    val dietaryWarning: DietaryWarning? = null,
+    /** Which add method is showing (Search / Custom / Barcode). */
+    val activeTab: AddTab = AddTab.SEARCH,
+    /** True while a "describe to AI" call (on the Search tab) is running. */
+    val isDescribing: Boolean = false,
+    /** True while a scanned barcode is being looked up. */
+    val barcodeLookingUp: Boolean = false,
+    /** True when the last scanned barcode wasn't in any database (offer the Custom tab instead). */
+    val barcodeNotFound: Boolean = false,
+    /** The last barcode scanned, so "not found → add custom" can pre-fill / explain. */
+    val lastScannedCode: String? = null,
+    /** One-shot toast message (e.g. "Added Cola", or an AI-describe miss); cleared after shown. */
+    val message: String? = null
 ) {
     val totalCalories: Float get() = draft.sumOf { it.total.calories.toDouble() }.toFloat()
 }
 
 @HiltViewModel
 class ManualEntryViewModel @Inject constructor(
+    savedStateHandle: SavedStateHandle,
     private val nutritionRepository: NutritionRepository,
     private val mealRepository: MealRepository,
     private val galleryRepository: GalleryRepository,
     private val settingsRepository: SettingsRepository,
     private val dietaryGate: DietaryGate,
+    private val barcodeRepository: BarcodeRepository,
+    private val pipeline: FoodAnalysisPipeline,
     mealLogContext: MealLogContext
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(ManualEntryUiState())
+    // Which tab to open on — the "Custom food" tile lands on Custom, "Search foods" on Search.
+    private val startTab: AddTab = runCatching {
+        savedStateHandle.get<String>(Screen.ManualEntry.ARG_START_TAB)?.let { AddTab.valueOf(it) }
+    }.getOrNull() ?: AddTab.SEARCH
+
+    private val _uiState = MutableStateFlow(ManualEntryUiState(activeTab = startTab))
     val uiState: StateFlow<ManualEntryUiState> = _uiState
+
+    /** Switch the add-method tab (and clear a stale "barcode not found" state). */
+    fun setTab(tab: AddTab) = _uiState.update { it.copy(activeTab = tab, barcodeNotFound = false) }
+
+    fun clearMessage() = _uiState.update { it.copy(message = null) }
 
     val servingPresets: StateFlow<List<ServingPreset>> = settingsRepository.mealPresets
     val drinkPresets: StateFlow<List<ServingPreset>> = settingsRepository.drinkPresets
@@ -201,6 +239,110 @@ class ManualEntryViewModel @Inject constructor(
     fun clearSearch() {
         searchJob?.cancel()
         _uiState.update { it.copy(query = "", searchResults = emptyList()) }
+    }
+
+    // ---- Add via "describe to AI" (Search tab) ----
+
+    /**
+     * Describe a food to the AI in plain words and add whatever it returns to the meal — the same
+     * pipeline the Describe-to-AI screen uses, so an off-database food is still one tap. Each returned
+     * dish becomes one meal item.
+     */
+    fun describeToAi(text: String) {
+        val query = text.trim()
+        if (query.isBlank()) return
+        searchJob?.cancel()
+        viewModelScope.launch {
+            _uiState.update { it.copy(isDescribing = true) }
+            val foods = runCatching { pipeline.describeMeal(query) }.getOrDefault(emptyList())
+            val newDrafts = foods
+                .filter { it.totalCalories > 0f || it.ingredients.isNotEmpty() }
+                .map { DraftItem(it.asSingleIngredient(), portionEdited = true) }
+            _uiState.update {
+                if (newDrafts.isEmpty()) it.copy(isDescribing = false, message = "The AI couldn't work that out — try wording it differently, or use the Custom tab.")
+                else it.copy(draft = it.draft + newDrafts, isDescribing = false, query = "", searchResults = emptyList())
+            }
+        }
+    }
+
+    // ---- Add via barcode (Barcode tab) ----
+
+    /** Look a scanned barcode up (Open Food Facts / local DB) and add the product to the meal. */
+    fun scanBarcode(code: String) {
+        _uiState.update { it.copy(barcodeLookingUp = true, barcodeNotFound = false, lastScannedCode = code) }
+        viewModelScope.launch {
+            val product = runCatching { barcodeRepository.lookup(code) }.getOrNull()
+            if (product == null) {
+                _uiState.update { it.copy(barcodeLookingUp = false, barcodeNotFound = true) }
+            } else {
+                val drink = Drinks.isDrink(product.description, product.foodCategory)
+                val ingredient = Ingredient(
+                    name = product.description,
+                    grams = product.commonServingGrams ?: 100f,
+                    caloriesPer100g = product.caloriesPer100g,
+                    proteinPer100g = product.proteinPer100g,
+                    fatPer100g = product.fatPer100g,
+                    carbsPer100g = product.carbsPer100g,
+                    waterMlPer100g = if (drink) Drinks.estimateWaterPer100(product.carbsPer100g, product.proteinPer100g, product.fatPer100g) else 0f,
+                    isDrink = drink
+                )
+                _uiState.update {
+                    it.copy(
+                        barcodeLookingUp = false,
+                        draft = it.draft + DraftItem(ingredient, portionEdited = true),
+                        message = "Added ${product.description}"
+                    )
+                }
+            }
+        }
+    }
+
+    /** Clear a "barcode not found" so the Barcode tab is ready to scan again. */
+    fun dismissBarcodeResult() = _uiState.update { it.copy(barcodeNotFound = false, lastScannedCode = null) }
+
+    // ---- Add via custom values (Custom tab) ----
+
+    /** Add a hand-entered food (typed values, or read from a snapped label) to the meal. */
+    fun addCustomIngredient(ingredient: Ingredient) {
+        if (ingredient.name.isBlank()) return
+        _uiState.update {
+            it.copy(
+                draft = it.draft + DraftItem(ingredient, portionEdited = true),
+                message = "Added ${ingredient.name}"
+            )
+        }
+    }
+
+    /**
+     * Read a snapped nutrition-facts label with the AI (Custom tab). Returns the single food it read,
+     * or null if it couldn't — the tab fills its own fields from the result. Shares the decode + prompt
+     * with the standalone Custom food screen.
+     */
+    suspend fun readNutritionLabel(path: String): DetectedFood? {
+        val bitmap = withContext(Dispatchers.IO) { decodeUprightBitmap(path) } ?: return null
+        return runCatching { pipeline.analyze(bitmap, note = NUTRITION_LABEL_PROMPT) }.getOrNull()?.firstOrNull()
+    }
+
+    /**
+     * Collapse a detected/described dish into one per-100 g [Ingredient] so it becomes a single meal
+     * item (the manual meal stores one ingredient per item). Preserves macros, water and micros.
+     */
+    private fun DetectedFood.asSingleIngredient(): Ingredient {
+        val g = totalGrams.takeIf { it > 0f } ?: 100f
+        val per100 = 100f / g
+        return Ingredient(
+            name = label,
+            grams = g,
+            caloriesPer100g = totalCalories * per100,
+            proteinPer100g = totalProtein * per100,
+            fatPer100g = totalFat * per100,
+            carbsPer100g = totalCarbs * per100,
+            fiberPer100g = totalFiber * per100,
+            waterMlPer100g = totalWaterMl * per100,
+            isDrink = isDrink,
+            // totalMicros is absolute (at g grams); scaledTo(x) = micros·x/100, so 100·per100 gives per-100 g.
+            microsPer100g = totalMicros.scaledTo(100f * per100)
+        )
     }
 
     fun saveToGallery(index: Int) {
