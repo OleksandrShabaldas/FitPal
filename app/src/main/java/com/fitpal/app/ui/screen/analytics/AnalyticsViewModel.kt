@@ -342,6 +342,16 @@ class AnalyticsViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     /**
+     * The days that count as "eaten" over the whole history: every logged day with real food
+     * (calories > 0). Water-only days log as a 0-kcal row (see `MealRepository.logWater`), so they'd
+     * otherwise pad the day count and drag the average intake DOWN — the same `consumed > 0` rule the
+     * Calorie-balance detail uses, so the two screens agree. Also feeds the "Average intake" popup.
+     */
+    val intakeDays: StateFlow<List<DailyNutritionRow>> = lifetimeRows
+        .map { rows -> rows.filter { it.calories > 0f } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /**
      * Implied maintenance kcal from **lifetime** average intake vs. **lifetime** weight change
      * (display only — never changes the budget). Uses the whole history on purpose: over months the
      * day-to-day water/glycogen swings average out, so the 7700 kcal/kg conversion tracks real fat
@@ -350,11 +360,45 @@ class AnalyticsViewModel @Inject constructor(
      * are enough logged days and weigh-ins).
      */
     val maintenanceBreakdown: StateFlow<com.fitpal.app.domain.WeightTrend.MaintenanceEstimate?> =
-        combine(lifetimeRows, lifetimeWeightRate) { rows, rate ->
+        combine(intakeDays, lifetimeWeightRate) { rows, rate ->
             val loggedDays = rows.size
             val avg = if (loggedDays > 0) rows.sumOf { it.calories.toDouble() }.toFloat() / loggedDays else 0f
             com.fitpal.app.domain.WeightTrend.impliedMaintenanceBreakdown(avg, rate, loggedDays)
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    /** The body's estimated resting burn (BMR × 1.2) — the base the daily goal and the theoretical
+     *  total burn are both built on. Mirrors `CalorieDetailViewModel`'s resting burn exactly. */
+    private val restingBurnPerDay: StateFlow<Float> = combine(
+        settingsRepository.userProfile,
+        weightRepository.getLatest()
+    ) { profile, weight ->
+        weight?.let { BmrCalculator.restingBurn(profile, it.weightKg) } ?: 0f
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0f)
+
+    // Lifetime per-day step + exercise burn — the "active" slice on top of resting, so the popup can
+    // rebuild the SAME total burn the Calorie-balance screen shows (resting + steps + workouts).
+    private val lifetimeStepBurn: StateFlow<List<DailyStepRow>> =
+        stepRepository.getDailySteps(LIFETIME_FROM, LIFETIME_TO)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private val lifetimeExerciseBurn: StateFlow<List<DailyBurnRow>> =
+        exerciseRepository.getDailyBurnRange(LIFETIME_FROM, LIFETIME_TO)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /**
+     * The theoretical total burn per eaten day — resting + step + workout calories, averaged over the
+     * SAME eaten days as the intake average (step calories trimmed by the user's setting, exactly like
+     * the Calorie-balance screen). This is the number that screen's "deficit" is measured against, so
+     * the maintenance popup can show it beside the weight-based figure and explain the gap.
+     */
+    val theoreticalBurnPerDay: StateFlow<Float> = combine(
+        intakeDays, lifetimeStepBurn, lifetimeExerciseBurn, restingBurnPerDay, stepTrimPercent
+    ) { days, steps, ex, resting, trim ->
+        if (days.isEmpty() || resting <= 0f) return@combine 0f
+        val dates = days.mapTo(HashSet()) { it.date }
+        val stepCal = steps.filter { it.date in dates }.sumOf { (it.caloriesBurned * (100 - trim) / 100f).toDouble() }
+        val exCal = ex.filter { it.date in dates }.sumOf { it.burned.toDouble() }
+        resting + ((stepCal + exCal) / days.size).toFloat()
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0f)
 
     /** Just the final number (the card's headline + the "show maintenance" gate). */
     val lifetimeMaintenance: StateFlow<Int?> = maintenanceBreakdown

@@ -13,6 +13,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -71,6 +73,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fitpal.app.data.local.dao.DailyMicros
 import com.fitpal.app.data.local.dao.DailyNutritionRow
+import com.fitpal.app.data.local.entity.WeightEntryEntity
 import com.fitpal.app.domain.DayScore
 import com.fitpal.app.ui.component.BackdropTheme
 import com.fitpal.app.ui.component.BarTrendChart
@@ -139,6 +142,8 @@ fun AnalyticsScreen(
     val fitnessGoal by viewModel.fitnessGoal.collectAsStateWithLifecycle()
     val lifetimeMaintenance by viewModel.lifetimeMaintenance.collectAsStateWithLifecycle()
     val maintenanceBreakdown by viewModel.maintenanceBreakdown.collectAsStateWithLifecycle()
+    val intakeDays by viewModel.intakeDays.collectAsStateWithLifecycle()
+    val theoreticalBurnPerDay by viewModel.theoreticalBurnPerDay.collectAsStateWithLifecycle()
     val spotlight by viewModel.spotlight.collectAsStateWithLifecycle()
     val analyticsViews by viewModel.analyticsViews.collectAsStateWithLifecycle()
     // Which cards are flipped to "Lifetime", plus the all-time data they draw from.
@@ -152,8 +157,10 @@ fun AnalyticsScreen(
     val fastingMealMinutes by viewModel.fastingMealMinutesByDate.collectAsStateWithLifecycle()
     val fastingGrace by viewModel.fastingGrace.collectAsStateWithLifecycle()
     var showWeightDialog by remember { mutableStateOf(false) }
-    // The maintenance-estimate card taps open a "how is this calculated?" explainer.
+    // The maintenance-estimate card taps open a "how is this calculated?" explainer; its two rows
+    // drill further into the day-by-day intake list and the full weigh-in list ("intake"/"weight").
     var showMaintenanceInfo by remember { mutableStateOf(false) }
+    var maintenanceDrill by remember { mutableStateOf<String?>(null) }
     // A fasting square opens its own explainer (not the score popup); this holds which day.
     var selectedFastingDay by remember { mutableStateOf<LocalDate?>(null) }
     var selectedDay by remember { mutableStateOf<LocalDate?>(null) }
@@ -764,13 +771,16 @@ fun AnalyticsScreen(
                     // ---- Averages ----
                     "averages" -> if (rollingRows.isNotEmpty()) item {
                         ChartCard("Averages", "", spotlight = spotlight, onToggleSpotlight = viewModel::toggleSpotlight) {
-                            val n = rollingRows.size.coerceAtLeast(1)
+                            // Average over EATEN days only — a water-only day logs as a 0-kcal row and
+                            // would otherwise drag every average down (same rule as the maintenance estimate).
+                            val eaten = rollingRows.filter { it.calories > 0f }
+                            val n = eaten.size.coerceAtLeast(1)
                             listOf(
-                                "Calories" to "${(rollingRows.sumOf { it.calories.toDouble() } / n).toInt()} kcal",
-                                "Protein" to "${(rollingRows.sumOf { it.protein.toDouble() } / n).toInt()}g",
-                                "Fat" to "${(rollingRows.sumOf { it.fat.toDouble() } / n).toInt()}g",
-                                "Carbs" to "${(rollingRows.sumOf { it.carbs.toDouble() } / n).toInt()}g",
-                                "Fiber" to "${(rollingRows.sumOf { it.fiber.toDouble() } / n).toInt()}g"
+                                "Calories" to "${(eaten.sumOf { it.calories.toDouble() } / n).toInt()} kcal",
+                                "Protein" to "${(eaten.sumOf { it.protein.toDouble() } / n).toInt()}g",
+                                "Fat" to "${(eaten.sumOf { it.fat.toDouble() } / n).toInt()}g",
+                                "Carbs" to "${(eaten.sumOf { it.carbs.toDouble() } / n).toInt()}g",
+                                "Fiber" to "${(eaten.sumOf { it.fiber.toDouble() } / n).toInt()}g"
                             ).forEach { (label, value) ->
                                 Row(Modifier.fillMaxWidth().padding(vertical = 1.dp), Arrangement.SpaceBetween) {
                                     Text(label, style = MaterialTheme.typography.bodyMedium, color = CreamMuted)
@@ -807,7 +817,29 @@ fun AnalyticsScreen(
             MaintenanceDialog(
                 estimate = est,
                 calGoal = calGoal,
+                theoreticalBurnPerDay = theoreticalBurnPerDay,
+                onShowIntake = { showMaintenanceInfo = false; maintenanceDrill = "intake" },
+                onShowWeight = { showMaintenanceInfo = false; maintenanceDrill = "weight" },
                 onDismiss = { showMaintenanceInfo = false }
+            )
+        }
+    }
+
+    when (maintenanceDrill) {
+        "intake" -> maintenanceBreakdown?.let { est ->
+            IntakeDetailDialog(
+                days = intakeDays,
+                average = est.avgIntakeKcal,
+                onBack = { maintenanceDrill = null; showMaintenanceInfo = true },
+                onDismiss = { maintenanceDrill = null }
+            )
+        }
+        "weight" -> maintenanceBreakdown?.let { est ->
+            WeightTrendDetailDialog(
+                weights = weights,
+                ratePerWeekKg = est.ratePerWeekKg,
+                onBack = { maintenanceDrill = null; showMaintenanceInfo = true },
+                onDismiss = { maintenanceDrill = null }
             )
         }
     }
@@ -1577,43 +1609,60 @@ private fun AiReviewCard(
 /**
  * "How is the maintenance estimate worked out?" — shows the same numbers the estimate is built from
  * (average intake, the measured weight trend, and the 7,700-kcal-per-kg conversion) so the headline
- * figure isn't a black box.
+ * figure isn't a black box. The two source rows drill into the full day-by-day lists, and the
+ * reconciliation block explains why this (weight-based) number can differ from the Calorie-balance
+ * screen's formula-based burn — the "why didn't the deficit show on the scale?" question.
  */
 @Composable
 private fun MaintenanceDialog(
     estimate: com.fitpal.app.domain.WeightTrend.MaintenanceEstimate,
     calGoal: Int,
+    theoreticalBurnPerDay: Float,
+    onShowIntake: () -> Unit,
+    onShowWeight: () -> Unit,
     onDismiss: () -> Unit
 ) {
     val rate = estimate.ratePerWeekKg
     val steady = kotlin.math.abs(rate) < 0.05f
     val losing = rate < 0f
     val adjust = kotlin.math.abs(estimate.dailyEnergyBalanceKcal)
+    val formulaBurn = Math.round(theoreticalBurnPerDay)
+    // How much the Calorie-balance screen's burn estimate exceeds what the scale implies, per day —
+    // and the phantom "deficit" that difference invents over all the eaten days.
+    val gap = formulaBurn - estimate.maintenanceKcal
+    val phantomKcal = gap * estimate.loggedDays
+    val phantomKg = kotlin.math.abs(phantomKcal) / 7700f
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = { TextButton(onClick = onDismiss) { Text("Got it") } },
         title = { Text("How this is worked out") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                modifier = Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 Text(
                     "≈ ${"%,d".format(estimate.maintenanceKcal)} kcal/day",
                     style = MaterialTheme.typography.headlineSmall, color = GoldLight
                 )
                 Text(
                     "What your logged food and your weight change together imply you burn on an average " +
-                        "day. It's an insight only — it never changes your calorie target.",
+                        "day. It's an insight only — it never changes your calorie target. Tap a row to see " +
+                        "every day behind it.",
                     style = MaterialTheme.typography.bodySmall, color = CreamMuted
                 )
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     MaintenanceRow(
                         "Average intake",
                         "${"%,d".format(estimate.avgIntakeKcal)} kcal",
-                        "over ${estimate.loggedDays} logged days"
+                        "over ${estimate.loggedDays} eaten days",
+                        onClick = onShowIntake
                     )
                     MaintenanceRow(
                         "Weight trend",
                         if (steady) "holding steady" else "${"%.1f".format(kotlin.math.abs(rate))} kg/week ${if (losing) "down" else "up"}",
-                        null
+                        "tap for every weigh-in",
+                        onClick = onShowWeight
                     )
                     if (!steady) {
                         MaintenanceRow(
@@ -1637,6 +1686,37 @@ private fun MaintenanceDialog(
                         style = MaterialTheme.typography.bodySmall, color = CreamMuted
                     )
                 }
+
+                // ---- Reconciliation: why the scale can disagree with the Calorie-balance deficit ----
+                if (formulaBurn > 0) {
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.08f)))
+                    Text("Why a deficit can lag the scale", style = MaterialTheme.typography.titleSmall, color = Cream)
+                    Text(
+                        buildString {
+                            append("The Calorie-balance screen weighs your food against a formula estimate of your ")
+                            append("burn (~${"%,d".format(formulaBurn)} kcal/day: resting + steps + workouts). This number ")
+                            append("uses your real weight instead, putting your true burn near ${"%,d".format(estimate.maintenanceKcal)}. ")
+                            when {
+                                gap >= 40 -> append(
+                                    "The formula runs about ${"%,d".format(gap)} kcal/day HIGH for you — so across your " +
+                                    "${estimate.loggedDays} eaten days it invents roughly ${"%,d".format(phantomKcal)} kcal of " +
+                                    "\"deficit\" (~${"%.1f".format(phantomKg)} kg) that was never really there. That's why the " +
+                                    "scale didn't drop what the balance screen implied. "
+                                )
+                                gap <= -40 -> append(
+                                    "The formula runs about ${"%,d".format(-gap)} kcal/day LOW for you, so the scale may be " +
+                                    "moving a little faster than the balance screen suggests. "
+                                )
+                                else -> append("The two line up closely for you. ")
+                            }
+                            append("Food logging usually undercounts a little, the formula is a population average, and " +
+                                "short-term water — plus some muscle when you're barely training — blur week-to-week weight. " +
+                                "Judged over weeks, this weight-based number is the one to trust.")
+                        },
+                        style = MaterialTheme.typography.bodySmall, color = CreamMuted
+                    )
+                }
+
                 Text(
                     "1 kg of body-weight change is about 7,700 kcal, spread across the week. It's a rough " +
                         "estimate — it can read high while you're losing quickly, and settles as your weight steadies.",
@@ -1648,8 +1728,14 @@ private fun MaintenanceDialog(
 }
 
 @Composable
-private fun MaintenanceRow(label: String, value: String, note: String?) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+private fun MaintenanceRow(label: String, value: String, note: String?, onClick: (() -> Unit)? = null) {
+    Row(
+        modifier = Modifier.fillMaxWidth()
+            .then(if (onClick != null) Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onClick) else Modifier)
+            .padding(vertical = 2.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(label, style = MaterialTheme.typography.bodyMedium, color = CreamMuted)
             if (note != null) {
@@ -1658,7 +1744,161 @@ private fun MaintenanceRow(label: String, value: String, note: String?) {
         }
         Spacer(Modifier.width(12.dp))
         Text(value, style = MaterialTheme.typography.bodyMedium, color = Cream, textAlign = TextAlign.End)
+        if (onClick != null) {
+            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = CreamMuted, modifier = Modifier.size(18.dp))
+        }
     }
+}
+
+/** A "label … value" line for the detail popups' stat blocks. */
+@Composable
+private fun StatLine(label: String, value: String, valueColor: Color = Cream) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = CreamMuted)
+        Spacer(Modifier.width(12.dp))
+        Text(value, style = MaterialTheme.typography.bodyMedium, color = valueColor, textAlign = TextAlign.End)
+    }
+}
+
+/**
+ * Drill-down from the maintenance popup's "Average intake" row: the full per-day intake behind the
+ * average, plus min / max / median / total — so the average is auditable, not a bare number.
+ * (Water-only days are excluded — same rule as the average itself.)
+ */
+@Composable
+private fun IntakeDetailDialog(
+    days: List<DailyNutritionRow>,
+    average: Int,
+    onBack: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val fmt = DateTimeFormatter.ofPattern("EEE d MMM ''yy")
+    fun label(isoDate: String) = runCatching { LocalDate.parse(isoDate).format(fmt) }.getOrDefault(isoDate)
+    val kcals = days.map { it.calories }.sorted()
+    val total = kcals.sumOf { it.toDouble() }.toInt()
+    val median = when {
+        kcals.isEmpty() -> 0
+        kcals.size % 2 == 1 -> kcals[kcals.size / 2].toInt()
+        else -> ((kcals[kcals.size / 2 - 1] + kcals[kcals.size / 2]) / 2f).toInt()
+    }
+    val minDay = days.minByOrNull { it.calories }
+    val maxDay = days.maxByOrNull { it.calories }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onBack) { Text("Back") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        title = { Text("Average intake") },
+        text = {
+            Column(
+                modifier = Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    "${"%,d".format(average)} kcal/day",
+                    style = MaterialTheme.typography.headlineSmall, color = GoldLight
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    StatLine("Eaten days", "${days.size}")
+                    StatLine("Total logged", "${"%,d".format(total)} kcal")
+                    StatLine("Average", "${"%,d".format(average)} kcal")
+                    StatLine("Median", "${"%,d".format(median)} kcal")
+                    minDay?.let { StatLine("Lowest", "${"%,d".format(it.calories.toInt())} kcal · ${label(it.date)}", ScoreFair) }
+                    maxDay?.let { StatLine("Highest", "${"%,d".format(it.calories.toInt())} kcal · ${label(it.date)}", ScorePoor) }
+                }
+                Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.08f)))
+                Text("Every eaten day", style = MaterialTheme.typography.labelMedium, color = CreamMuted)
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    days.sortedByDescending { it.date }.forEach { row ->
+                        val color = when (row.date) {
+                            maxDay?.date -> ScorePoor
+                            minDay?.date -> ScoreFair
+                            else -> Cream
+                        }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(label(row.date), style = MaterialTheme.typography.bodySmall, color = CreamMuted)
+                            Text("${"%,d".format(row.calories.toInt())} kcal", style = MaterialTheme.typography.bodySmall, color = color)
+                        }
+                    }
+                }
+            }
+        }
+    )
+}
+
+/**
+ * Drill-down from the maintenance popup's "Weight trend" row: every weigh-in plus start / current /
+ * net / min / max, and a plain-language note on how the weekly rate is fit (a line through ALL
+ * weigh-ins, so a single water-heavy morning can't swing it) — the reasoning the user asked to see.
+ */
+@Composable
+private fun WeightTrendDetailDialog(
+    weights: List<WeightEntryEntity>,
+    ratePerWeekKg: Float,
+    onBack: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val fmt = DateTimeFormatter.ofPattern("EEE d MMM ''yy")
+    fun label(isoDate: String) = runCatching { LocalDate.parse(isoDate).format(fmt) }.getOrDefault(isoDate)
+    val sorted = weights.sortedBy { it.date }
+    val start = sorted.firstOrNull()
+    val current = sorted.lastOrNull()
+    val minW = sorted.minByOrNull { it.weightKg }
+    val maxW = sorted.maxByOrNull { it.weightKg }
+    val net = (current?.weightKg ?: 0f) - (start?.weightKg ?: 0f)
+    val steady = kotlin.math.abs(ratePerWeekKg) < 0.05f
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onBack) { Text("Back") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        title = { Text("Weight trend") },
+        text = {
+            Column(
+                modifier = Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    if (steady) "Holding steady"
+                    else "${"%.2f".format(kotlin.math.abs(ratePerWeekKg))} kg/week ${if (ratePerWeekKg < 0f) "down" else "up"}",
+                    style = MaterialTheme.typography.headlineSmall, color = GoldLight
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    StatLine("Weigh-ins", "${sorted.size}")
+                    start?.let { StatLine("First", "${"%.1f".format(it.weightKg)} kg · ${label(it.date)}") }
+                    current?.let { StatLine("Latest", "${"%.1f".format(it.weightKg)} kg · ${label(it.date)}") }
+                    StatLine(
+                        "Net change",
+                        "${if (net >= 0f) "+" else "−"}${"%.1f".format(kotlin.math.abs(net))} kg",
+                        if (net > 0.1f) ScorePoor else if (net < -0.1f) ScoreFair else Cream
+                    )
+                    minW?.let { StatLine("Lowest", "${"%.1f".format(it.weightKg)} kg · ${label(it.date)}", ScoreFair) }
+                    maxW?.let { StatLine("Highest", "${"%.1f".format(it.weightKg)} kg · ${label(it.date)}", ScorePoor) }
+                }
+                Text(
+                    "The weekly rate is the slope of a line fit through ALL your weigh-ins, not just the " +
+                        "first and last — so one water-heavy morning can't swing it. Net change is the raw " +
+                        "first-to-latest difference for comparison; the two differ when your weight zig-zagged. " +
+                        "Day-to-day water and glycogen can move the scale ±0.5–1 kg on their own, which is why " +
+                        "the estimate leans on the long trend.",
+                    style = MaterialTheme.typography.bodySmall, color = CreamMuted
+                )
+                Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.08f)))
+                Text("Every weigh-in", style = MaterialTheme.typography.labelMedium, color = CreamMuted)
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    sorted.reversed().forEach { w ->
+                        val color = when (w.date) {
+                            maxW?.date -> ScorePoor
+                            minW?.date -> ScoreFair
+                            else -> Cream
+                        }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(label(w.date), style = MaterialTheme.typography.bodySmall, color = CreamMuted)
+                            Text("${"%.1f".format(w.weightKg)} kg", style = MaterialTheme.typography.bodySmall, color = color)
+                        }
+                    }
+                }
+            }
+        }
+    )
 }
 
 @Composable
