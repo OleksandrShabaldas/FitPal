@@ -35,11 +35,14 @@ class MainActivity : ComponentActivity() {
 
     // A route a notification / widget / share asked us to open.
     private var pendingRoute by mutableStateOf<String?>(null)
+    // A one-shot action for the Home screen (e.g. open the weigh-in dialog), from a notification.
+    private var pendingHomeAction by mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         pendingRoute = routeFor(intent)
+        pendingHomeAction = intent.getStringExtra(EXTRA_HOME_ACTION)
         // First launch (and no shared/notification route) → run onboarding to set accurate targets.
         val startOnboarding = !settingsRepository.hasOnboarded.value && pendingRoute == null
         setContent {
@@ -69,6 +72,8 @@ class MainActivity : ComponentActivity() {
                     FitPalNavHost(
                         pendingRoute = pendingRoute,
                         onPendingRouteHandled = { pendingRoute = null },
+                        pendingHomeAction = pendingHomeAction,
+                        onHomeActionHandled = { pendingHomeAction = null },
                         startOnboarding = startOnboarding
                     )
                 }
@@ -102,6 +107,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         routeFor(intent)?.let { pendingRoute = it }
+        intent.getStringExtra(EXTRA_HOME_ACTION)?.let { pendingHomeAction = it }
     }
 
     private fun routeFor(intent: Intent?): String? {
@@ -115,5 +121,9 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_NAV_ROUTE = "fitpal.nav_route"
+        /** A one-shot action to run on the Home screen after opening it (see [pendingHomeAction]). */
+        const val EXTRA_HOME_ACTION = "fitpal.home_action"
+        /** [EXTRA_HOME_ACTION] value: open the "log today's weight" dialog on Home. */
+        const val HOME_ACTION_LOG_WEIGHT = "log_weight"
     }
 }

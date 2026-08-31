@@ -349,11 +349,17 @@ class AnalyticsViewModel @Inject constructor(
      * high. Independent of the viewed range, so the card shows in Week and 30-day alike (once there
      * are enough logged days and weigh-ins).
      */
-    val lifetimeMaintenance: StateFlow<Int?> = combine(lifetimeRows, lifetimeWeightRate) { rows, rate ->
-        val loggedDays = rows.size
-        val avg = if (loggedDays > 0) rows.sumOf { it.calories.toDouble() }.toFloat() / loggedDays else 0f
-        com.fitpal.app.domain.WeightTrend.impliedMaintenance(avg, rate, loggedDays)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    val maintenanceBreakdown: StateFlow<com.fitpal.app.domain.WeightTrend.MaintenanceEstimate?> =
+        combine(lifetimeRows, lifetimeWeightRate) { rows, rate ->
+            val loggedDays = rows.size
+            val avg = if (loggedDays > 0) rows.sumOf { it.calories.toDouble() }.toFloat() / loggedDays else 0f
+            com.fitpal.app.domain.WeightTrend.impliedMaintenanceBreakdown(avg, rate, loggedDays)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    /** Just the final number (the card's headline + the "show maintenance" gate). */
+    val lifetimeMaintenance: StateFlow<Int?> = maintenanceBreakdown
+        .map { it?.maintenanceKcal }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     fun logWeight(kg: Float) {
         viewModelScope.launch { weightRepository.logWeight(kg) }

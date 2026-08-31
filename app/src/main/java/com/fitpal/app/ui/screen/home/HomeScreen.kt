@@ -155,6 +155,9 @@ fun HomeScreen(
     onExerciseClick: (Long) -> Unit = {},
     onOpenWater: (String) -> Unit = {},
     onSwipeToNextScreen: () -> Unit = {},
+    /** A one-shot action from a notification (e.g. open the weigh-in dialog); null otherwise. */
+    pendingAction: String? = null,
+    onActionHandled: () -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val nutrition by viewModel.dailyNutrition.collectAsStateWithLifecycle()
@@ -192,6 +195,17 @@ fun HomeScreen(
     var showCalendar by remember { mutableStateOf(false) }
     var showStepDialog by remember { mutableStateOf(false) }
     var showWeightDialog by remember { mutableStateOf(false) }
+
+    // The weigh-in reminder opens Home and asks us to pop the weight dialog straight up, so the
+    // notification lands the user on the logging step instead of just the Home screen.
+    LaunchedEffect(pendingAction) {
+        if (pendingAction == com.fitpal.app.MainActivity.HOME_ACTION_LOG_WEIGHT) {
+            // logWeight() always writes today's weight regardless of the viewed day, so opening the
+            // dialog is enough — no need to jump the Home view back to today.
+            showWeightDialog = true
+            onActionHandled()
+        }
+    }
 
     // Calories burned are added back to the day's eating budget: 50% of (rougher) exercise burn,
     // and the step-calorie estimate in full (it's already trimmed by the user's step setting).

@@ -41,6 +41,12 @@ data class EntryDetailUiState(
     /** The day this entry is logged on — so "copy to date" can center on it. */
     val entryDate: java.time.LocalDate = java.time.LocalDate.now(),
     val ingredients: List<Ingredient> = emptyList(),
+    /**
+     * The +/− "Amount" multiplier for this entry (how many of it were eaten). Grams stay the single
+     * source of truth for calories/macros — this is a remembered display count
+     * ([MealLogItemEntity.servings]) so reopening the entry shows what you last set it to.
+     */
+    val servings: Int = 1,
     /** The one-tap situation tag on this entry's meal ("Home"/"Restaurant"/…), or null. */
     val context: String? = null,
     /** A meal-aware coaching note the background worker may attach; null when there's nothing useful. */
@@ -175,6 +181,7 @@ class EntryDetailViewModel @Inject constructor(
                     mealType = mealType,
                     entryDate = entryDate,
                     ingredients = ingredients,
+                    servings = item.servings.coerceAtLeast(1),
                     insights = insights,
                     isLoading = false,
                     modelReady = modelManager.isLlmReady
@@ -222,6 +229,24 @@ class EntryDetailViewModel @Inject constructor(
         if (index !in current.indices) return
         current[index] = current[index].withGrams(newGrams)
         persistIngredients(current)
+    }
+
+    /**
+     * The +/− "Amount" stepper: log this meal N times over. Scales every ingredient's weight by the
+     * change (so calories/macros track it, exactly like the pre-log photo review — grams stay the
+     * source of truth), and persists the count itself ([MealLogItemEntity.servings]) so reopening
+     * the entry shows what it was left on instead of resetting to 1. If the amount was hand-edited
+     * in between, the next step just scales from whatever's there now.
+     */
+    fun setServings(newServings: Int) {
+        val n = newServings.coerceIn(1, MAX_SERVINGS)
+        val current = _uiState.value.servings.coerceAtLeast(1)
+        if (n == current) return
+        val factor = n.toFloat() / current
+        val scaled = _uiState.value.ingredients.map { it.withGrams(it.grams * factor) }
+        _uiState.update { it.copy(servings = n) }
+        viewModelScope.launch { mealRepository.updateItemServings(entryId, n) }
+        persistIngredients(scaled)
     }
 
     /**
@@ -618,5 +643,7 @@ class EntryDetailViewModel @Inject constructor(
     companion object {
         /** Cached insights live for one month unless the food is saved to the collection. */
         private const val RETENTION_MS = 30L * 24 * 60 * 60 * 1000
+        /** Upper bound for the "Amount" multiplier (matches the pre-log review). */
+        private const val MAX_SERVINGS = 50
     }
 }

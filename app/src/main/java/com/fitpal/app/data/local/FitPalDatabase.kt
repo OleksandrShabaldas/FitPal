@@ -53,7 +53,7 @@ import com.fitpal.app.data.local.entity.WeightEntryEntity
         UsdaFoodEntity::class,
         WeightEntryEntity::class
     ],
-    version = 27,
+    version = 28,
     exportSchema = true
 )
 abstract class FitPalDatabase : RoomDatabase() {
@@ -456,6 +456,15 @@ abstract class FitPalDatabase : RoomDatabase() {
                     )
                 """)
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_context_notes_date ON context_notes(date)")
+            }
+        }
+
+        /** v27 -> v28: remember the meal-detail +/− "Amount" multiplier so it survives reopening
+         *  the entry instead of resetting to 1 (grams/macros were already persisted; only the
+         *  display count was forgotten). */
+        val MIGRATION_27_28 = object : Migration(27, 28) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE meal_log_items ADD COLUMN servings INTEGER NOT NULL DEFAULT 1")
             }
         }
     }

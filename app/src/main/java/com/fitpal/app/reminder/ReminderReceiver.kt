@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
 import com.fitpal.app.MainActivity
+import com.fitpal.app.data.repository.WeightRepository
 import com.fitpal.app.domain.model.ReminderKind
 import com.fitpal.app.ml.ReviewGenerator
 import com.fitpal.app.ui.navigation.Screen
@@ -32,6 +33,7 @@ class ReminderReceiver : BroadcastReceiver() {
     interface ReminderEntryPoint {
         fun reminderManager(): ReminderManager
         fun reviewGenerator(): ReviewGenerator
+        fun weightRepository(): WeightRepository
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -72,10 +74,28 @@ class ReminderReceiver : BroadcastReceiver() {
                     pending.finish()
                 }
             }
+        } else if (kind == ReminderKind.WEIGHT) {
+            // The weigh-in nudge opens Home AND pops the weight dialog straight up — but only if
+            // today's weight isn't already logged, so we don't nag after the user has weighed in.
+            val pending = goAsync()
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val alreadyLogged = runCatching {
+                        entryPoint(context).weightRepository().hasLoggedOn(LocalDate.now())
+                    }.getOrDefault(false)
+                    if (!alreadyLogged) {
+                        postNotification(
+                            context, kind, Screen.Home.route, CHANNEL_REMINDERS, "Reminders",
+                            homeAction = MainActivity.HOME_ACTION_LOG_WEIGHT
+                        )
+                    }
+                } finally {
+                    pending.finish()
+                }
+            }
         } else {
-            // Meals nudge the Add screen; the weigh-in nudge opens Home (where the weight card lives).
-            val route = if (kind == ReminderKind.WEIGHT) Screen.Home.route else Screen.AddFood.route
-            postNotification(context, kind, route, CHANNEL_REMINDERS, "Reminders")
+            // Meals nudge the Add screen.
+            postNotification(context, kind, Screen.AddFood.route, CHANNEL_REMINDERS, "Reminders")
         }
     }
 
@@ -130,13 +150,20 @@ class ReminderReceiver : BroadcastReceiver() {
         runCatching { manager.notify(notifId, notification) }
     }
 
-    private fun postNotification(context: Context, kind: ReminderKind, route: String, channelId: String, channelName: String) {
+    private fun postNotification(
+        context: Context,
+        kind: ReminderKind,
+        route: String,
+        channelId: String,
+        channelName: String,
+        homeAction: String? = null
+    ) {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
         manager.createNotificationChannel(
             NotificationChannel(channelId, channelName, NotificationManager.IMPORTANCE_DEFAULT)
         )
         val notifId = NOTIF_KIND_BASE + kind.ordinal
-        val pi = openIntent(context, route, notifId)
+        val pi = openIntent(context, route, notifId, homeAction)
         val notification = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(android.R.drawable.ic_popup_reminder)
             .setContentTitle(kind.notifTitle)
@@ -147,10 +174,11 @@ class ReminderReceiver : BroadcastReceiver() {
         runCatching { manager.notify(notifId, notification) }
     }
 
-    private fun openIntent(context: Context, route: String, requestCode: Int): PendingIntent {
+    private fun openIntent(context: Context, route: String, requestCode: Int, homeAction: String? = null): PendingIntent {
         val open = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
             putExtra(MainActivity.EXTRA_NAV_ROUTE, route)
+            if (homeAction != null) putExtra(MainActivity.EXTRA_HOME_ACTION, homeAction)
         }
         return PendingIntent.getActivity(
             context, requestCode, open,

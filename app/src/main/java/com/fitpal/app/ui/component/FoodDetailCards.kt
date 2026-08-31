@@ -19,12 +19,15 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -68,11 +71,34 @@ fun IngredientsCard(
     totalGrams: Float? = null,
     onScaleTo: ((Float) -> Unit)? = null,
     /** When set, shows an "Edit with AI" button beside "Add ingredient". */
-    onEditWithAi: (() -> Unit)? = null
+    onEditWithAi: (() -> Unit)? = null,
+    /** When set, shows a +/− "Amount" stepper to log this meal several times over. */
+    servings: Int? = null,
+    onServingsChanged: ((Int) -> Unit)? = null
 ) {
     val unit = if (isDrink) "ml" else "g"
     Column(modifier = modifier.fillMaxWidth().glass().padding(16.dp)) {
         Text("Ingredients", style = MaterialTheme.typography.titleSmall, color = Cream, modifier = Modifier.padding(bottom = 8.dp))
+        // "Amount": how many of this whole meal were eaten. Scales everything below in one tap.
+        if (servings != null && onServingsChanged != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Amount", style = MaterialTheme.typography.bodyMedium, color = Cream, modifier = Modifier.weight(1f))
+                FilledTonalIconButton(onClick = { onServingsChanged(servings - 1) }, enabled = servings > 1) {
+                    Icon(Icons.Default.Remove, contentDescription = "One fewer")
+                }
+                Text(
+                    "$servings",
+                    style = MaterialTheme.typography.titleMedium, color = Cream,
+                    textAlign = TextAlign.Center, modifier = Modifier.width(40.dp)
+                )
+                FilledTonalIconButton(onClick = { onServingsChanged(servings + 1) }) {
+                    Icon(Icons.Default.Add, contentDescription = "One more")
+                }
+            }
+        }
         // Whole-dish size: edit the total to scale every ingredient together.
         if (ingredients.size > 1 && totalGrams != null && onScaleTo != null) {
             Row(

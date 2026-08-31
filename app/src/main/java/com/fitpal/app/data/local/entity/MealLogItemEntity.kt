@@ -73,5 +73,12 @@ data class MealLogItemEntity(
      * comma-wrapped like ",dessert,drink," so a `LIKE '%,dessert,%'` can't false-match. Null = none.
      * See [com.fitpal.app.domain.model.DietaryRuleKind.tagsToDb].
      */
-    val ruleTags: String? = null
+    val ruleTags: String? = null,
+    /**
+     * The +/− "Amount" multiplier last set on the meal-detail screen (how many of this whole item
+     * were eaten). Grams/calories/macros are still the source of truth — this is remembered only so
+     * reopening the entry shows the count you left it on instead of resetting to 1.
+     */
+    @ColumnInfo(defaultValue = "1")
+    val servings: Int = 1
 )

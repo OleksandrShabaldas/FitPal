@@ -18,6 +18,10 @@ interface WeightDao {
     @Query("SELECT * FROM weight_entries ORDER BY date DESC LIMIT 1")
     fun getLatest(): Flow<WeightEntryEntity?>
 
+    /** How many weigh-ins exist for a given day — used to skip the weigh-in reminder once logged. */
+    @Query("SELECT COUNT(*) FROM weight_entries WHERE date = :date")
+    suspend fun countForDate(date: String): Int
+
     /** All entries in a date range, oldest first — for charts. */
     @Query("SELECT * FROM weight_entries WHERE date BETWEEN :from AND :to ORDER BY date ASC")
     fun getRange(from: String, to: String): Flow<List<WeightEntryEntity>>

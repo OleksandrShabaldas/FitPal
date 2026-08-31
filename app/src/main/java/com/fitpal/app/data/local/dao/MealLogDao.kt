@@ -255,6 +255,10 @@ interface MealLogDao {
     @Query("UPDATE meal_log_items SET name = :name WHERE id = :id")
     suspend fun updateItemName(id: Long, name: String)
 
+    /** Persist the meal-detail +/− "Amount" multiplier so reopening the entry remembers it. */
+    @Query("UPDATE meal_log_items SET servings = :servings WHERE id = :id")
+    suspend fun updateServings(id: Long, servings: Int)
+
     /** Name (or clear the name of) a whole meal — the group of dishes logged in one go. */
     @Query("UPDATE meal_logs SET name = :name WHERE id = :mealLogId")
     suspend fun updateMealLogName(mealLogId: Long, name: String?)

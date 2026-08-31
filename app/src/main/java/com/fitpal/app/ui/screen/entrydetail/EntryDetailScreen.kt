@@ -320,7 +320,9 @@ fun EntryDetailScreen(
                                     onRemove = viewModel::removeIngredient,
                                     onReplace = { index -> viewModel.clearSearch(); replacingIndex = index },
                                     onAdd = { showAddDialog = true },
-                                    onEditWithAi = { showEditWithAi = true }
+                                    onEditWithAi = { showEditWithAi = true },
+                                    servings = state.servings,
+                                    onServingsChanged = viewModel::setServings
                                 )
                             }
                             item { MacroCard(item) }

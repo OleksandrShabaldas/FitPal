@@ -138,6 +138,7 @@ fun AnalyticsScreen(
     val weightRate by viewModel.weightRatePerWeek.collectAsStateWithLifecycle()
     val fitnessGoal by viewModel.fitnessGoal.collectAsStateWithLifecycle()
     val lifetimeMaintenance by viewModel.lifetimeMaintenance.collectAsStateWithLifecycle()
+    val maintenanceBreakdown by viewModel.maintenanceBreakdown.collectAsStateWithLifecycle()
     val spotlight by viewModel.spotlight.collectAsStateWithLifecycle()
     val analyticsViews by viewModel.analyticsViews.collectAsStateWithLifecycle()
     // Which cards are flipped to "Lifetime", plus the all-time data they draw from.
@@ -151,6 +152,8 @@ fun AnalyticsScreen(
     val fastingMealMinutes by viewModel.fastingMealMinutesByDate.collectAsStateWithLifecycle()
     val fastingGrace by viewModel.fastingGrace.collectAsStateWithLifecycle()
     var showWeightDialog by remember { mutableStateOf(false) }
+    // The maintenance-estimate card taps open a "how is this calculated?" explainer.
+    var showMaintenanceInfo by remember { mutableStateOf(false) }
     // A fasting square opens its own explainer (not the score popup); this holds which day.
     var selectedFastingDay by remember { mutableStateOf<LocalDate?>(null) }
     var selectedDay by remember { mutableStateOf<LocalDate?>(null) }
@@ -734,7 +737,8 @@ fun AnalyticsScreen(
                         ChartCard(
                             "Maintenance estimate", "from your whole history",
                             highlight = highlight == "maintenance",
-                            spotlight = spotlight, onToggleSpotlight = viewModel::toggleSpotlight
+                            spotlight = spotlight, onToggleSpotlight = viewModel::toggleSpotlight,
+                            onClick = { showMaintenanceInfo = true }
                         ) {
                             Text(
                                 "≈ ${"%,d".format(maint)} kcal/day",
@@ -748,6 +752,11 @@ fun AnalyticsScreen(
                                     append("A rough estimate — it can still read high while you're losing weight quickly, and settles as your weight steadies.")
                                 },
                                 style = MaterialTheme.typography.bodySmall, color = CreamMuted
+                            )
+                            Spacer(Modifier.height(10.dp))
+                            Text(
+                                "Tap to see how this is worked out ›",
+                                style = MaterialTheme.typography.labelMedium, color = GoldLight
                             )
                         }
                     } }
@@ -791,6 +800,16 @@ fun AnalyticsScreen(
             onSave = { kg -> viewModel.logWeight(kg); showWeightDialog = false },
             onDismiss = { showWeightDialog = false }
         )
+    }
+
+    if (showMaintenanceInfo) {
+        maintenanceBreakdown?.let { est ->
+            MaintenanceDialog(
+                estimate = est,
+                calGoal = calGoal,
+                onDismiss = { showMaintenanceInfo = false }
+            )
+        }
     }
 
     selectedDay?.let { day ->
@@ -852,6 +871,8 @@ private fun ChartCard(
     highlight: Boolean = false,
     spotlight: Set<String> = emptySet(),
     onToggleSpotlight: (String) -> Unit = {},
+    /** Tap action (e.g. open an explainer popup); defaults to nothing. Long-press still spotlights. */
+    onClick: () -> Unit = {},
     /** Optional control parked at the end of the header row (e.g. the Lifetime pill). */
     trailing: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit
@@ -860,7 +881,7 @@ private fun ChartCard(
         modifier = Modifier.fillMaxWidth()
             .cardSurface(title in spotlight)
             .then(highlightBorder(highlight))
-            .combinedClickable(onClick = {}, onLongClick = { onToggleSpotlight(title) })
+            .combinedClickable(onClick = onClick, onLongClick = { onToggleSpotlight(title) })
             .padding(16.dp)
     ) {
         Row(
@@ -1550,6 +1571,93 @@ private fun AiReviewCard(
             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = CreamMuted)
         }
         Text("›", style = MaterialTheme.typography.headlineSmall, color = CreamMuted)
+    }
+}
+
+/**
+ * "How is the maintenance estimate worked out?" — shows the same numbers the estimate is built from
+ * (average intake, the measured weight trend, and the 7,700-kcal-per-kg conversion) so the headline
+ * figure isn't a black box.
+ */
+@Composable
+private fun MaintenanceDialog(
+    estimate: com.fitpal.app.domain.WeightTrend.MaintenanceEstimate,
+    calGoal: Int,
+    onDismiss: () -> Unit
+) {
+    val rate = estimate.ratePerWeekKg
+    val steady = kotlin.math.abs(rate) < 0.05f
+    val losing = rate < 0f
+    val adjust = kotlin.math.abs(estimate.dailyEnergyBalanceKcal)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Got it") } },
+        title = { Text("How this is worked out") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    "≈ ${"%,d".format(estimate.maintenanceKcal)} kcal/day",
+                    style = MaterialTheme.typography.headlineSmall, color = GoldLight
+                )
+                Text(
+                    "What your logged food and your weight change together imply you burn on an average " +
+                        "day. It's an insight only — it never changes your calorie target.",
+                    style = MaterialTheme.typography.bodySmall, color = CreamMuted
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    MaintenanceRow(
+                        "Average intake",
+                        "${"%,d".format(estimate.avgIntakeKcal)} kcal",
+                        "over ${estimate.loggedDays} logged days"
+                    )
+                    MaintenanceRow(
+                        "Weight trend",
+                        if (steady) "holding steady" else "${"%.1f".format(kotlin.math.abs(rate))} kg/week ${if (losing) "down" else "up"}",
+                        null
+                    )
+                    if (!steady) {
+                        MaintenanceRow(
+                            if (losing) "You're eating under" else "You're eating over",
+                            "≈ ${"%,d".format(adjust)} kcal/day",
+                            if (losing) "so real burn is higher than intake" else "so real burn is lower than intake"
+                        )
+                    }
+                }
+                Text(
+                    buildString {
+                        append("Maintenance ≈ ${"%,d".format(estimate.avgIntakeKcal)}")
+                        if (!steady) append(if (losing) " + ${"%,d".format(adjust)}" else " − ${"%,d".format(adjust)}")
+                        append(" ≈ ${"%,d".format(estimate.maintenanceKcal)} kcal/day")
+                    },
+                    style = MaterialTheme.typography.bodyMedium, color = Cream
+                )
+                if (calGoal > 0) {
+                    Text(
+                        "For comparison, your current target is ${"%,d".format(calGoal)} kcal/day.",
+                        style = MaterialTheme.typography.bodySmall, color = CreamMuted
+                    )
+                }
+                Text(
+                    "1 kg of body-weight change is about 7,700 kcal, spread across the week. It's a rough " +
+                        "estimate — it can read high while you're losing quickly, and settles as your weight steadies.",
+                    style = MaterialTheme.typography.labelSmall, color = CreamFaint
+                )
+            }
+        }
+    )
+}
+
+@Composable
+private fun MaintenanceRow(label: String, value: String, note: String?) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.bodyMedium, color = CreamMuted)
+            if (note != null) {
+                Text(note, style = MaterialTheme.typography.labelSmall, color = CreamFaint)
+            }
+        }
+        Spacer(Modifier.width(12.dp))
+        Text(value, style = MaterialTheme.typography.bodyMedium, color = Cream, textAlign = TextAlign.End)
     }
 }
 

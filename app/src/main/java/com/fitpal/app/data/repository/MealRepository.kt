@@ -494,6 +494,11 @@ class MealRepository @Inject constructor(
         if (clean.isNotEmpty()) mealLogDao.updateItemName(itemId, clean)
     }
 
+    /** Persist the meal-detail +/− "Amount" stepper so it survives reopening the entry. */
+    suspend fun updateItemServings(itemId: Long, servings: Int) {
+        mealLogDao.updateServings(itemId, servings.coerceAtLeast(1))
+    }
+
     /**
      * Name a whole meal — the dishes logged together in one go ("Sunday roast"). A blank name
      * clears it, so the meal goes back to being described by its dishes.

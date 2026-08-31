@@ -21,6 +21,10 @@ class WeightRepository @Inject constructor(
 
     fun getAll(): Flow<List<WeightEntryEntity>> = weightDao.getAll()
 
+    /** True if a weight has already been logged for [date] — the weigh-in reminder skips those days. */
+    suspend fun hasLoggedOn(date: LocalDate = LocalDate.now()): Boolean =
+        weightDao.countForDate(date.format(dateFormat)) > 0
+
     suspend fun logWeight(weightKg: Float, date: LocalDate = LocalDate.now()) {
         if (weightKg <= 0f) return
         weightDao.upsertForDate(

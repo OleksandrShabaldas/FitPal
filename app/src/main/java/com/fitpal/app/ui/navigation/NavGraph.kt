@@ -75,6 +75,8 @@ import com.fitpal.app.ui.screen.water.WaterDetailScreen
 fun FitPalNavHost(
     pendingRoute: String? = null,
     onPendingRouteHandled: () -> Unit = {},
+    pendingHomeAction: String? = null,
+    onHomeActionHandled: () -> Unit = {},
     startOnboarding: Boolean = false
 ) {
     val navController = rememberNavController()
@@ -153,6 +155,8 @@ fun FitPalNavHost(
 
             composable(Screen.Home.route) {
                 HomeScreen(
+                    pendingAction = pendingHomeAction,
+                    onActionHandled = onHomeActionHandled,
                     onAddFood = { navController.navigate(Screen.AddFood.route) },
                     onOpenSearch = { navController.navigate(Screen.Search.route) },
                     onEntryClick = { entryId ->

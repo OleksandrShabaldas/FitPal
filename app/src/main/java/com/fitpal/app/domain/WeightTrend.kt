@@ -92,14 +92,45 @@ object WeightTrend {
     }
 
     /**
+     * The full working behind [impliedMaintenance], so a "how is this calculated?" popup can show
+     * the same numbers instead of a bare total. All fields are rounded for display.
+     */
+    data class MaintenanceEstimate(
+        /** The final implied maintenance, kcal/day (coerced to a sane 800–6000 range). */
+        val maintenanceKcal: Int,
+        /** Average daily intake over the logged days. */
+        val avgIntakeKcal: Int,
+        /** How many days of food went into the average. */
+        val loggedDays: Int,
+        /** Measured weight trend, kg/week (negative = losing). */
+        val ratePerWeekKg: Float,
+        /**
+         * What that trend is worth per day, kcal — positive when gaining (eating above maintenance),
+         * negative when losing. maintenance = avgIntake − this.
+         */
+        val dailyEnergyBalanceKcal: Int
+    )
+
+    /**
      * Implied maintenance calories from average daily intake vs. measured weight change:
      * maintenance ≈ avgIntake − (weight change per day × 7700). Null until there's enough to trust
      * (at least ~10 logged days and a usable rate). A rough estimate, not a prescription.
      */
-    fun impliedMaintenance(avgIntakeKcal: Float, ratePerWeek: Float?, loggedDays: Int): Int? {
+    fun impliedMaintenance(avgIntakeKcal: Float, ratePerWeek: Float?, loggedDays: Int): Int? =
+        impliedMaintenanceBreakdown(avgIntakeKcal, ratePerWeek, loggedDays)?.maintenanceKcal
+
+    /** [impliedMaintenance] with its working exposed — see [MaintenanceEstimate]. */
+    fun impliedMaintenanceBreakdown(avgIntakeKcal: Float, ratePerWeek: Float?, loggedDays: Int): MaintenanceEstimate? {
         if (ratePerWeek == null || avgIntakeKcal <= 0f || loggedDays < 10) return null
         val ratePerDayKg = ratePerWeek / 7f
-        val maintenance = avgIntakeKcal - ratePerDayKg * KCAL_PER_KG
-        return maintenance.roundToInt().coerceIn(800, 6000)
+        val dailyBalance = ratePerDayKg * KCAL_PER_KG
+        val maintenance = (avgIntakeKcal - dailyBalance).roundToInt().coerceIn(800, 6000)
+        return MaintenanceEstimate(
+            maintenanceKcal = maintenance,
+            avgIntakeKcal = avgIntakeKcal.roundToInt(),
+            loggedDays = loggedDays,
+            ratePerWeekKg = ratePerWeek,
+            dailyEnergyBalanceKcal = dailyBalance.roundToInt()
+        )
     }
 }
