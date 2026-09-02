@@ -58,6 +58,7 @@ import com.fitpal.app.ui.component.MealItemCard
 import com.fitpal.app.ui.component.MealItemContent
 import com.fitpal.app.ui.component.MealTypeSelector
 import com.fitpal.app.ui.component.RenameDialog
+import com.fitpal.app.ui.component.rememberFastingGuard
 import com.fitpal.app.ui.theme.CalorieColor
 import com.fitpal.app.ui.theme.Cream
 import com.fitpal.app.ui.theme.CreamMuted
@@ -81,6 +82,8 @@ fun MealGroupScreen(
     var showCopyPicker by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showRenameMeal by remember { mutableStateOf(false) }
+    // A copy onto today is eating now, so it goes through the same fasting gate as a fresh log.
+    val fastingGuard = rememberFastingGuard()
 
     // Pop back once the whole meal is deleted (or all dishes were removed individually). Guarded
     // so it fires exactly once (delete sets the flag AND empties the flow — both would pop).
@@ -107,7 +110,12 @@ fun MealGroupScreen(
             mealTypeChooser = true,
             initialMealType = state.mealType,
             copiesChooser = true,
-            onConfirmMeal = { date, meal, copies -> showCopyPicker = false; viewModel.copyToDate(date, meal, copies) },
+            onConfirmMeal = { date, meal, copies ->
+                showCopyPicker = false
+                fastingGuard.attempt(isForToday = date == java.time.LocalDate.now()) {
+                    viewModel.copyToDate(date, meal, copies)
+                }
+            },
             onConfirm = {},
             onDismiss = { showCopyPicker = false }
         )

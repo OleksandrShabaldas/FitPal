@@ -143,7 +143,12 @@ fun AnalysisScreen(
             mealTypeChooser = true,
             initialMealType = mealType,
             copiesChooser = true,
-            onConfirmMeal = { date, meal, copies -> showCopyPicker = false; viewModel.copyToDate(date, meal, copies) },
+            onConfirmMeal = { date, meal, copies ->
+                showCopyPicker = false
+                fastingGuard.attempt(isForToday = date == java.time.LocalDate.now()) {
+                    viewModel.copyToDate(date, meal, copies)
+                }
+            },
             onConfirm = {},
             onDismiss = { showCopyPicker = false }
         )

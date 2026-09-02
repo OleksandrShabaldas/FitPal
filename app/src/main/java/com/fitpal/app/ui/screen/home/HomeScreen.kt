@@ -112,6 +112,7 @@ import com.fitpal.app.domain.model.MealTypes
 import com.fitpal.app.domain.model.Micronutrients
 import com.fitpal.app.ui.component.CalorieRing
 import com.fitpal.app.ui.component.DatePickerDialog
+import com.fitpal.app.ui.component.rememberFastingGuard
 import com.fitpal.app.ui.component.GlassCapsule
 import com.fitpal.app.ui.component.GradientBackdrop
 import com.fitpal.app.ui.component.BackdropTheme
@@ -195,6 +196,9 @@ fun HomeScreen(
     var showCalendar by remember { mutableStateOf(false) }
     var showStepDialog by remember { mutableStateOf(false) }
     var showWeightDialog by remember { mutableStateOf(false) }
+    // Copying a logged entry onto today counts as eating now, so it must pass the same fasting gate
+    // (warn + "I ate this earlier" grace) as any other log — a copy is just another way to log.
+    val fastingGuard = rememberFastingGuard()
 
     // The weigh-in reminder opens Home and asks us to pop the weight dialog straight up, so the
     // notification lands the user on the logging step instead of just the Home screen.
@@ -421,7 +425,12 @@ fun HomeScreen(
                 editingItem = null
             },
             onDelete = { viewModel.deleteItem(item.id); editingItem = null },
-            onCopyToDate = { date, meal, copies -> viewModel.copyItemToDate(item, date, meal, copies); editingItem = null },
+            onCopyToDate = { date, meal, copies ->
+                fastingGuard.attempt(isForToday = date == java.time.LocalDate.now()) {
+                    viewModel.copyItemToDate(item, date, meal, copies)
+                }
+                editingItem = null
+            },
             onChangeMealType = { type -> viewModel.setItemMealType(item, type); editingItem = null },
             onDismiss = { editingItem = null }
         )

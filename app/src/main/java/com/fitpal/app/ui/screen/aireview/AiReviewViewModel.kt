@@ -33,6 +33,10 @@ data class AiReviewUiState(
     val subtitle: String = "",
     val isLoading: Boolean = true,
     val review: String? = null,
+    /** The green "do this next" coaching card, parsed from the review's FOCUS: line (null if absent). */
+    val focus: String? = null,
+    /** The red "keep an eye on this" card, parsed from the review's WATCH: line (null if absent). */
+    val watch: String? = null,
     val modelReady: Boolean = true,
     val error: String? = null,
     /** Which engine produced this overview — for the online / on-device badge. */
@@ -77,7 +81,10 @@ class AiReviewViewModel @Inject constructor(
             // Already generated for this period? Show it instantly.
             val saved = aiReviewRepository.get(period, periodKey)
             if (saved != null) {
-                _uiState.update { it.copy(isLoading = false, review = saved.text, aiSource = saved.source) }
+                val p = parseReview(saved.text)
+                _uiState.update {
+                    it.copy(isLoading = false, review = p.prose, focus = p.focus, watch = p.watch, aiSource = saved.source)
+                }
                 return@launch
             }
             if (!reviewGenerator.canGenerate()) {
@@ -139,7 +146,37 @@ class AiReviewViewModel @Inject constructor(
         }
         // Read back so the online/on-device badge reflects which engine produced it.
         val saved = aiReviewRepository.get(period, periodKey)
-        _uiState.update { it.copy(isLoading = false, review = text, aiSource = saved?.source, progress = "") }
+        val p = parseReview(text)
+        _uiState.update {
+            it.copy(isLoading = false, review = p.prose, focus = p.focus, watch = p.watch, aiSource = saved?.source, progress = "")
+        }
+    }
+
+    private data class ParsedReview(val prose: String, val focus: String?, val watch: String?)
+
+    /**
+     * Split the coach's two action cards off the prose. The model ends the review with `FOCUS:` and
+     * `WATCH:` lines (see [com.fitpal.app.ml.FoodPrompts]); we lift those into the green/red cards and
+     * keep them out of the body. Tolerant of markdown bold/bullets around the tags, and of older
+     * reviews that have no such lines (both come back null → no cards).
+     */
+    private fun parseReview(text: String): ParsedReview {
+        var focus: String? = null
+        var watch: String? = null
+        val prose = StringBuilder()
+        text.lines().forEach { line ->
+            val m = CARD_LINE.find(line)
+            if (m == null) {
+                prose.appendLine(line)
+                return@forEach
+            }
+            val body = m.groupValues[2].trim().trim('*', '_', ' ').ifBlank { null }
+            when (m.groupValues[1]) {
+                "FOCUS" -> if (focus == null) focus = body
+                "WATCH" -> if (watch == null) watch = body
+            }
+        }
+        return ParsedReview(prose.toString().trim(), focus, watch)
     }
 
     // ---------- Period helpers ----------
@@ -171,4 +208,13 @@ class AiReviewViewModel @Inject constructor(
 
     private fun parseMonthOr(s: String, fallback: YearMonth): YearMonth =
         try { YearMonth.parse(s) } catch (e: Exception) { fallback }
+
+    private companion object {
+        /**
+         * A `FOCUS:`/`WATCH:` card line, tolerating leading markdown (**, -, >, #). Uppercase-only on
+         * purpose (the prompt always emits it that way) so a prose sentence like "Watch your portions"
+         * can't be misread as a card.
+         */
+        private val CARD_LINE = Regex("^[\\s*_#>\\-]*(FOCUS|WATCH)\\s*:\\s*(.+)$")
+    }
 }

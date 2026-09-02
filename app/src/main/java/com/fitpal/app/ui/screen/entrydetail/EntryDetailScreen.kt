@@ -78,6 +78,7 @@ import com.fitpal.app.ui.component.MealInsightsSection
 import com.fitpal.app.ui.component.MicronutrientCard
 import com.fitpal.app.ui.component.MicronutrientBars
 import com.fitpal.app.ui.component.RenameDialog
+import com.fitpal.app.ui.component.rememberFastingGuard
 import com.fitpal.app.ui.component.SegmentedPills
 import com.fitpal.app.ui.theme.CarbColor
 import com.fitpal.app.ui.theme.Cream
@@ -123,6 +124,8 @@ fun EntryDetailScreen(
     var showCopyPicker by remember { mutableStateOf(false) }
     var showEditWithAi by remember { mutableStateOf(false) }
     var showRename by remember { mutableStateOf(false) }
+    // A copy onto today is eating now, so it goes through the same fasting gate as a fresh log.
+    val fastingGuard = rememberFastingGuard()
 
     // "Add ingredient" popup: which tab, the Custom form, and the two full-screen cameras (barcode
     // scan + label snap). The form/tab are hoisted so they survive the popup closing while a camera
@@ -206,7 +209,12 @@ fun EntryDetailScreen(
             mealTypeChooser = true,
             initialMealType = state.mealType,
             copiesChooser = true,
-            onConfirmMeal = { date, meal, copies -> showCopyPicker = false; viewModel.copyToDate(date, meal, copies) },
+            onConfirmMeal = { date, meal, copies ->
+                showCopyPicker = false
+                fastingGuard.attempt(isForToday = date == java.time.LocalDate.now()) {
+                    viewModel.copyToDate(date, meal, copies)
+                }
+            },
             onConfirm = {},
             onDismiss = { showCopyPicker = false }
         )

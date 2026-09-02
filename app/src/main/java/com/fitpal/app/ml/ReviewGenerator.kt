@@ -75,7 +75,8 @@ class ReviewGenerator @Inject constructor(
             }
             val weights = weightRepository.getAll().first()
             val isDaily = period.equals("daily", ignoreCase = true) || totalDays <= 1
-            val extraContext = buildExtraContext(from, to, isDaily)
+            val reviewLabel = reviewLabelFor(period, from, to, isDaily)
+            val extraContext = buildExtraContext(from, to, isDaily, reviewLabel)
 
             val (rawReview, source) = pipeline.generateNutritionReviewWithSource(
                 period, rows, totalDays, profile, targets, weights, foodLog, extraContext
@@ -97,24 +98,38 @@ class ReviewGenerator @Inject constructor(
      * is judged net of exercise), the user's personal limitations, the long-term habit notes, and —
      * for weekly/monthly — an instruction to distil an updated, short habit summary at the end.
      */
-    private suspend fun buildExtraContext(from: String, to: String, isDaily: Boolean): String {
+    private suspend fun buildExtraContext(from: String, to: String, isDaily: Boolean, reviewLabel: String): String {
         val exByDate = exerciseRepository.entriesInRange(from, to).groupBy { it.date }
         val trim = settingsRepository.stepCalorieReductionPercent.value
-        val stepBurnByDate = stepRepository.getDailySteps(from, to).first()
-            .associate { it.date to (it.caloriesBurned * (100 - trim) / 100f) }
+        val stepRows = stepRepository.getDailySteps(from, to).first()
+        val stepCountByDate = stepRows.associate { it.date to it.steps }
+        val stepBurnByDate = stepRows.associate { it.date to (it.caloriesBurned * (100 - trim) / 100f) }
         val burnDates = (exByDate.keys + stepBurnByDate.keys).toSortedSet()
         val activityLines = burnDates.joinToString("\n") { d ->
             val ex = exByDate[d].orEmpty()
             val exKcal = ex.sumOf { it.caloriesBurned.toDouble() }.toInt()
+            val steps = stepCountByDate[d] ?: 0
             val stepKcal = stepBurnByDate[d]?.toInt() ?: 0
             val exStr = if (ex.isEmpty()) "no workout"
                 else ex.joinToString(", ") { "${it.name} ${it.minutes}min ~${it.caloriesBurned.toInt()}kcal" }
-            "$d: $exStr; steps ~${stepKcal}kcal; total burned ~${exKcal + stepKcal}kcal"
+            // The raw step COUNT is the strongest "unusual day" signal — a huge count almost always
+            // means a hike/long walk/event that shaped the eating (improvised snacks, no real meals).
+            // Flag it so the coach reasons from it instead of only seeing a burn number.
+            val activeFlag = when {
+                steps >= 25000 -> " [UNUSUALLY ACTIVE DAY — a huge step count like this usually means a long hike/walk/event; real meals were probably not an option, so judge the food choices in that light]"
+                steps >= 15000 -> " [very active day]"
+                else -> ""
+            }
+            "$d: $exStr; ${"%,d".format(steps)} steps (~${stepKcal}kcal); total burned ~${exKcal + stepKcal}kcal$activeFlag"
         }
 
         return buildString {
+            appendLine("REVIEWING: $reviewLabel. Refer to the day/period by this weekday/date. Do NOT say " +
+                "\"today\"/\"yesterday\"/\"tomorrow\" — this overview is cached and may be read days later; use " +
+                "the date, \"that day\", \"going forward\", or \"next time\" instead.")
+            appendLine()
             if (activityLines.isNotBlank()) {
-                appendLine("ACTIVITY & CALORIES BURNED (per day — judge intake NET of this):")
+                appendLine("ACTIVITY & CALORIES BURNED (per day — judge intake NET of this; a big step count is a real signal, not a footnote):")
                 appendLine(activityLines)
             } else {
                 appendLine("ACTIVITY & CALORIES BURNED: no workouts or step data logged this period.")
@@ -147,7 +162,8 @@ class ReviewGenerator @Inject constructor(
             if (!isDaily) {
                 appendLine()
                 append(
-                    "AT THE VERY END, on a new line starting exactly with \"HABITS:\", output an updated, " +
+                    "AFTER the FOCUS and WATCH lines, as the very last line of all, on a new line " +
+                        "starting exactly with \"HABITS:\", output an updated, " +
                         "concise (<=200 words) running profile of this user. Cover, in plain sentences: " +
                         "eating PATTERNS (meal timing, frequency, consistency); common TRIGGERS (stress, " +
                         "weekends, social/family meals, boredom); STRENGTHS they show consistently; recurring " +
@@ -174,6 +190,17 @@ class ReviewGenerator @Inject constructor(
         val habits = lines.subList(idx, lines.size).joinToString("\n").substringAfter(":").trim()
         return before to habits.ifBlank { null }
     }
+
+    /** A human, absolute label for the reviewed period — so the coach never says a stale "today". */
+    private fun reviewLabelFor(period: String, from: String, to: String, isDaily: Boolean): String = runCatching {
+        when {
+            isDaily -> LocalDate.parse(to).format(DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy"))
+            period.equals("weekly", ignoreCase = true) ->
+                "the week of ${LocalDate.parse(from).format(DateTimeFormatter.ofPattern("d MMM"))} – " +
+                    LocalDate.parse(to).format(DateTimeFormatter.ofPattern("d MMM yyyy"))
+            else -> LocalDate.parse(from).format(DateTimeFormatter.ofPattern("MMMM yyyy"))
+        }
+    }.getOrDefault(to)
 
     private data class Range(val from: String, val to: String, val totalDays: Int)
 

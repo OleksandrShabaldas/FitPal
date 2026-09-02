@@ -1,5 +1,7 @@
 package com.fitpal.app.ui.screen.aireview
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,10 +18,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -28,6 +33,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -40,6 +48,8 @@ import com.fitpal.app.ui.component.GradientBackdrop
 import com.fitpal.app.ui.theme.Cream
 import com.fitpal.app.ui.theme.CreamMuted
 import com.fitpal.app.ui.theme.GoldLight
+import com.fitpal.app.ui.theme.ScoreGreen
+import com.fitpal.app.ui.theme.ScoreRed
 import com.fitpal.app.ui.theme.glass
 import com.fitpal.app.ui.theme.glassSoft
 
@@ -120,6 +130,34 @@ fun AiReviewScreen(
                                 color = Cream
                             )
                         }
+
+                        // The coach's two takeaway cards: one thing to DO (green) + one to WATCH (red).
+                        if (state.focus != null || state.watch != null) {
+                            Spacer(Modifier.height(12.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                state.focus?.let {
+                                    CoachActionCard(
+                                        accent = ScoreGreen,
+                                        label = "Focus next",
+                                        icon = Icons.Filled.TrendingUp,
+                                        body = it,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                                state.watch?.let {
+                                    CoachActionCard(
+                                        accent = ScoreRed,
+                                        label = "Keep an eye on",
+                                        icon = Icons.Filled.Visibility,
+                                        body = it,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
+                        }
                     }
 
                     else -> Column(
@@ -143,6 +181,41 @@ fun AiReviewScreen(
                 }
             }
         }
+    }
+}
+
+/**
+ * One of the coach's two takeaway cards — a tinted glass panel with an accent icon + label and the
+ * one-sentence action. Green ("Focus next") for what to do, red ("Keep an eye on") for what to watch;
+ * both parsed from the review's FOCUS:/WATCH: lines. Mirrors [com.fitpal.app.ui.component.CoachingTipCard]'s style.
+ */
+@Composable
+private fun CoachActionCard(
+    accent: Color,
+    label: String,
+    icon: ImageVector,
+    body: String,
+    modifier: Modifier = Modifier
+) {
+    val shape = RoundedCornerShape(20.dp)
+    Column(
+        modifier = modifier
+            .background(accent.copy(alpha = 0.10f), shape)
+            .border(1.dp, accent.copy(alpha = 0.30f), shape)
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier.size(30.dp).background(accent.copy(alpha = 0.18f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(17.dp))
+            }
+            Spacer(Modifier.width(8.dp))
+            Text(label, style = MaterialTheme.typography.labelMedium, color = accent, fontWeight = FontWeight.SemiBold)
+        }
+        Text(body, style = MaterialTheme.typography.bodyMedium, color = Cream)
     }
 }
 
