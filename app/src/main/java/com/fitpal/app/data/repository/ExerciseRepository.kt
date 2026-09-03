@@ -56,6 +56,53 @@ class ExerciseRepository @Inject constructor(
     }
 
     /**
+     * Insert or update an activity imported from another app (Calistapp), keyed by [externalId]
+     * (the source's stable id). Unlike [logExercise], the [calories] are stored VERBATIM — the
+     * source computed them (HR-based) and is authoritative, so we must not recompute from MET.
+     * Idempotent: a re-transfer of the same [externalId] updates the row rather than duplicating it.
+     */
+    suspend fun upsertFromCalistapp(
+        externalId: String,
+        date: String,
+        name: String,
+        minutes: Int,
+        met: Float,
+        calories: Float,
+        detailsJson: String?,
+        startMs: Long,
+        source: String = "calistapp"
+    ): Long {
+        val existing = exerciseDao.getByExternalId(externalId)
+        return if (existing != null) {
+            exerciseDao.updateByExternalId(
+                externalId = externalId,
+                date = date,
+                name = name,
+                minutes = minutes,
+                met = met,
+                calories = calories,
+                detailsJson = detailsJson,
+                timestamp = System.currentTimeMillis()
+            )
+            existing.id
+        } else {
+            exerciseDao.insert(
+                ExerciseEntryEntity(
+                    date = date,
+                    name = name,
+                    minutes = minutes,
+                    met = met,
+                    caloriesBurned = calories,
+                    source = source,
+                    externalId = externalId,
+                    detailsJson = detailsJson,
+                    timestamp = if (startMs > 0) startMs else System.currentTimeMillis()
+                )
+            )
+        }
+    }
+
+    /**
      * Change a logged workout's duration after the fact. Calories scale linearly with time (the MET
      * and the body weight used at log time are unchanged), so we scale from the original burn.
      * Returns the updated entry.

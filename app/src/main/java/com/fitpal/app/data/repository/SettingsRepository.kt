@@ -50,6 +50,21 @@ class SettingsRepository @Inject constructor(
         _stepCalorieReductionPercent.value = clamped
     }
 
+    // --- Calistapp bridge: whether FitPal wakes Calistapp to hand over steps ---
+
+    private val _calistappSyncEnabled = MutableStateFlow(prefs.getBoolean(KEY_CALISTAPP_SYNC, true))
+    /**
+     * When on, FitPal nudges Calistapp (a silent broadcast) to pull the day's steps after each step
+     * sync and once a day. Turning it off only stops the nudge — Calistapp can still pull on its own
+     * schedule and the provider keeps serving it. On by default.
+     */
+    val calistappSyncEnabled: StateFlow<Boolean> = _calistappSyncEnabled
+
+    fun setCalistappSyncEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_CALISTAPP_SYNC, enabled).apply()
+        _calistappSyncEnabled.value = enabled
+    }
+
     // --- Steps last-synced time ---
     // When we last pulled Health Connect (epoch millis; 0 = never). Lets the UI show freshness, so
     // "synced" reads as "we checked Health Connect at HH:mm", not "Samsung Health is up to date".
@@ -807,6 +822,7 @@ class SettingsRepository @Inject constructor(
     companion object {
         private const val KEY_CALORIE_GOAL = "daily_calorie_goal"
         private const val KEY_STEP_CAL_REDUCTION = "step_cal_reduction_pct"
+        private const val KEY_CALISTAPP_SYNC = "calistapp_sync_enabled"
         private const val KEY_STEPS_SYNCED_AT = "steps_last_synced_at"
         private const val KEY_HF_TOKEN = "hf_token"
         private const val KEY_GEMINI_KEY = "gemini_api_key"

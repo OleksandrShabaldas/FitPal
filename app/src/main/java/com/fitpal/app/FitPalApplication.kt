@@ -43,6 +43,19 @@ class FitPalApplication : Application() {
         // store to do it). No-op if the user turned auto-check off or it already ran today.
         runCatching { entryPoint.updateManager().checkOnStartIfDue() }
 
+        // Daily: refresh steps and nudge Calistapp to pull them (the "FitPal wakes Calistapp" leg
+        // of the bridge). KEEP so we don't reset the period every launch.
+        runCatching {
+            val work = androidx.work.PeriodicWorkRequestBuilder<com.fitpal.app.sync.StepNudgeWorker>(
+                1, java.util.concurrent.TimeUnit.DAYS
+            ).build()
+            androidx.work.WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+                com.fitpal.app.sync.StepNudgeWorker.UNIQUE_NAME,
+                androidx.work.ExistingPeriodicWorkPolicy.KEEP,
+                work
+            )
+        }
+
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
             override fun onActivityStarted(activity: Activity) = foreground.onActivityStarted()
             override fun onActivityStopped(activity: Activity) = foreground.onActivityStopped()

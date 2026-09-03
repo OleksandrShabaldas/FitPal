@@ -5,6 +5,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fitpal.app.data.local.entity.ExerciseEntryEntity
 import com.fitpal.app.data.repository.ExerciseRepository
+import com.fitpal.app.sync.CalistappDetails
+import com.fitpal.app.sync.CalistappWorkoutDetails
 import com.fitpal.app.ui.navigation.Screen
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,10 +23,22 @@ data class ExerciseDetailUiState(
     /** True once this workout has been saved to the collection (for the bookmark state). */
     val savedToCollection: Boolean = false,
     /** One-shot confirmation after "copy to another date" — shown as a toast, then cleared. */
-    val copyConfirmation: String? = null
+    val copyConfirmation: String? = null,
+    /**
+     * Rich workout detail, present ONLY for exercises imported from Calistapp (intensity, HR, reps,
+     * per-exercise breakdown). Null for FitPal's own logged/estimated exercises — the extra UI is
+     * simply not shown for those.
+     */
+    val calistappDetails: CalistappWorkoutDetails? = null
 ) {
-    /** Intensity bucket from the MET value. */
-    val intensity: String get() = when {
+    /** From Calistapp when it carried its detail blob. */
+    val isFromCalistapp: Boolean get() = calistappDetails != null
+
+    /**
+     * Intensity bucket. Prefers Calistapp's heart-rate-derived label for imported workouts (it's a
+     * truer read than MET for a bodyweight session); otherwise the MET bucket FitPal already used.
+     */
+    val intensity: String get() = calistappDetails?.intensity ?: when {
         (entry?.met ?: 0f) < 3f -> "Light"
         (entry?.met ?: 0f) < 6f -> "Moderate"
         else -> "Vigorous"
@@ -49,6 +63,9 @@ class ExerciseDetailViewModel @Inject constructor(
                 it.copy(
                     entry = entry,
                     suggestions = entry?.let { e -> exerciseRepository.suggestionsFor(e) } ?: emptyList(),
+                    calistappDetails = entry
+                        ?.takeIf { e -> CalistappDetails.isFromCalistapp(e) }
+                        ?.let { e -> CalistappDetails.parse(e.detailsJson) },
                     isLoading = false
                 )
             }

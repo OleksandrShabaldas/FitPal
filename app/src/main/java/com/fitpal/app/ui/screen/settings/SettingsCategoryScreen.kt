@@ -122,6 +122,7 @@ fun SettingsCategoryScreen(
                     StepCaloriesSection(viewModel)
                     SamsungHealthSection(viewModel)
                     WatchSection(viewModel)
+                    CalistappSyncSection(viewModel)
                 }
                 "presets" -> {
                     PresetsSection(viewModel)
@@ -386,6 +387,32 @@ private fun StepCaloriesSection(viewModel: SettingsViewModel) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+        }
+    }
+}
+
+@Composable
+private fun CalistappSyncSection(viewModel: SettingsViewModel) {
+    val enabled by viewModel.calistappSyncEnabled.collectAsStateWithLifecycle()
+    Box(modifier = Modifier.fillMaxWidth().glass()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                    Text("Sync with Calistapp", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "Wake Calistapp at the end of the day to hand over your steps. Your Calistapp workouts " +
+                            "also show up here as calories burned. Turn off to stop nudging Calistapp — it can " +
+                            "still pull steps on its own.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(checked = enabled, onCheckedChange = { viewModel.setCalistappSyncEnabled(it) })
+            }
         }
     }
 }

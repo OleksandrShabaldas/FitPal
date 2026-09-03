@@ -111,7 +111,12 @@ class ReviewGenerator @Inject constructor(
             val steps = stepCountByDate[d] ?: 0
             val stepKcal = stepBurnByDate[d]?.toInt() ?: 0
             val exStr = if (ex.isEmpty()) "no workout"
-                else ex.joinToString(", ") { "${it.name} ${it.minutes}min ~${it.caloriesBurned.toInt()}kcal" }
+                // Calistapp-imported workouts carry richer detail (intensity, HR, reps, exercises) —
+                // fold it in so the coach reasons from the real session, not just a kcal number.
+                else ex.joinToString(", ") {
+                    "${it.name} ${it.minutes}min ~${it.caloriesBurned.toInt()}kcal" +
+                        com.fitpal.app.sync.CalistappDetails.promptSuffix(it)
+                }
             // The raw step COUNT is the strongest "unusual day" signal — a huge count almost always
             // means a hike/long walk/event that shaped the eating (improvised snacks, no real meals).
             // Flag it so the coach reasons from it instead of only seeing a burn number.

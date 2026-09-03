@@ -24,7 +24,9 @@ import com.fitpal.app.domain.Streaks
 import com.fitpal.app.domain.model.FitnessGoal
 import com.fitpal.app.domain.model.MealTypes
 import com.fitpal.app.domain.model.NutritionInfo
+import android.content.Context
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -63,7 +65,8 @@ class HomeViewModel @Inject constructor(
     private val exerciseRepository: ExerciseRepository,
     private val trailRepository: TrailRepository,
     private val challengeRepository: ChallengeRepository,
-    private val focusedDate: FocusedDate
+    private val focusedDate: FocusedDate,
+    @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
     private val dateFormat = DateTimeFormatter.ISO_LOCAL_DATE
@@ -360,6 +363,12 @@ class HomeViewModel @Inject constructor(
             val kg = latestWeight.value?.weightKg ?: 70f
             runCatching { stepRepository.syncFromHealthConnect(kg) }
             loadStepSources()
+            // FitPal is opened ~daily, so this is the most reliable moment to hand fresh steps to
+            // Calistapp: wake it to pull them. Gated by the user's Calistapp-sync toggle; harmless
+            // if Calistapp isn't installed.
+            if (settingsRepository.calistappSyncEnabled.value) {
+                runCatching { com.fitpal.app.sync.CalistappNudge.nudge(appContext) }
+            }
         }
     }
 

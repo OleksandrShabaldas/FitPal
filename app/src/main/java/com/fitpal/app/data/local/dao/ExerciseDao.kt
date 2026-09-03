@@ -28,6 +28,28 @@ interface ExerciseDao {
     @Query("SELECT * FROM exercise_entries WHERE id = :id")
     suspend fun getById(id: Long): ExerciseEntryEntity?
 
+    /** Look up an imported entry by its source id (Calistapp session id) — for idempotent upsert. */
+    @Query("SELECT * FROM exercise_entries WHERE externalId = :externalId LIMIT 1")
+    suspend fun getByExternalId(externalId: String): ExerciseEntryEntity?
+
+    /** Rewrite an existing externally-sourced row in place (calories are stored verbatim). */
+    @Query("""
+        UPDATE exercise_entries
+        SET date = :date, name = :name, minutes = :minutes, met = :met,
+            caloriesBurned = :calories, detailsJson = :detailsJson, timestamp = :timestamp
+        WHERE externalId = :externalId
+    """)
+    suspend fun updateByExternalId(
+        externalId: String,
+        date: String,
+        name: String,
+        minutes: Int,
+        met: Float,
+        calories: Float,
+        detailsJson: String?,
+        timestamp: Long
+    )
+
     /**
      * Every distinct exercise the user has ever logged, keeping the latest version of each
      * (case-insensitive by name), newest first. Powers the global search.

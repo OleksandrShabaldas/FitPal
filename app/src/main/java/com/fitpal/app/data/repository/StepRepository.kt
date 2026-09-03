@@ -117,6 +117,32 @@ class StepRepository @Inject constructor(
     fun getDailySteps(from: String, to: String): Flow<List<DailyStepRow>> =
         stepDao.getDailySteps(from, to)
 
+    /** One post-trim daily step figure for the sync provider. */
+    data class DailyStepExport(
+        val date: String,
+        val steps: Int,
+        /** Calories AFTER the user's over-count trim — the number Calistapp stores as-is. */
+        val trimmedCalories: Float,
+        val reductionPercent: Int
+    )
+
+    /**
+     * A date range of daily steps with FitPal's reduction % ALREADY applied — this is what the
+     * Calistapp bridge hands over, so Calistapp never reimplements the formula. Pulls the current
+     * trim from settings once and applies it to every day (matching [getCaloriesBurned]).
+     */
+    suspend fun dailyStepsForRange(from: String, to: String): List<DailyStepExport> {
+        val pct = settingsRepository.stepCalorieReductionPercent.value
+        return stepDao.getDailyStepsOnce(from, to).map { row ->
+            DailyStepExport(
+                date = row.date,
+                steps = row.steps,
+                trimmedCalories = (row.caloriesBurned * (100 - pct) / 100f).coerceAtLeast(0f),
+                reductionPercent = pct
+            )
+        }
+    }
+
     // ---- Health Connect (Samsung Health) ----
 
     fun healthConnectAvailable(): Boolean = healthConnectManager.isAvailable()

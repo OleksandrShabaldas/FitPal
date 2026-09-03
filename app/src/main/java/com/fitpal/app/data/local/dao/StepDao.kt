@@ -51,6 +51,10 @@ interface StepDao {
     /** Step totals for a date range (for analytics). */
     @Query("SELECT date, SUM(steps) as steps, SUM(caloriesBurned) as caloriesBurned FROM step_entries WHERE date BETWEEN :from AND :to GROUP BY date ORDER BY date")
     fun getDailySteps(from: String, to: String): Flow<List<DailyStepRow>>
+
+    /** One-shot twin of [getDailySteps] — for the Calistapp sync provider (raw, pre-trim calories). */
+    @Query("SELECT date, SUM(steps) as steps, SUM(caloriesBurned) as caloriesBurned FROM step_entries WHERE date BETWEEN :from AND :to GROUP BY date ORDER BY date")
+    suspend fun getDailyStepsOnce(from: String, to: String): List<DailyStepRow>
 }
 
 data class DailyStepRow(

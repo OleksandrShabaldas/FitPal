@@ -89,6 +89,10 @@ class SettingsViewModel @Inject constructor(
     val userProfile: StateFlow<UserProfile> = settingsRepository.userProfile
     val stepCalorieReductionPercent: StateFlow<Int> = settingsRepository.stepCalorieReductionPercent
 
+    // ---- Calistapp bridge ----
+    val calistappSyncEnabled: StateFlow<Boolean> = settingsRepository.calistappSyncEnabled
+    fun setCalistappSyncEnabled(enabled: Boolean) = settingsRepository.setCalistappSyncEnabled(enabled)
+
     /** Latest weight — shown in Profile & goals so setup includes the number targets need most. */
     val latestWeight: StateFlow<com.fitpal.app.data.local.entity.WeightEntryEntity?> =
         weightRepository.getLatest()

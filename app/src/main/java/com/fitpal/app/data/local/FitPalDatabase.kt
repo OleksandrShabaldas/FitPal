@@ -53,7 +53,7 @@ import com.fitpal.app.data.local.entity.WeightEntryEntity
         UsdaFoodEntity::class,
         WeightEntryEntity::class
     ],
-    version = 28,
+    version = 29,
     exportSchema = true
 )
 abstract class FitPalDatabase : RoomDatabase() {
@@ -465,6 +465,21 @@ abstract class FitPalDatabase : RoomDatabase() {
         val MIGRATION_27_28 = object : Migration(27, 28) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE meal_log_items ADD COLUMN servings INTEGER NOT NULL DEFAULT 1")
+            }
+        }
+
+        /**
+         * v28 -> v29: the Calistapp bridge. Exercise entries gain an `externalId` (the Calistapp
+         * session id — a stable de-dupe key so re-transfers update rather than duplicate) and a
+         * `detailsJson` blob (Calistapp's per-exercise breakdown + intensity, opaque to FitPal).
+         * A UNIQUE index on `externalId` backs the upsert; NULLs (all pre-existing manual rows)
+         * are distinct in SQLite so they don't collide.
+         */
+        val MIGRATION_28_29 = object : Migration(28, 29) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE exercise_entries ADD COLUMN externalId TEXT")
+                db.execSQL("ALTER TABLE exercise_entries ADD COLUMN detailsJson TEXT")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_exercise_entries_externalId ON exercise_entries(externalId)")
             }
         }
     }

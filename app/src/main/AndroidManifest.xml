@@ -26,9 +26,10 @@
          hands the APK to the system installer. Android still asks the user to confirm. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
-    <!-- So we can detect / open the Health Connect app -->
+    <!-- So we can detect / open the Health Connect app, and reach Calistapp's wake-up receiver -->
     <queries>
         <package android:name="com.google.android.apps.healthdata" />
+        <package android:name="com.calistapp" />
     </queries>
 
     <application
@@ -80,6 +81,15 @@
             android:name=".ml.AnalysisService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <!-- The Calistapp bridge: Calistapp pushes finished workouts here and pulls the day's steps
+             (+ FitPal's already-trimmed step-calories). Exported so a separate app can reach it;
+             not permission-guarded (the two apps use different signing keys, so a signature perm
+             can't work) — FitPalSyncProvider enforces a Calistapp-only caller check at runtime. -->
+        <provider
+            android:name=".sync.FitPalSyncProvider"
+            android:authorities="com.fitpal.app.sync"
+            android:exported="true" />
 
         <!-- Receives commands from the Wear OS companion (log water / describe meal / describe
              exercise / request stats). Play Services cold-starts it even when the app is dead. -->

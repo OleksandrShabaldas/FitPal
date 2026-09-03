@@ -53,6 +53,7 @@ import com.fitpal.app.ui.theme.GoldLight
 import com.fitpal.app.ui.theme.glass
 import com.fitpal.app.ui.theme.glassSoft
 import com.fitpal.app.ml.AiSource
+import com.fitpal.app.sync.CalistappWorkoutDetails
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -160,10 +161,16 @@ fun ExerciseDetailScreen(
                         }
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            "≈ ${entry.minutes} active min × MET ${"%.1f".format(entry.met)} (${state.intensity}) · scales with your body weight. Counts in full toward that day's budget.",
+                            if (state.isFromCalistapp)
+                                "≈ ${entry.minutes} active min at ${state.intensity.lowercase()} intensity · imported from Calistapp with its heart-rate–based calories. Counts in full toward that day's budget."
+                            else
+                                "≈ ${entry.minutes} active min × MET ${"%.1f".format(entry.met)} (${state.intensity}) · scales with your body weight. Counts in full toward that day's budget.",
                             style = MaterialTheme.typography.bodySmall, color = CreamMuted
                         )
                     }
+
+                    // Calistapp-only: the real workout breakdown (intensity, HR, reps, exercises).
+                    state.calistappDetails?.let { CalistappBreakdownCard(it) }
 
                     // Editable duration — calories recompute from the same MET.
                     Column(modifier = Modifier.fillMaxWidth().glass().padding(18.dp)) {
@@ -217,6 +224,61 @@ private fun StatTile(label: String, value: String, modifier: Modifier = Modifier
         Text(value, style = MaterialTheme.typography.titleMedium, color = Cream)
     }
 }
+
+/**
+ * The workout breakdown Calistapp shipped with an imported exercise — heart rate, reps, RPE and the
+ * per-exercise split. Shown only for Calistapp-sourced rows; FitPal's own exercises never reach here.
+ */
+@Composable
+private fun CalistappBreakdownCard(details: CalistappWorkoutDetails) {
+    Column(modifier = Modifier.fillMaxWidth().glass().padding(18.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Workout breakdown", style = MaterialTheme.typography.titleMedium, color = Cream, modifier = Modifier.weight(1f))
+            Text("from Calistapp", style = MaterialTheme.typography.labelSmall, color = CreamMuted)
+        }
+        Spacer(Modifier.height(12.dp))
+
+        // Heart rate + reps tiles (only those Calistapp actually measured).
+        val tiles = buildList<Pair<String, String>> {
+            details.effortHr?.let { add("Avg HR" to "$it bpm") }
+            details.peakHr?.takeIf { it > 0 }?.let { add("Peak HR" to "$it bpm") }
+            details.totalReps?.takeIf { it > 0 }?.let { add("Total reps" to "$it") }
+        }
+        if (tiles.isNotEmpty()) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                tiles.forEach { (label, value) -> StatTile(label, value, Modifier.weight(1f)) }
+            }
+        }
+
+        val extras = buildList {
+            details.rpe?.let { add("RPE $it/10") }
+            details.activeMinutes?.takeIf { it > 0 }?.let { add("$it active min") }
+        }
+        if (extras.isNotEmpty()) {
+            Spacer(Modifier.height(10.dp))
+            Text(extras.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = CreamMuted)
+        }
+
+        if (details.exercises.isNotEmpty()) {
+            Spacer(Modifier.height(14.dp))
+            Text("Exercises", style = MaterialTheme.typography.titleSmall, color = Cream)
+            Spacer(Modifier.height(6.dp))
+            details.exercises.forEach { e ->
+                Row(modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(e.name.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.bodyMedium, color = Cream, modifier = Modifier.weight(1f))
+                    Text(exerciseDetailLine(e), style = MaterialTheme.typography.bodySmall, color = CreamMuted)
+                }
+            }
+        }
+    }
+}
+
+/** "3 sets · 30 reps · 42 kcal", dropping any piece Calistapp didn't record. */
+private fun exerciseDetailLine(e: CalistappWorkoutDetails.Exercise): String = buildList {
+    if (e.sets > 0) add("${e.sets} set${if (e.sets == 1) "" else "s"}")
+    if (e.reps > 0) add("${e.reps} reps")
+    if (e.kcal >= 1.0) add("${e.kcal.toInt()} kcal")
+}.joinToString(" · ").ifBlank { "—" }
 
 private val dateFmt = DateTimeFormatter.ofPattern("EEEE, d MMMM")
 
