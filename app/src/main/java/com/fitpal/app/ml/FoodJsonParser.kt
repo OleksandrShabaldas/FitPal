@@ -404,8 +404,22 @@ object FoodJsonParser {
                 magnesiumMg = optNum(obj, "magnesium", "mg"),
                 zincMg = optNum(obj, "zinc", "zn"),
                 vitaminEMg = optNum(obj, "vitE", "vitaminE")
-            )
+            ),
+            // Null (not 0) when the model left caffeine out, so the tracker knows it's unchecked
+            // rather than trusting a silent "none" for a coffee.
+            caffeineMgPer100g = optNumOrNull(obj, "caffeine", "caffeineMg", "caffeinePer100g")
         )
+    }
+
+    /** Like [optNum] but null when none of the keys holds a usable number. */
+    private fun optNumOrNull(obj: JSONObject, vararg keys: String): Float? {
+        for (k in keys) {
+            if (!obj.has(k) || obj.isNull(k)) continue
+            val d = obj.optDouble(k, Double.NaN)
+            if (!d.isNaN()) return d.toFloat().coerceAtLeast(0f)
+            obj.optString(k).trim().toFloatOrNull()?.let { return it.coerceAtLeast(0f) }
+        }
+        return null
     }
 
     /**

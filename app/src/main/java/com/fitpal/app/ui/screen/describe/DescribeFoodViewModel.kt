@@ -7,10 +7,15 @@ import com.fitpal.app.data.repository.GalleryRepository
 import com.fitpal.app.data.repository.MealRepository
 import com.fitpal.app.data.repository.NutritionRepository
 import com.fitpal.app.data.repository.SettingsRepository
+import com.fitpal.app.data.repository.mealLogMeta
 import com.fitpal.app.domain.MealLogContext
 import com.fitpal.app.domain.model.DetectedFood
 import com.fitpal.app.domain.model.DietaryWarning
+import com.fitpal.app.domain.model.EatenAt
+import com.fitpal.app.domain.model.EatenAtState
 import com.fitpal.app.domain.model.Ingredient
+import com.fitpal.app.domain.model.LogDecision
+import com.fitpal.app.domain.model.MealContext
 import com.fitpal.app.domain.model.ServingPreset
 import com.fitpal.app.ml.AiSource
 import com.fitpal.app.ml.AnalysisJobManager
@@ -31,6 +36,8 @@ import javax.inject.Inject
 data class DescribeFoodUiState(
     val description: String = "",
     val isAnalyzing: Boolean = false,
+    /** The live progress line while the AI works ("Waiting for the AI to reply… (6s)"). */
+    val progressMessage: String = "",
     val hasAnalyzed: Boolean = false,
     val foods: List<DetectedFood> = emptyList(),
     val noMatchesFound: Boolean = false,
@@ -81,8 +88,29 @@ class DescribeFoodViewModel @Inject constructor(
     val mealType: StateFlow<String> = _mealType
     fun setMealType(type: String) {
         _mealType.value = type
-        jobManager.updateMealType(type)
+        if (ownsJob()) jobManager.updateMealType(type)
     }
+
+    /** When the meal was eaten — "now" until picked. */
+    private val eatenAtState = EatenAtState()
+    val eatenAt: StateFlow<EatenAt> = eatenAtState.value
+
+    /** Situation tags ("Home", "Family meal"…) — pickable while the AI works. */
+    private val _tags = MutableStateFlow<Set<String>>(emptySet())
+    val tags: StateFlow<Set<String>> = _tags
+
+    fun pickEatenTime(time: java.time.LocalTime) {
+        eatenAtState.pick(time)
+        if (ownsJob()) jobManager.updateEatenAt(eatenAtState.current)
+    }
+
+    fun toggleTag(tag: String) {
+        _tags.value = MealContext.toggle(_tags.value, tag)
+        if (ownsJob()) jobManager.updateTags(_tags.value)
+    }
+
+    /** True when the background job is a description (this screen's kind of job). */
+    private fun ownsJob(): Boolean = jobManager.current?.kind == JobKind.TEXT
 
     /** The day to log to — starts from Home's "+" (or today), user-editable. */
     private val _logDate = MutableStateFlow(
@@ -95,7 +123,7 @@ class DescribeFoodViewModel @Inject constructor(
 
     fun setLogDate(date: java.time.LocalDate) {
         _logDate.value = date
-        jobManager.updateTargetDate(logDateIso())
+        if (ownsJob()) jobManager.updateTargetDate(logDateIso())
     }
 
     private var adoptedJobId: String? = null
@@ -105,6 +133,8 @@ class DescribeFoodViewModel @Inject constructor(
         jobManager.current?.takeIf { it.kind == JobKind.TEXT }?.let { job ->
             _mealType.value = job.mealType
             job.targetDate?.let { iso -> runCatching { java.time.LocalDate.parse(iso) }.getOrNull()?.let { _logDate.value = it } }
+            eatenAtState.set(job.eatenAt)
+            _tags.value = job.tags
             _uiState.update { it.copy(description = job.description) }
         }
         observeJob()
@@ -164,7 +194,7 @@ class DescribeFoodViewModel @Inject constructor(
         val text = _uiState.value.description
         if (text.isBlank()) return
         _uiState.update { it.copy(isAnalyzing = true, noMatchesFound = false, needsModel = false) }
-        jobManager.startTextJob(text, _mealType.value, logDateIso())
+        jobManager.startTextJob(text, _mealType.value, logDateIso(), eatenAt = eatenAtState.current, tags = _tags.value)
     }
 
     /** User chose to analyse despite the dietary-rule warning. */
@@ -184,7 +214,7 @@ class DescribeFoodViewModel @Inject constructor(
                 if (job == null || job.kind != JobKind.TEXT) return@collect
                 when (val s = job.status) {
                     is JobStatus.Running -> _uiState.update {
-                        it.copy(isAnalyzing = true, aiSource = s.source, onlineFailedReason = null)
+                        it.copy(isAnalyzing = true, aiSource = s.source, onlineFailedReason = null, progressMessage = s.message)
                     }
                     is JobStatus.OnlineFailed -> _uiState.update {
                         it.copy(isAnalyzing = false, onlineFailedReason = s.reason)
@@ -337,7 +367,9 @@ class DescribeFoodViewModel @Inject constructor(
             caloriesPer100g = food.caloriesPer100g,
             proteinPer100g = food.proteinPer100g,
             fatPer100g = food.fatPer100g,
-            carbsPer100g = food.carbsPer100g
+            carbsPer100g = food.carbsPer100g,
+            // Linked to its database row so the background check can fill its fibre/vitamins once.
+            sourceFoodId = food.fdcId
         )
         _uiState.update { state ->
             val foods = state.foods.toMutableList()
@@ -362,7 +394,8 @@ class DescribeFoodViewModel @Inject constructor(
         }
     }
 
-    fun logMeal() {
+    /** Log the found foods. [decision] = what the fasting check decided. */
+    fun logMeal(decision: LogDecision = LogDecision.NONE) {
         val foods = _uiState.value.foods
         if (foods.isEmpty()) return
         viewModelScope.launch {
@@ -371,7 +404,8 @@ class DescribeFoodViewModel @Inject constructor(
                 mealRepository.logMeal(
                     foods, _mealType.value,
                     date = logDateIso(),
-                    source = _uiState.value.aiSource
+                    source = _uiState.value.aiSource,
+                    meta = mealLogMeta(_logDate.value, eatenAtState.current, decision, _tags.value)
                 )
                 jobManager.completeByUser()
                 _uiState.update { it.copy(isSaving = false, saved = true) }

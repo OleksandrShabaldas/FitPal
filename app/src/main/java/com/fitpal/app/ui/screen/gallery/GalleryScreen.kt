@@ -136,7 +136,7 @@ fun GalleryScreen(
                             modifier = Modifier.weight(1f),
                             onClick = { onOpenDetail(food.id) }
                         )
-                        IconButton(onClick = { fastingGuard.attempt(isForToday = logDate == java.time.LocalDate.now()) { viewModel.quickLog(food.id) } }) {
+                        IconButton(onClick = { fastingGuard.attempt(isForToday = logDate == java.time.LocalDate.now()) { d -> viewModel.quickLog(food.id, d) } }) {
                             Icon(Icons.Default.Add, contentDescription = "Log ${food.name}", tint = GoldLight)
                         }
                         IconButton(onClick = { viewModel.deleteFood(food) }) {

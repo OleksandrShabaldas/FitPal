@@ -67,6 +67,7 @@ fun BarcodeScreen(
     val drinkPresets by viewModel.drinkPresets.collectAsStateWithLifecycle()
     val mealType by viewModel.mealType.collectAsStateWithLifecycle()
     val logDate by viewModel.logDate.collectAsStateWithLifecycle()
+    val eatenAt by viewModel.eatenAt.collectAsStateWithLifecycle()
     val fastingGuard = rememberFastingGuard()
     val context = LocalContext.current
     var showDatePicker by remember { mutableStateOf(false) }
@@ -195,7 +196,21 @@ fun BarcodeScreen(
                         Spacer(Modifier.width(8.dp))
                         Text("Logging to: ${logDateLabel(logDate)}")
                     }
-                    Button(onClick = { fastingGuard.attempt(isForToday = logDate == java.time.LocalDate.now()) { viewModel.logMeal() } }, modifier = Modifier.fillMaxWidth(), enabled = !state.isSaving) {
+                    com.fitpal.app.ui.component.EatenAtChip(
+                        eatenAt = eatenAt,
+                        onPick = viewModel::pickEatenTime,
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
+                    Button(
+                        onClick = {
+                            fastingGuard.attempt(
+                                isForToday = logDate == java.time.LocalDate.now(),
+                                eatenAt = eatenAt.time
+                            ) { decision -> viewModel.logMeal(decision) }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !state.isSaving
+                    ) {
                         Icon(Icons.Default.Check, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
                         Text(if (state.isSaving) "Saving…" else "Log meal")

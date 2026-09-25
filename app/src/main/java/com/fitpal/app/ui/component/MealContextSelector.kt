@@ -17,18 +17,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.fitpal.app.ui.theme.Cream
+import com.fitpal.app.domain.model.MealContext
 import com.fitpal.app.ui.theme.CreamMuted
 import com.fitpal.app.ui.theme.GoldLight
 
-/** The fixed set of one-tap meal situations. Curated + short so tagging stays instant. */
-val MEAL_CONTEXTS = listOf(
-    "Home", "Restaurant", "Family meal", "Work/school", "Social", "On the go", "Travel"
-)
-
 /**
- * Optional one-tap "where/what situation was this meal" picker. Single-select; tapping the selected
- * chip again clears it. Feeds the AI review so it can reason about *why* a day looked unusual.
+ * Optional one-tap "what situation was this meal" tags. Multi-select — a family dinner at home is
+ * both "Home" and "Family meal" — and tapping a selected chip clears it. Feeds the AI review so it
+ * can reason about *why* a day looked unusual. The tags themselves live in [MealContext].
  *
  * Custom compact pills (not Material [androidx.compose.material3.FilterChip], which is chunky) so a
  * row of seven fits tightly and matches the app's glass look.
@@ -36,8 +32,8 @@ val MEAL_CONTEXTS = listOf(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun MealContextSelector(
-    selected: String?,
-    onSelected: (String) -> Unit,
+    selected: Set<String>,
+    onToggle: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     FlowRow(
@@ -45,8 +41,8 @@ fun MealContextSelector(
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        MEAL_CONTEXTS.forEach { tag ->
-            ContextChip(tag = tag, selected = selected == tag, onClick = { onSelected(tag) })
+        MealContext.ALL.forEach { tag ->
+            ContextChip(tag = tag, selected = tag in selected, onClick = { onToggle(tag) })
         }
     }
 }

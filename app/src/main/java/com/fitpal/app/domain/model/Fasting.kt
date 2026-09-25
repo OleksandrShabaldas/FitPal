@@ -78,20 +78,27 @@ enum class FastingPreset(val label: String, val eatStartMin: Int, val eatEndMin:
 enum class FastingDayResult { HELD, BROKE }
 
 /**
- * Decide per day whether the fast was **held** or **broken**, from when meals were logged. Each meal
- * is `(dayIso, minuteOfDayItWasLogged)`. A day where anything was logged inside the fasting window is
+ * Decide per day whether the fast was **held** or **broken**, from when meals were eaten. Each meal
+ * is `(dayIso, minuteOfDayItWasEaten)`. A day where anything was eaten inside the fasting window is
  * BROKE; a day with meals all inside the eating window is HELD. Days with no logged food don't appear
  * (we can't tell whether you fasted or just didn't track). Returns empty when fasting is off.
+ *
+ * [loggedDuringFastDays] are days where a meal was logged during the fast with "log anyway" (no pass,
+ * no photo proof): they stay BROKE even if that meal's time was later edited into the window — the
+ * log itself decided it, and a free time edit mustn't stand in for one of the monthly passes.
+ * [graceDays] (a pass was used) win over both.
  */
 fun FastingSchedule.adherenceByDay(
     meals: List<Pair<String, Int>>,
-    graceDays: Set<String> = emptySet()
+    graceDays: Set<String> = emptySet(),
+    loggedDuringFastDays: Set<String> = emptySet()
 ): Map<String, FastingDayResult> {
     if (!enabled) return emptyMap()
     return meals.groupBy({ it.first }, { it.second }).mapValues { (date, minutes) ->
         when {
             // The user attested (via "I ate earlier") that they ate within the window that day.
             date in graceDays -> FastingDayResult.HELD
+            date in loggedDuringFastDays -> FastingDayResult.BROKE
             minutes.any { !isEatingAt(it) } -> FastingDayResult.BROKE
             else -> FastingDayResult.HELD
         }

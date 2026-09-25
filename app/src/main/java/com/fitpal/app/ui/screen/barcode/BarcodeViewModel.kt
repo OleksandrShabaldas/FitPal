@@ -62,6 +62,14 @@ class BarcodeViewModel @Inject constructor(
     fun setLogDate(date: java.time.LocalDate) { _logDate.value = date }
     private fun logDateIso(): String = _logDate.value.format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE)
 
+    /** When it was eaten — "now" unless the user picks a time. */
+    private val eatenAtState = com.fitpal.app.domain.model.EatenAtState()
+    val eatenAt: StateFlow<com.fitpal.app.domain.model.EatenAt> = eatenAtState.value
+    fun pickEatenTime(time: java.time.LocalTime) = eatenAtState.pick(time)
+
+    /** The fasting check's decision, held across the dietary-rule warning. */
+    private var pendingDecision = com.fitpal.app.domain.model.LogDecision.NONE
+
     fun onBarcodeScanned(code: String) {
         // Ignore repeat detections once we've locked onto a code.
         if (_uiState.value.scannedCode != null) return
@@ -85,7 +93,9 @@ class BarcodeViewModel @Inject constructor(
                             fatPer100g = product.fatPer100g,
                             carbsPer100g = product.carbsPer100g,
                             waterMlPer100g = if (drink) com.fitpal.app.domain.Drinks.estimateWaterPer100(product.carbsPer100g, product.proteinPer100g, product.fatPer100g) else 0f,
-                            isDrink = drink
+                            isDrink = drink,
+                            // Linked to its database row so the background check fills its gaps once.
+                            sourceFoodId = product.fdcId
                         )
                     )
                 }
@@ -119,8 +129,10 @@ class BarcodeViewModel @Inject constructor(
         _uiState.value = BarcodeUiState()
     }
 
-    fun logMeal() {
+    /** Log the product. [decision] = what the fasting check decided. */
+    fun logMeal(decision: com.fitpal.app.domain.model.LogDecision = com.fitpal.app.domain.model.LogDecision.NONE) {
         val product = _uiState.value.product ?: return
+        pendingDecision = decision
         viewModelScope.launch {
             val isToday = _logDate.value == java.time.LocalDate.now()
             val warning = dietaryGate.checkKnownFoods(listOf(product.name to product.calories), isToday)
@@ -142,7 +154,10 @@ class BarcodeViewModel @Inject constructor(
         val product = _uiState.value.product ?: return
         _uiState.update { it.copy(isSaving = true) }
         try {
-            mealRepository.logItems(listOf(product), _mealType.value, date = logDateIso())
+            mealRepository.logItems(
+                listOf(product), _mealType.value, date = logDateIso(),
+                meta = com.fitpal.app.data.repository.mealLogMeta(_logDate.value, eatenAtState.current, pendingDecision)
+            )
             _uiState.update { it.copy(isSaving = false, saved = true) }
         } catch (e: Exception) {
             _uiState.update { it.copy(isSaving = false) }

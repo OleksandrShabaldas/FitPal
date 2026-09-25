@@ -6,8 +6,22 @@ import android.net.Uri
  * All screens in the app. Used for navigation routing.
  */
 sealed class Screen(val route: String) {
-    data object Onboarding : Screen("onboarding")
+    /**
+     * First-run intro + setup. [ARG_REPLAY] = opened again from Settings: it starts from your current
+     * settings and returns to where you came from, instead of landing on Home.
+     */
+    data object Onboarding : Screen("onboarding?replay={replay}") {
+        const val ARG_REPLAY = "replay"
+        fun buildRoute(replay: Boolean = false): String = if (replay) "onboarding?replay=true" else "onboarding"
+    }
     data object Home : Screen("home")
+    /**
+     * The weigh-in, as a dialog over whatever's behind it — opened by the weigh-in notification and
+     * both weight cards, so there's one way in and it can't get lost.
+     */
+    data object WeighIn : Screen("weigh_in")
+    /** Write feedback to the developer (opens the email app, pre-filled). */
+    data object Feedback : Screen("feedback")
     data object AddFood : Screen("add_food")
     /** Global fuzzy search over everything the user has ever logged (foods + exercises). */
     data object Search : Screen("search")

@@ -418,6 +418,45 @@ class SettingsRepository @Inject constructor(
         }
     }
 
+    // --- Caffeine tracker (off by default): shows what's still in your body + today's total ---
+
+    private fun loadCaffeineSettings() = com.fitpal.app.domain.CaffeineSettings(
+        enabled = prefs.getBoolean(KEY_CAFFEINE_ENABLED, false),
+        dailyLimitMg = prefs.getInt(KEY_CAFFEINE_LIMIT, 400),
+        halfLifeHours = prefs.getFloat(KEY_CAFFEINE_HALF_LIFE, 5f)
+    )
+
+    private val _caffeineSettings = MutableStateFlow(loadCaffeineSettings())
+    val caffeineSettings: StateFlow<com.fitpal.app.domain.CaffeineSettings> = _caffeineSettings
+
+    fun setCaffeineEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_CAFFEINE_ENABLED, enabled).apply()
+        _caffeineSettings.value = _caffeineSettings.value.copy(enabled = enabled)
+    }
+
+    fun setCaffeineDailyLimit(mg: Int) {
+        val clamped = mg.coerceIn(0, 2000)
+        prefs.edit().putInt(KEY_CAFFEINE_LIMIT, clamped).apply()
+        _caffeineSettings.value = _caffeineSettings.value.copy(dailyLimitMg = clamped)
+    }
+
+    fun setCaffeineHalfLife(hours: Float) {
+        val clamped = hours.coerceIn(2f, 10f)
+        prefs.edit().putFloat(KEY_CAFFEINE_HALF_LIFE, clamped).apply()
+        _caffeineSettings.value = _caffeineSettings.value.copy(halfLifeHours = clamped)
+    }
+
+    // --- Home hero: the little drawer of food-limit + caffeine rings, open or closed ---
+    // Persisted (not a remember) so it stays the way you left it across screens and restarts.
+
+    private val _heroDrawerOpen = MutableStateFlow(prefs.getBoolean(KEY_HERO_DRAWER_OPEN, false))
+    val heroDrawerOpen: StateFlow<Boolean> = _heroDrawerOpen
+
+    fun setHeroDrawerOpen(open: Boolean) {
+        prefs.edit().putBoolean(KEY_HERO_DRAWER_OPEN, open).apply()
+        _heroDrawerOpen.value = open
+    }
+
     // --- Foods the user hid from the database search (fdcId strings; a local-only "don't show" flag,
     // since the shared food DB can't be edited). Included in backup/restore. ---
 
@@ -853,6 +892,10 @@ class SettingsRepository @Inject constructor(
         private const val KEY_FASTING_NOTIFY = "fasting_notify"
         private const val KEY_HIDDEN_FOODS = "hidden_food_ids"
         private const val KEY_FASTING_GRACE = "fasting_grace"
+        private const val KEY_CAFFEINE_ENABLED = "caffeine_enabled"
+        private const val KEY_CAFFEINE_LIMIT = "caffeine_daily_limit_mg"
+        private const val KEY_CAFFEINE_HALF_LIFE = "caffeine_half_life_h"
+        private const val KEY_HERO_DRAWER_OPEN = "hero_drawer_open"
 
         /** How many "I ate earlier" fasting corrections are allowed per calendar month. */
         const val FASTING_BACKDATE_LIMIT = 3

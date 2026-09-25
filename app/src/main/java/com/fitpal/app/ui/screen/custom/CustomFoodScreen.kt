@@ -83,6 +83,7 @@ fun CustomFoodScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val mealType by viewModel.mealType.collectAsStateWithLifecycle()
     val logDate by viewModel.logDate.collectAsStateWithLifecycle()
+    val eatenAt by viewModel.eatenAt.collectAsStateWithLifecycle()
     val fastingGuard = rememberFastingGuard()
     var showDatePicker by remember { mutableStateOf(false) }
     var showLabelCamera by remember { mutableStateOf(false) }
@@ -194,8 +195,14 @@ fun CustomFoodScreen(
                     Spacer(Modifier.width(8.dp))
                     Text("Logging to: ${logDateLabel(logDate)}")
                 }
+                com.fitpal.app.ui.component.EatenAtChip(eatenAt = eatenAt, onPick = viewModel::pickEatenTime)
                 Button(
-                    onClick = { fastingGuard.attempt(isForToday = logDate == java.time.LocalDate.now()) { viewModel.log() } },
+                    onClick = {
+                        fastingGuard.attempt(
+                            isForToday = logDate == java.time.LocalDate.now(),
+                            eatenAt = eatenAt.time
+                        ) { decision -> viewModel.log(decision) }
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = state.canSave && !state.isSaving
                 ) {

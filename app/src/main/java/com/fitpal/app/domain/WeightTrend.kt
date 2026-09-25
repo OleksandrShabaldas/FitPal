@@ -44,6 +44,45 @@ object WeightTrend {
         return slopePerWeek(pts)
     }
 
+    /**
+     * How much weight changed over the window [from]..[to] (kg; negative = down): the latest weigh-in
+     * inside the window against a baseline — the last weigh-in in the equally long stretch *before*
+     * the window (so a week with one weigh-in still shows how it moved), else the window's first.
+     * Null when there's no weigh-in in the window or nothing to compare it with.
+     */
+    fun changeOver(weights: List<WeightEntryEntity>, from: LocalDate, to: LocalDate): Float? {
+        val pts = datedPoints(weights)
+        val inWindow = pts.filter { !it.first.isBefore(from) && !it.first.isAfter(to) }
+        val end = inWindow.lastOrNull() ?: return null
+        val span = to.toEpochDay() - from.toEpochDay() + 1
+        val lookbackFrom = from.minusDays(span)
+        val baseline = pts.lastOrNull { it.first.isBefore(from) && !it.first.isBefore(lookbackFrom) }
+            ?: inWindow.first().takeIf { it !== end }
+            ?: return null
+        return end.second - baseline.second
+    }
+
+    /** Change from the very first weigh-in to the latest (kg), or null with fewer than two. */
+    fun lifetimeChange(weights: List<WeightEntryEntity>): Float? {
+        val pts = datedPoints(weights)
+        if (pts.size < 2) return null
+        return pts.last().second - pts.first().second
+    }
+
+    /**
+     * Whether a change of [deltaKg] is heading the way [goal] wants: true = on track, false = the
+     * other way, null = too small to call (or a goal where steadiness is the point and it's steady).
+     */
+    fun changeIsOnTrack(deltaKg: Float, goal: FitnessGoal): Boolean? {
+        if (abs(deltaKg) < 0.05f) return null
+        return when (goal) {
+            FitnessGoal.LOSE_FAT -> deltaKg < 0f
+            FitnessGoal.BUILD_MUSCLE -> deltaKg > 0f
+            // Maintaining / recomping: staying within about half a kilo is the win.
+            FitnessGoal.MAINTAIN, FitnessGoal.RECOMP -> abs(deltaKg) <= 0.5f
+        }
+    }
+
     /** Parse + sort weigh-ins to (date, kg), dropping any with an unparseable date. */
     private fun datedPoints(weights: List<WeightEntryEntity>): List<Pair<LocalDate, Float>> =
         weights

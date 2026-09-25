@@ -38,9 +38,13 @@ import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
+import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.dialog
+import com.fitpal.app.ui.screen.feedback.FeedbackScreen
+import com.fitpal.app.ui.screen.weighin.WeighInRoute
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.fitpal.app.R
@@ -75,8 +79,6 @@ import com.fitpal.app.ui.screen.water.WaterDetailScreen
 fun FitPalNavHost(
     pendingRoute: String? = null,
     onPendingRouteHandled: () -> Unit = {},
-    pendingHomeAction: String? = null,
-    onHomeActionHandled: () -> Unit = {},
     startOnboarding: Boolean = false
 ) {
     val navController = rememberNavController()
@@ -94,13 +96,16 @@ fun FitPalNavHost(
         }
     }
 
-    // Ask once for notification permission (Android 13+) so background-analysis updates show.
+    // Ask once for notification permission (Android 13+) so background-analysis updates show. On a
+    // first launch the intro asks at its reminders step instead (with the reason next to it), so the
+    // system prompt doesn't pop over the welcome screen.
     val context = LocalContext.current
     val notifPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { }
     LaunchedEffect(Unit) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+        if (!startOnboarding &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
             notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -143,20 +148,46 @@ fun FitPalNavHost(
             startDestination = if (startOnboarding) Screen.Onboarding.route else Screen.Home.route,
             modifier = Modifier.padding(innerPadding).hazeSource(hazeState)
         ) {
-            composable(Screen.Onboarding.route) {
+            composable(
+                route = Screen.Onboarding.route,
+                arguments = listOf(
+                    navArgument(Screen.Onboarding.ARG_REPLAY) {
+                        type = NavType.BoolType
+                        defaultValue = false
+                    }
+                )
+            ) { entry ->
+                val replay = entry.arguments?.getBoolean(Screen.Onboarding.ARG_REPLAY) == true
                 OnboardingScreen(
+                    replay = replay,
                     onFinish = {
-                        navController.navigate(Screen.Home.route) {
-                            popUpTo(Screen.Onboarding.route) { inclusive = true }
+                        if (replay) {
+                            safeBack()
+                        } else {
+                            navController.navigate(Screen.Home.route) {
+                                popUpTo(Screen.Onboarding.route) { inclusive = true }
+                            }
                         }
                     }
                 )
             }
 
+            // The weigh-in floats over whatever's behind it — the notification, the Home weight card
+            // and the Analytics weight card all open this one destination.
+            dialog(
+                route = Screen.WeighIn.route,
+                dialogProperties = DialogProperties(usePlatformDefaultWidth = false)
+            ) {
+                WeighInRoute(onDone = safeBack)
+            }
+
+            composable(Screen.Feedback.route) {
+                FeedbackScreen(onBack = safeBack)
+            }
+
             composable(Screen.Home.route) {
                 HomeScreen(
-                    pendingAction = pendingHomeAction,
-                    onActionHandled = onHomeActionHandled,
+                    onOpenWeighIn = { navController.navigate(Screen.WeighIn.route) },
                     onAddFood = { navController.navigate(Screen.AddFood.route) },
                     onOpenSearch = { navController.navigate(Screen.Search.route) },
                     onEntryClick = { entryId ->
@@ -190,7 +221,8 @@ fun FitPalNavHost(
                     onOpenDay = { navTo(Screen.Home.route) },
                     onOpenCalorieDetail = { range, anchor ->
                         navController.navigate(Screen.CalorieDetail.buildRoute(range, anchor))
-                    }
+                    },
+                    onOpenWeighIn = { navController.navigate(Screen.WeighIn.route) }
                 )
             }
 
@@ -318,6 +350,7 @@ fun FitPalNavHost(
             composable(Screen.Settings.route) {
                 SettingsScreen(
                     onOpenCategory = { id -> navController.navigate(Screen.SettingsCategory.buildRoute(id)) },
+                    onOpenFeedback = { navController.navigate(Screen.Feedback.route) },
                     onSwipeToCollection = { navTo(Screen.Collection.route) },
                     onBack = safeBack
                 )
@@ -332,6 +365,7 @@ fun FitPalNavHost(
                     category = category,
                     onManageModels = { navController.navigate(Screen.ModelSetup.route) },
                     onCustomizeScreen = { screenId -> navController.navigate(Screen.CustomizeWidgets.buildRoute(screenId)) },
+                    onReplayIntro = { navController.navigate(Screen.Onboarding.buildRoute(replay = true)) },
                     onBack = safeBack
                 )
             }

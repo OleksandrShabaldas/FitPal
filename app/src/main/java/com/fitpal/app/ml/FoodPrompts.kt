@@ -47,11 +47,13 @@ object FoodPrompts {
         salads/veg 15-120, fruit 30-90, cooked grains/pasta 110-160, lean meat 120-200,
         cheese/fatty/fried 250-450, oils ~880. A bowl of light soup is NOT calorie-dense.
         Reply with ONLY a JSON object in exactly this format and nothing else:
-        {"foods":[{"name":"Coca-Cola","isDrink":true,"grams":330,"items":[{"name":"Coca-Cola","grams":330,"kcalPer100g":42,"proteinPer100g":0,"fatPer100g":0,"carbsPer100g":11,"fiberPer100g":0,"waterMlPer100":89,"vitA":0,"vitC":0,"vitD":0,"calcium":0,"iron":0,"potassium":0,"sodium":5,"b12":0,"folate":0,"b6":0,"magnesium":1,"zinc":0,"vitE":0}],"variations":[]}]}
+        {"foods":[{"name":"Coca-Cola","isDrink":true,"grams":330,"items":[{"name":"Coca-Cola","grams":330,"kcalPer100g":42,"proteinPer100g":0,"fatPer100g":0,"carbsPer100g":11,"fiberPer100g":0,"waterMlPer100":89,"vitA":0,"vitC":0,"vitD":0,"calcium":0,"iron":0,"potassium":0,"sodium":5,"b12":0,"folate":0,"b6":0,"magnesium":1,"zinc":0,"vitE":0,"caffeine":10}],"variations":[]}]}
         Use realistic per-100 values and a realistic serving (grams for food, ml for drinks).
         vitA = vitamin A mcg, vitC = vitamin C mg, vitD = vitamin D mcg,
         calcium/iron/potassium/sodium = mg, b12 = vitamin B12 mcg, folate = mcg,
         b6 = vitamin B6 mg, magnesium/zinc = mg, vitE = vitamin E mg. All per 100 g.
+        caffeine = mg per 100 g/ml (brewed coffee 40, espresso 210, energy drink 32, cola 10,
+        black tea 20, green tea 12, dark chocolate 60); 0 for anything without caffeine.
     """.trimIndent()
 
     /** Online text path — leaner than [describe] (the capable model needs less coaxing). */
@@ -68,10 +70,11 @@ object FoodPrompts {
         Each item, per 100 g/ml: name, grams (this item's weight), kcalPer100g, proteinPer100g,
         fatPer100g, carbsPer100g, fiberPer100g, waterMlPer100 (water 100, cola 89, juice 85,
         milk 88, fruit/veg 80-96, cooked grains 65-70, bread 35, cheese 37, oil 0), then micros:
-        vitA/vitD/b12/folate in mcg; vitC/calcium/iron/potassium/sodium/b6/magnesium/zinc/vitE in mg.
+        vitA/vitD/b12/folate in mcg; vitC/calcium/iron/potassium/sodium/b6/magnesium/zinc/vitE in mg;
+        then caffeine in mg (coffee 40, espresso 210, energy drink 32, cola 10, tea 20; 0 if none).
         Realistic calorie densities (light soup 25-60, salad/veg 15-120, cooked grains 110-160,
         fried/fatty 250-450, oil ~880). Never 0 kcal for a real food. Estimate every field honestly.
-        Example food: {"name":"Coca-Cola","isDrink":true,"grams":330,"items":[{"name":"Coca-Cola","grams":330,"kcalPer100g":42,"proteinPer100g":0,"fatPer100g":0,"carbsPer100g":11,"fiberPer100g":0,"waterMlPer100":89,"vitA":0,"vitC":0,"vitD":0,"calcium":0,"iron":0,"potassium":0,"sodium":5,"b12":0,"folate":0,"b6":0,"magnesium":1,"zinc":0,"vitE":0}],"variations":[]}
+        Example food: {"name":"Coca-Cola","isDrink":true,"grams":330,"items":[{"name":"Coca-Cola","grams":330,"kcalPer100g":42,"proteinPer100g":0,"fatPer100g":0,"carbsPer100g":11,"fiberPer100g":0,"waterMlPer100":89,"vitA":0,"vitC":0,"vitD":0,"calcium":0,"iron":0,"potassium":0,"sodium":5,"b12":0,"folate":0,"b6":0,"magnesium":1,"zinc":0,"vitE":0,"caffeine":10}],"variations":[]}
     """.trimIndent()
 
     /**
@@ -100,12 +103,13 @@ object FoodPrompts {
             others so the items still sum to roughly the total, instead of just piling it on top.
 
             Reply with ONLY JSON in this exact shape and nothing else:
-            {"foods":[{"name":"<dish name>","isDrink":${food.isDrink},"grams":$total,"items":[{"name":"<item>","grams":<weight>,"kcalPer100g":0,"proteinPer100g":0,"fatPer100g":0,"carbsPer100g":0,"fiberPer100g":0,"waterMlPer100":0,"vitA":0,"vitC":0,"vitD":0,"calcium":0,"iron":0,"potassium":0,"sodium":0,"b12":0,"folate":0,"b6":0,"magnesium":0,"zinc":0,"vitE":0}],"variations":[]}]}
+            {"foods":[{"name":"<dish name>","isDrink":${food.isDrink},"grams":$total,"items":[{"name":"<item>","grams":<weight>,"kcalPer100g":0,"proteinPer100g":0,"fatPer100g":0,"carbsPer100g":0,"fiberPer100g":0,"waterMlPer100":0,"vitA":0,"vitC":0,"vitD":0,"calcium":0,"iron":0,"potassium":0,"sodium":0,"b12":0,"folate":0,"b6":0,"magnesium":0,"zinc":0,"vitE":0,"caffeine":0}],"variations":[]}]}
             Per 100 $unit for each item: realistic kcalPer100g (light soup 25-60, salad/veg 15-120,
             cooked grains 110-160, lean meat 120-200, cheese/fried 250-450, oil ~880 — never 0 for a
             real food), macros, fiber, waterMlPer100 (water 100, cola 89, juice 85, milk 88,
-            fruit/veg 80-96, cooked grains 65-70, bread 35, cheese 37, oil 0), and micros
-            (vitA/vitD/b12/folate in mcg; vitC/calcium/iron/potassium/sodium/b6/magnesium/zinc/vitE in mg).
+            fruit/veg 80-96, cooked grains 65-70, bread 35, cheese 37, oil 0), micros
+            (vitA/vitD/b12/folate in mcg; vitC/calcium/iron/potassium/sodium/b6/magnesium/zinc/vitE in mg),
+            and caffeine in mg (coffee 40, espresso 210, energy drink 32, cola 10, tea 20; 0 if none).
             Estimate every field honestly. Never include alcohol or plain water as an item.
         """.trimIndent()
     }
@@ -139,12 +143,14 @@ object FoodPrompts {
         shape, but replace the foods and numbers with the real ones you see (these numbers are a
         realistic crepes-with-toppings example):
         {"foods":[
-        {"name":"Crepe","isDrink":false,"grams":120,"items":[{"name":"Crepe","grams":120,"kcalPer100g":220,"proteinPer100g":6,"fatPer100g":8,"carbsPer100g":31,"fiberPer100g":1,"waterMlPer100":0,"vitA":30,"vitC":0,"vitD":1,"calcium":80,"iron":1,"potassium":120,"sodium":150,"b12":0.3,"folate":10,"b6":0.05,"magnesium":12,"zinc":0.5,"vitE":0.4}]},
-        {"name":"Whipped cream","isDrink":false,"grams":40,"items":[{"name":"Whipped cream","grams":40,"kcalPer100g":340,"proteinPer100g":2,"fatPer100g":36,"carbsPer100g":3,"fiberPer100g":0,"waterMlPer100":0,"vitA":110,"vitC":0,"vitD":0,"calcium":65,"iron":0,"potassium":75,"sodium":30,"b12":0.2,"folate":3,"b6":0.02,"magnesium":7,"zinc":0.2,"vitE":0.5}]},
-        {"name":"Caramel sauce","isDrink":false,"grams":25,"items":[{"name":"Caramel sauce","grams":25,"kcalPer100g":310,"proteinPer100g":1,"fatPer100g":9,"carbsPer100g":57,"fiberPer100g":0,"waterMlPer100":0,"vitA":0,"vitC":0,"vitD":0,"calcium":40,"iron":0,"potassium":80,"sodium":200,"b12":0,"folate":0,"b6":0,"magnesium":5,"zinc":0.1,"vitE":0}]},
-        {"name":"Strawberries","isDrink":false,"grams":50,"items":[{"name":"Strawberries","grams":50,"kcalPer100g":33,"proteinPer100g":1,"fatPer100g":0,"carbsPer100g":8,"fiberPer100g":2,"waterMlPer100":91,"vitA":1,"vitC":59,"vitD":0,"calcium":16,"iron":0,"potassium":150,"sodium":1,"b12":0,"folate":24,"b6":0.05,"magnesium":13,"zinc":0.1,"vitE":0.3}]}
+        {"name":"Crepe","isDrink":false,"grams":120,"items":[{"name":"Crepe","grams":120,"kcalPer100g":220,"proteinPer100g":6,"fatPer100g":8,"carbsPer100g":31,"fiberPer100g":1,"waterMlPer100":0,"vitA":30,"vitC":0,"vitD":1,"calcium":80,"iron":1,"potassium":120,"sodium":150,"b12":0.3,"folate":10,"b6":0.05,"magnesium":12,"zinc":0.5,"vitE":0.4,"caffeine":0}]},
+        {"name":"Whipped cream","isDrink":false,"grams":40,"items":[{"name":"Whipped cream","grams":40,"kcalPer100g":340,"proteinPer100g":2,"fatPer100g":36,"carbsPer100g":3,"fiberPer100g":0,"waterMlPer100":0,"vitA":110,"vitC":0,"vitD":0,"calcium":65,"iron":0,"potassium":75,"sodium":30,"b12":0.2,"folate":3,"b6":0.02,"magnesium":7,"zinc":0.2,"vitE":0.5,"caffeine":0}]},
+        {"name":"Caramel sauce","isDrink":false,"grams":25,"items":[{"name":"Caramel sauce","grams":25,"kcalPer100g":310,"proteinPer100g":1,"fatPer100g":9,"carbsPer100g":57,"fiberPer100g":0,"waterMlPer100":0,"vitA":0,"vitC":0,"vitD":0,"calcium":40,"iron":0,"potassium":80,"sodium":200,"b12":0,"folate":0,"b6":0,"magnesium":5,"zinc":0.1,"vitE":0,"caffeine":0}]},
+        {"name":"Strawberries","isDrink":false,"grams":50,"items":[{"name":"Strawberries","grams":50,"kcalPer100g":33,"proteinPer100g":1,"fatPer100g":0,"carbsPer100g":8,"fiberPer100g":2,"waterMlPer100":91,"vitA":1,"vitC":59,"vitD":0,"calcium":16,"iron":0,"potassium":150,"sodium":1,"b12":0,"folate":24,"b6":0.05,"magnesium":13,"zinc":0.1,"vitE":0.3,"caffeine":0}]}
         ]}
         Units per 100 g: vitA/vitD/b12/folate = mcg; vitC/calcium/iron/potassium/sodium/b6/magnesium/zinc/vitE = mg.
+        caffeine = mg per 100 g/ml: coffee 40, espresso 210, latte 30, energy drink 32, cola 10,
+        black tea 20, green tea 12, dark chocolate 60; 0 for anything without caffeine.
         Estimate every field honestly; use 0 only when truly absent.
     """.trimIndent()
     }
@@ -177,11 +183,12 @@ object FoodPrompts {
         proteinPer100g, fatPer100g, carbsPer100g, fiberPer100g, waterMlPer100 (water 100, cola 89,
         juice 85, milk 88, most fruit/veg 80-96, soup 88-92, cooked grains 65-70, bread 35,
         cheese 37, nuts 4, oil 0), then micros: vitA/vitD/b12/folate in mcg; and
-        vitC/calcium/iron/potassium/sodium/b6/magnesium/zinc/vitE in mg.
+        vitC/calcium/iron/potassium/sodium/b6/magnesium/zinc/vitE in mg; then caffeine in mg
+        (coffee 40, espresso 210, latte 30, energy drink 32, cola 10, tea 20; 0 if none).
         Realistic calorie densities: light soup 25-60, broth 10-30, salad/veg 15-120, fruit 30-90,
         cooked grains/pasta 110-160, lean meat 120-200, cheese/fried 250-450, oil ~880. Never 0 kcal
         for a real food; never include alcohol or plain water as an item. Estimate every field honestly.
-        Example item: {"name":"Crepe","grams":120,"kcalPer100g":220,"proteinPer100g":6,"fatPer100g":8,"carbsPer100g":31,"fiberPer100g":1,"waterMlPer100":0,"vitA":30,"vitC":0,"vitD":1,"calcium":80,"iron":1,"potassium":120,"sodium":150,"b12":0.3,"folate":10,"b6":0.05,"magnesium":12,"zinc":0.5,"vitE":0.4}
+        Example item: {"name":"Crepe","grams":120,"kcalPer100g":220,"proteinPer100g":6,"fatPer100g":8,"carbsPer100g":31,"fiberPer100g":1,"waterMlPer100":0,"vitA":30,"vitC":0,"vitD":1,"calcium":80,"iron":1,"potassium":120,"sodium":150,"b12":0.3,"folate":10,"b6":0.05,"magnesium":12,"zinc":0.5,"vitE":0.4,"caffeine":0}
 
         "dishCandidates": include ONLY when the whole plate is a single dish you're genuinely unsure
         about — 2-3 most likely dish names, each {"name","variations":[ item objects with description ]}.
@@ -210,7 +217,7 @@ object FoodPrompts {
             Give each a realistic per-100 nutrition (light soups 25-60 kcal/100g, oils ~880) and a
             small serving size in grams.
             Reply with ONLY a JSON object in exactly this format and nothing else:
-            {"dishes":[{"name":"<dish name>","missing":[{"name":"<sauce or dressing>","grams":30,"kcalPer100g":300,"proteinPer100g":1,"fatPer100g":32,"carbsPer100g":4,"fiberPer100g":0,"vitA":0,"vitC":0,"vitD":0,"calcium":10,"iron":0,"potassium":5,"sodium":200,"b12":0,"folate":2,"b6":0,"magnesium":3,"zinc":0,"vitE":1}]}]}
+            {"dishes":[{"name":"<dish name>","missing":[{"name":"<sauce or dressing>","grams":30,"kcalPer100g":300,"proteinPer100g":1,"fatPer100g":32,"carbsPer100g":4,"fiberPer100g":0,"vitA":0,"vitC":0,"vitD":0,"calcium":10,"iron":0,"potassium":5,"sodium":200,"b12":0,"folate":2,"b6":0,"magnesium":3,"zinc":0,"vitE":1,"caffeine":0}]}]}
         """.trimIndent()
     }
 

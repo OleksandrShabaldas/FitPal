@@ -71,6 +71,14 @@ class CustomFoodViewModel @Inject constructor(
     fun setLogDate(date: java.time.LocalDate) { _logDate.value = date }
     private fun logDateIso(): String = _logDate.value.format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE)
 
+    /** When it was eaten — "now" unless the user picks a time. */
+    private val eatenAtState = com.fitpal.app.domain.model.EatenAtState()
+    val eatenAt: StateFlow<com.fitpal.app.domain.model.EatenAt> = eatenAtState.value
+    fun pickEatenTime(time: java.time.LocalTime) = eatenAtState.pick(time)
+
+    /** Caffeine per 100 g/ml read off a snapped label (energy drinks print it); null = not known. */
+    private var labelCaffeinePer100: Float? = null
+
     // Editing any field means the saved copy is now stale, so re-enable "Save to collection".
     fun onName(v: String) = _uiState.update { it.copy(name = v, savedToGallery = false) }
 
@@ -166,6 +174,7 @@ class CustomFoodViewModel @Inject constructor(
                 fiber = food.totalFiber / serving * 100f
             )
             per100Basis = basis
+            labelCaffeinePer100 = food.totalCaffeineMg?.let { it / serving * 100f }
             _uiState.update {
                 it.copy(
                     isReadingLabel = false,
@@ -197,17 +206,22 @@ class CustomFoodViewModel @Inject constructor(
             proteinPer100g = per100(s.protein),
             fatPer100g = per100(s.fat),
             carbsPer100g = per100(s.carbs),
-            fiberPer100g = per100(s.fiber)
+            fiberPer100g = per100(s.fiber),
+            caffeineMgPer100g = labelCaffeinePer100
         )
     }
 
-    fun log() {
+    /** Log the food. [decision] = what the fasting check decided. */
+    fun log(decision: com.fitpal.app.domain.model.LogDecision = com.fitpal.app.domain.model.LogDecision.NONE) {
         if (!_uiState.value.canSave) return
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true) }
             try {
                 val ingredient = buildIngredient()
-                mealRepository.logItems(listOf(ingredient), _mealType.value, date = logDateIso())
+                mealRepository.logItems(
+                    listOf(ingredient), _mealType.value, date = logDateIso(),
+                    meta = com.fitpal.app.data.repository.mealLogMeta(_logDate.value, eatenAtState.current, decision)
+                )
                 // If this was reached from a not-found barcode scan, remember it for next time.
                 barcode?.let { code ->
                     nutritionRepository.saveCustomBarcodeFood(

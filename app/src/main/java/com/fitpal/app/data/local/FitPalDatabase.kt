@@ -8,6 +8,7 @@ import com.fitpal.app.data.local.dao.AiReviewDao
 import com.fitpal.app.data.local.dao.ChallengeDao
 import com.fitpal.app.data.local.dao.ContextNoteDao
 import com.fitpal.app.data.local.dao.ExerciseDao
+import com.fitpal.app.data.local.dao.FoodExtrasDao
 import com.fitpal.app.data.local.dao.GalleryDao
 import com.fitpal.app.data.local.dao.InsightsCacheDao
 import com.fitpal.app.data.local.dao.MealLogDao
@@ -19,6 +20,7 @@ import com.fitpal.app.data.local.entity.AiReviewEntity
 import com.fitpal.app.data.local.entity.ChallengeEntity
 import com.fitpal.app.data.local.entity.ContextNoteEntity
 import com.fitpal.app.data.local.entity.ExerciseEntryEntity
+import com.fitpal.app.data.local.entity.FoodExtrasEntity
 import com.fitpal.app.data.local.entity.FoodInsightsCacheEntity
 import com.fitpal.app.data.local.entity.GalleryCategoryEntity
 import com.fitpal.app.data.local.entity.GalleryFoodEntity
@@ -39,6 +41,7 @@ import com.fitpal.app.data.local.entity.WeightEntryEntity
         ChallengeEntity::class,
         ContextNoteEntity::class,
         ExerciseEntryEntity::class,
+        FoodExtrasEntity::class,
         FoodInsightsCacheEntity::class,
         GalleryCategoryEntity::class,
         GalleryFoodEntity::class,
@@ -53,7 +56,7 @@ import com.fitpal.app.data.local.entity.WeightEntryEntity
         UsdaFoodEntity::class,
         WeightEntryEntity::class
     ],
-    version = 29,
+    version = 30,
     exportSchema = true
 )
 abstract class FitPalDatabase : RoomDatabase() {
@@ -61,6 +64,7 @@ abstract class FitPalDatabase : RoomDatabase() {
     abstract fun challengeDao(): ChallengeDao
     abstract fun contextNoteDao(): ContextNoteDao
     abstract fun exerciseDao(): ExerciseDao
+    abstract fun foodExtrasDao(): FoodExtrasDao
     abstract fun galleryDao(): GalleryDao
     abstract fun insightsCacheDao(): InsightsCacheDao
     abstract fun mealLogDao(): MealLogDao
@@ -480,6 +484,31 @@ abstract class FitPalDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE exercise_entries ADD COLUMN externalId TEXT")
                 db.execSQL("ALTER TABLE exercise_entries ADD COLUMN detailsJson TEXT")
                 db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_exercise_entries_externalId ON exercise_entries(externalId)")
+            }
+        }
+
+        /**
+         * v29 -> v30: meal times, caffeine, and the food-gap cache.
+         *  - `meal_logs.timeSource`: where the meal's time came from (logged / photo / picked).
+         *  - `meal_logs.loggedDuringFast`: logged while fasting with "log anyway" — breaks that day's
+         *    fast even if the time is edited later (so a free time edit can't stand in for a pass).
+         *  - `meal_log_items.caffeineMg`: caffeine in the portion; NULL = not known yet.
+         *  - `food_extras`: the background check's per-food answers (fibre, vitamins, caffeine…) so
+         *    each food is only checked once.
+         */
+        val MIGRATION_29_30 = object : Migration(29, 30) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE meal_logs ADD COLUMN timeSource TEXT")
+                db.execSQL("ALTER TABLE meal_logs ADD COLUMN loggedDuringFast INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE meal_log_items ADD COLUMN caffeineMg REAL")
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS food_extras (
+                        `key` TEXT PRIMARY KEY NOT NULL,
+                        valuesJson TEXT NOT NULL,
+                        model TEXT,
+                        checkedAt INTEGER NOT NULL
+                    )
+                """)
             }
         }
     }

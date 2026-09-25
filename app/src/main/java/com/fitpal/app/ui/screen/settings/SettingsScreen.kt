@@ -8,10 +8,18 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.MailOutline
+import com.fitpal.app.ui.theme.Cream
+import com.fitpal.app.ui.theme.CreamMuted
+import com.fitpal.app.ui.theme.GoldLight
+import com.fitpal.app.ui.theme.accentGlass
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -33,6 +41,7 @@ import com.fitpal.app.ui.theme.glass
 @Composable
 fun SettingsScreen(
     onOpenCategory: (String) -> Unit,
+    onOpenFeedback: () -> Unit = {},
     onSwipeToCollection: () -> Unit = {},
     onBack: () -> Unit = {},
 ) {
@@ -71,6 +80,32 @@ fun SettingsScreen(
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                }
+            }
+
+            // Not a settings category — an action — so it's set apart with a warm accent.
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp)
+                    .accentGlass(GoldLight)
+                    .clickable(onClick = onOpenFeedback)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.MailOutline, contentDescription = null, tint = GoldLight, modifier = Modifier.size(22.dp))
+                    Spacer(Modifier.width(14.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Send feedback", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = Cream)
+                        Text(
+                            "Ideas, bugs, praise — it goes straight to the developer",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = CreamMuted
+                        )
+                    }
+                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = GoldLight)
                 }
             }
         }

@@ -50,6 +50,10 @@ object MealJson {
             o.put("mg", m.magnesiumMg.toDouble())
             o.put("zn", m.zincMg.toDouble())
             o.put("vitE", m.vitaminEMg.toDouble())
+            // Only when known — a missing "caf100" reads back as "not checked yet", not 0.
+            ing.caffeineMgPer100g?.let { o.put("caf100", it.toDouble()) }
+            ing.sourceFoodId?.let { o.put("src", it) }
+            if (ing.isDrink) o.put("drink", true)
             arr.put(o)
         }
         return arr.toString()
@@ -84,7 +88,10 @@ object MealJson {
                         magnesiumMg = o.optDouble("mg", 0.0).toFloat(),
                         zincMg = o.optDouble("zn", 0.0).toFloat(),
                         vitaminEMg = o.optDouble("vitE", 0.0).toFloat()
-                    )
+                    ),
+                    caffeineMgPer100g = if (o.has("caf100") && !o.isNull("caf100")) o.optDouble("caf100", 0.0).toFloat() else null,
+                    sourceFoodId = if (o.has("src") && !o.isNull("src")) o.optInt("src") else null,
+                    isDrink = o.optBoolean("drink", false)
                 )
             }
         } catch (e: Exception) {

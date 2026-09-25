@@ -70,7 +70,11 @@ import com.fitpal.app.ui.component.DatePickerDialog
 import com.fitpal.app.ui.component.EditWithAiDialog
 import com.fitpal.app.ui.component.GlassTopBar
 import com.fitpal.app.ui.component.DietaryWarningDialog
+import com.fitpal.app.ui.component.EatenAtChip
 import com.fitpal.app.ui.component.GradientBackdrop
+import com.fitpal.app.ui.component.AnalysingStrip
+import com.fitpal.app.ui.component.MealContextSelector
+import com.fitpal.app.ui.component.WhileYouWaitCard
 import com.fitpal.app.ui.component.logDateLabel
 import com.fitpal.app.ui.component.rememberFastingGuard
 import com.fitpal.app.ui.component.MacroBar
@@ -96,6 +100,8 @@ fun AnalysisScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val mealType by viewModel.mealType.collectAsStateWithLifecycle()
     val logDate by viewModel.logDate.collectAsStateWithLifecycle()
+    val eatenAt by viewModel.eatenAt.collectAsStateWithLifecycle()
+    val tags by viewModel.tags.collectAsStateWithLifecycle()
     val fastingGuard = rememberFastingGuard()
     val context = androidx.compose.ui.platform.LocalContext.current
     // Which food card (index) is currently adding an ingredient, if any.
@@ -145,8 +151,8 @@ fun AnalysisScreen(
             copiesChooser = true,
             onConfirmMeal = { date, meal, copies ->
                 showCopyPicker = false
-                fastingGuard.attempt(isForToday = date == java.time.LocalDate.now()) {
-                    viewModel.copyToDate(date, meal, copies)
+                fastingGuard.attempt(isForToday = date == java.time.LocalDate.now()) { decision ->
+                    viewModel.copyToDate(date, meal, copies, decision)
                 }
             },
             onConfirm = {},
@@ -255,6 +261,11 @@ fun AnalysisScreen(
                                 onSelected = viewModel::setMealType,
                                 modifier = Modifier.padding(vertical = 4.dp)
                             )
+                            EatenAtChip(
+                                eatenAt = eatenAt,
+                                onPick = viewModel::pickEatenTime,
+                                onUsePhotoSuggestion = viewModel::usePhotoSuggestion
+                            )
                             Button(onClick = { viewModel.startAnalysis() }, modifier = Modifier.fillMaxWidth()) {
                                 Icon(Icons.Default.AutoAwesome, contentDescription = null)
                                 Spacer(Modifier.width(8.dp))
@@ -295,22 +306,29 @@ fun AnalysisScreen(
                         }
                     }
 
-                    state.isAnalyzing -> CenteredMessage {
+                    // The AI is working: a compact progress strip, then the details only the user
+                    // knows (meal, time, situation) so the wait isn't dead time.
+                    state.isAnalyzing -> Column(
+                        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+                            .padding(horizontal = 20.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
                         state.imageUri?.let { uri ->
                             AsyncImage(
                                 model = uri, contentDescription = "Food photo",
-                                modifier = Modifier.fillMaxWidth().height(220.dp).clip(RoundedCornerShape(20.dp)),
+                                modifier = Modifier.fillMaxWidth().height(180.dp).clip(RoundedCornerShape(20.dp)),
                                 contentScale = ContentScale.Crop
                             )
-                            Spacer(Modifier.height(24.dp))
                         }
-                        AiSourceBadge(state.aiSource)
-                        Spacer(Modifier.height(16.dp))
-                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.height(16.dp))
-                        Text(
-                            state.progressMessage.ifBlank { "Analysing..." },
-                            style = MaterialTheme.typography.bodyLarge, color = Cream, textAlign = TextAlign.Center
+                        AnalysingStrip(message = state.progressMessage, source = state.aiSource)
+                        WhileYouWaitCard(
+                            mealType = mealType,
+                            onMealType = viewModel::setMealType,
+                            eatenAt = eatenAt,
+                            onPickTime = viewModel::pickEatenTime,
+                            tags = tags,
+                            onToggleTag = viewModel::toggleTag,
+                            onUsePhotoSuggestion = viewModel::usePhotoSuggestion
                         )
                     }
 
@@ -442,6 +460,18 @@ fun AnalysisScreen(
                                     }
                                 }
                             }
+
+                            // The situation tags picked while waiting stay editable here.
+                            item {
+                                Column(modifier = Modifier.fillMaxWidth().glass().padding(16.dp)) {
+                                    Text(
+                                        "Where & who with (optional)",
+                                        style = MaterialTheme.typography.labelMedium, color = CreamMuted
+                                    )
+                                    Spacer(Modifier.height(10.dp))
+                                    MealContextSelector(selected = tags, onToggle = viewModel::toggleTag)
+                                }
+                            }
                         }
                     }
                 }
@@ -472,8 +502,21 @@ fun AnalysisScreen(
                             Text("Copy to date")
                         }
                     }
+                    // When it was eaten — small and quiet; the photo's own time is already filled in.
+                    EatenAtChip(
+                        eatenAt = eatenAt,
+                        onPick = viewModel::pickEatenTime,
+                        onUsePhotoSuggestion = viewModel::usePhotoSuggestion,
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
                     Button(
-                        onClick = { fastingGuard.attempt(isForToday = logDate == java.time.LocalDate.now()) { viewModel.logMeal() } },
+                        onClick = {
+                            fastingGuard.attempt(
+                                isForToday = logDate == java.time.LocalDate.now(),
+                                eatenAt = eatenAt.time,
+                                photoTime = eatenAt.isPhotoTime
+                            ) { decision -> viewModel.logMeal(decision) }
+                        },
                         modifier = Modifier.fillMaxWidth(),
                         enabled = !state.isSaving
                     ) {

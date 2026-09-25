@@ -134,7 +134,8 @@ class GalleryFoodDetailViewModel @Inject constructor(
             caloriesPer100g = food.caloriesPer100g,
             proteinPer100g = food.proteinPer100g,
             fatPer100g = food.fatPer100g,
-            carbsPer100g = food.carbsPer100g
+            carbsPer100g = food.carbsPer100g,
+            sourceFoodId = food.fdcId
         )
         _uiState.update { it.copy(searchQuery = "", searchResults = emptyList()) }
         persistIngredients(_uiState.value.ingredients + ingredient)
@@ -165,7 +166,8 @@ class GalleryFoodDetailViewModel @Inject constructor(
             caloriesPer100g = food.caloriesPer100g,
             proteinPer100g = food.proteinPer100g,
             fatPer100g = food.fatPer100g,
-            carbsPer100g = food.carbsPer100g
+            carbsPer100g = food.carbsPer100g,
+            sourceFoodId = food.fdcId
         )
         _uiState.update { it.copy(searchQuery = "", searchResults = emptyList()) }
         persistIngredients(current)
@@ -293,7 +295,7 @@ class GalleryFoodDetailViewModel @Inject constructor(
     // ---------------- Log / delete ----------------
 
     /** Log this saved food to the chosen day + meal, carrying its photo and AI analysis. */
-    fun logIt() {
+    fun logIt(decision: com.fitpal.app.domain.model.LogDecision = com.fitpal.app.domain.model.LogDecision.NONE) {
         val food = _uiState.value.food ?: return
         viewModelScope.launch {
             mealRepository.logMeal(
@@ -302,7 +304,10 @@ class GalleryFoodDetailViewModel @Inject constructor(
                 photoPath = _uiState.value.photoPath,
                 insights = _uiState.value.insights,
                 date = _logDate.value.format(DateTimeFormatter.ISO_LOCAL_DATE),
-                source = _uiState.value.aiSource
+                source = _uiState.value.aiSource,
+                meta = com.fitpal.app.data.repository.mealLogMeta(
+                    _logDate.value, com.fitpal.app.domain.model.EatenAt(), decision
+                )
             )
             galleryRepository.markUsed(foodId)
             _uiState.update { it.copy(logged = true) }

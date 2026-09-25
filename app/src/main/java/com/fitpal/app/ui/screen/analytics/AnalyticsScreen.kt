@@ -33,6 +33,9 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.TrendingDown
+import androidx.compose.material.icons.automirrored.filled.TrendingFlat
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.AllInclusive
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ChevronLeft
@@ -117,6 +120,8 @@ fun AnalyticsScreen(
     onSwipeToCollection: () -> Unit = {},
     onOpenDay: () -> Unit = {},
     onOpenCalorieDetail: (range: String, anchor: String) -> Unit = { _, _ -> },
+    /** Open the shared weigh-in (the same one the weigh-in notification opens). */
+    onOpenWeighIn: () -> Unit = {},
     viewModel: AnalyticsViewModel = hiltViewModel()
 ) {
     val range by viewModel.range.collectAsStateWithLifecycle()
@@ -156,7 +161,7 @@ fun AnalyticsScreen(
     val fastingStreak by viewModel.fastingStreak.collectAsStateWithLifecycle()
     val fastingMealMinutes by viewModel.fastingMealMinutesByDate.collectAsStateWithLifecycle()
     val fastingGrace by viewModel.fastingGrace.collectAsStateWithLifecycle()
-    var showWeightDialog by remember { mutableStateOf(false) }
+    val fastingLoggedDuringFastDays by viewModel.fastingLoggedDuringFastDays.collectAsStateWithLifecycle()
     // The maintenance-estimate card taps open a "how is this calculated?" explainer; its two rows
     // drill further into the day-by-day intake list and the full weigh-in list ("intake"/"weight").
     var showMaintenanceInfo by remember { mutableStateOf(false) }
@@ -353,8 +358,8 @@ fun AnalyticsScreen(
                         // Avg score + logged days are merged into one compact tile, both over the week.
                         val weekScores = weekDates.mapNotNull { scoreByDate[it.format(iso)] }
                         val avgScore = weekScores.takeIf { it.isNotEmpty() }?.let { it.sum() / it.size }
-                        val ww = weights.filter { it.date in rollingKeys }.sortedBy { it.date }
-                        val wChange = if (ww.size >= 2) ww.last().weightKg - ww.first().weightKg else null
+                        // Same calculation as the weight card's change chip, so the two always agree.
+                        val wChange = com.fitpal.app.domain.WeightTrend.changeOver(weights, rollingStart, rollingEnd)
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 StatTile(Modifier.weight(1f), "Avg calories", avgCal?.let { "${it.toInt()}" } ?: "—", "kcal/day", GoldLight, "tile_cal", spotlight, viewModel::toggleSpotlight) { jumpTo("calories") }
@@ -664,11 +669,18 @@ fun AnalyticsScreen(
                                 .cardSurface("Weight" in spotlight)
                                 .then(highlightBorder(highlight == "weight"))
                                 .combinedClickable(
-                                    onClick = { showWeightDialog = true },
+                                    onClick = onOpenWeighIn,
                                     onLongClick = { viewModel.toggleSpotlight("Weight") }
                                 )
                                 .padding(16.dp)
                         ) {
+                            // How much it moved over what you're viewing: this week / 30 days, or
+                            // since your very first weigh-in when the card is on Lifetime.
+                            val weightDelta = if ("weight" in lifetime) {
+                                com.fitpal.app.domain.WeightTrend.lifetimeChange(weights)
+                            } else {
+                                com.fitpal.app.domain.WeightTrend.changeOver(weights, rollingStart, rollingEnd)
+                            }
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -681,10 +693,16 @@ fun AnalyticsScreen(
                                         style = MaterialTheme.typography.bodySmall, color = CreamMuted
                                     )
                                 }
-                                Text(
-                                    text = if (latestWeight != null) "${"%.1f".format(latestWeight!!.weightKg)} kg" else "— kg",
-                                    style = MaterialTheme.typography.titleLarge, color = GoldLight
-                                )
+                                Column(horizontalAlignment = Alignment.End) {
+                                    Text(
+                                        text = if (latestWeight != null) "${"%.1f".format(latestWeight!!.weightKg)} kg" else "— kg",
+                                        style = MaterialTheme.typography.titleLarge, color = GoldLight
+                                    )
+                                    weightDelta?.let { delta ->
+                                        Spacer(Modifier.height(4.dp))
+                                        WeightChangeChip(delta, fitnessGoal)
+                                    }
+                                }
                             }
                             weightRate?.let { rate ->
                                 Spacer(Modifier.height(6.dp))
@@ -804,14 +822,6 @@ fun AnalyticsScreen(
         }
     }
 
-    if (showWeightDialog) {
-        WeightInputDialog(
-            initialKg = latestWeight?.weightKg,
-            onSave = { kg -> viewModel.logWeight(kg); showWeightDialog = false },
-            onDismiss = { showWeightDialog = false }
-        )
-    }
-
     if (showMaintenanceInfo) {
         maintenanceBreakdown?.let { est ->
             MaintenanceDialog(
@@ -862,6 +872,7 @@ fun AnalyticsScreen(
             schedule = fastingSchedule,
             mealMinutes = fastingMealMinutes[day.format(iso)],
             graceMinute = fastingGrace[day.format(iso)],
+            loggedDuringFast = day.format(iso) in fastingLoggedDuringFastDays,
             onJump = { openDay(day); selectedFastingDay = null },
             onDismiss = { selectedFastingDay = null }
         )
@@ -1437,6 +1448,8 @@ private fun FastingDayDialog(
     schedule: com.fitpal.app.domain.model.FastingSchedule,
     mealMinutes: List<Int>?,
     graceMinute: Int?,
+    /** A meal was logged with "log anyway" during the fast that day (no pass, no photo proof). */
+    loggedDuringFast: Boolean,
     onJump: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -1462,6 +1475,13 @@ private fun FastingDayDialog(
                     mealMinutes.isNullOrEmpty() -> Text(
                         "No food logged this day, so there's nothing to check.",
                         style = MaterialTheme.typography.bodyMedium, color = CreamMuted
+                    )
+                    // Logged during the fast with "log anyway" — broken for good, even if that meal's
+                    // time was moved into the window afterwards (only a pass or a photo can save it).
+                    loggedDuringFast && breaks.isEmpty() -> Text(
+                        "A meal was logged during your fast without using a pass, so this day counts as broken — " +
+                            "even though its time was later moved into your window.",
+                        style = MaterialTheme.typography.bodyMedium, color = ScorePoor
                     )
                     breaks.isEmpty() -> Text(
                         "You kept your fast — every meal was inside your eating window.",
@@ -1901,24 +1921,43 @@ private fun WeightTrendDetailDialog(
     )
 }
 
+/**
+ * The weight card's change chip: how much weight moved over the period you're viewing (or since your
+ * first weigh-in, in Lifetime) — an arrow and the kilos, green when it's heading the way your goal
+ * wants, amber when it isn't, muted when it's steady.
+ */
 @Composable
-private fun WeightInputDialog(initialKg: Float?, onSave: (Float) -> Unit, onDismiss: () -> Unit) {
-    var text by remember { mutableStateOf(initialKg?.let { "%.1f".format(it) } ?: "") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Log weight") },
-        text = {
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it },
-                label = { Text("Weight (kg)") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                singleLine = true
-            )
-        },
-        confirmButton = { TextButton(onClick = { text.toFloatOrNull()?.let(onSave) }) { Text("Save") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    )
+private fun WeightChangeChip(deltaKg: Float, goal: com.fitpal.app.domain.model.FitnessGoal) {
+    val steady = kotlin.math.abs(deltaKg) < 0.05f
+    val color = when (com.fitpal.app.domain.WeightTrend.changeIsOnTrack(deltaKg, goal)) {
+        true -> ScoreFair
+        false -> Gold
+        null -> CreamMuted
+    }
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(color.copy(alpha = 0.14f))
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        Icon(
+            imageVector = when {
+                steady -> Icons.AutoMirrored.Filled.TrendingFlat
+                deltaKg < 0f -> Icons.AutoMirrored.Filled.TrendingDown
+                else -> Icons.AutoMirrored.Filled.TrendingUp
+            },
+            contentDescription = null,
+            tint = color,
+            modifier = Modifier.size(14.dp)
+        )
+        Text(
+            text = if (steady) "0.0 kg" else (if (deltaKg > 0f) "+" else "−") + "%.1f kg".format(kotlin.math.abs(deltaKg)),
+            style = MaterialTheme.typography.labelMedium,
+            color = color
+        )
+    }
 }
 
 private fun enough(s: List<Float?>): Boolean = s.count { it != null } >= 2

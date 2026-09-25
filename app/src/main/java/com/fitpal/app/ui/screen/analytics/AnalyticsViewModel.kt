@@ -210,7 +210,9 @@ class AnalyticsViewModel @Inject constructor(
     /** Per-day HELD/BROKE over the viewed window (empty when fasting is off). */
     val fastingAdherence: StateFlow<Map<String, com.fitpal.app.domain.model.FastingDayResult>> =
         combine(fastingMealTimes, settingsRepository.fastingSchedule, settingsRepository.fastingGrace) { times, schedule, grace ->
-            schedule.adherenceByDay(times.map { it.date to minuteOfDay(it.timestamp) }, grace.keys)
+            schedule.adherenceByDay(
+                times.map { it.date to minuteOfDay(it.timestamp) }, grace.keys, loggedDuringFastDays(times)
+            )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
     /** Per-day sorted minute-of-day of each non-water meal — lets the day dialog explain a broken fast. */
@@ -218,6 +220,14 @@ class AnalyticsViewModel @Inject constructor(
         fastingMealTimes.map { rows ->
             rows.groupBy({ it.date }, { minuteOfDay(it.timestamp) }).mapValues { it.value.sorted() }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
+    /** Days in the viewed window where a meal was logged with "log anyway" during the fast. */
+    val fastingLoggedDuringFastDays: StateFlow<Set<String>> =
+        fastingMealTimes.map { loggedDuringFastDays(it) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
+
+    private fun loggedDuringFastDays(rows: List<com.fitpal.app.data.local.dao.MealTimeRow>): Set<String> =
+        rows.filter { it.loggedDuringFast }.map { it.date }.toSet()
 
     /** Consecutive days up to today the fast was kept — over a 90-day lookback, independent of the view. */
     val fastingStreak: StateFlow<Int> = run {
@@ -227,7 +237,11 @@ class AnalyticsViewModel @Inject constructor(
                 .collect { recent.value = it }
         }
         combine(recent, settingsRepository.fastingSchedule, settingsRepository.fastingGrace) { times, schedule, grace ->
-            fastingStreakOf(schedule.adherenceByDay(times.map { it.date to minuteOfDay(it.timestamp) }, grace.keys))
+            fastingStreakOf(
+                schedule.adherenceByDay(
+                    times.map { it.date to minuteOfDay(it.timestamp) }, grace.keys, loggedDuringFastDays(times)
+                )
+            )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
     }
 
@@ -404,10 +418,6 @@ class AnalyticsViewModel @Inject constructor(
     val lifetimeMaintenance: StateFlow<Int?> = maintenanceBreakdown
         .map { it?.maintenanceKcal }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
-
-    fun logWeight(kg: Float) {
-        viewModelScope.launch { weightRepository.logWeight(kg) }
-    }
 
     private companion object {
         // Dates are stored as ISO text and compared as text, so these bracket every real date.

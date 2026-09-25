@@ -76,10 +76,24 @@ data class DailyWaterSplit(
     val foodWater: Float
 )
 
-/** One row per logged meal — its day plus when it was logged — for the fasting-adherence heatmap. */
+/** One row per logged meal — its day plus when it was eaten — for the fasting-adherence heatmap. */
 data class MealTimeRow(
     val date: String,
-    val timestamp: Long
+    val timestamp: Long,
+    /** Logged with "log anyway" during a fast — breaks the day whatever its time says. */
+    val loggedDuringFast: Boolean = false
+)
+
+/** One logged item's caffeine + when it was eaten — the caffeine tracker's raw data. */
+data class CaffeineRow(
+    val itemId: Long,
+    val name: String,
+    val grams: Float,
+    val isDrink: Boolean,
+    /** Null = not known yet (the tracker falls back to a name-based estimate). */
+    val caffeineMg: Float?,
+    val timestamp: Long,
+    val date: String
 )
 
 /** Daily micronutrient totals — one query returns all thirteen. */
@@ -151,9 +165,37 @@ interface MealLogDao {
     @Query("SELECT * FROM meal_log_items WHERE id = :itemId")
     fun observeItemById(itemId: Long): Flow<MealLogItemEntity?>
 
-    /** Every non-water meal's day + log time in a range — for fasting adherence (excludes plain water quick-adds). */
-    @Query("SELECT date, timestamp FROM meal_logs WHERE date BETWEEN :from AND :to AND mealType != 'water'")
+    /** Every non-water meal's day + eaten time in a range — for fasting adherence (excludes plain water quick-adds). */
+    @Query("SELECT date, timestamp, loggedDuringFast FROM meal_logs WHERE date BETWEEN :from AND :to AND mealType != 'water'")
     fun getMealTimesInRange(from: String, to: String): Flow<List<MealTimeRow>>
+
+    /** Move a whole meal to a new eaten time (same day) — the post-log time editor. */
+    @Query("UPDATE meal_logs SET timestamp = :timestamp, timeSource = :timeSource WHERE id = :mealLogId")
+    suspend fun updateMealTime(mealLogId: Long, timestamp: Long, timeSource: String?)
+
+    /**
+     * Every non-water item logged on the days in [from]..[to], with its caffeine and the meal's
+     * eaten time — the caffeine tracker works out what's still in the body from these.
+     */
+    @Query("""
+        SELECT i.id AS itemId, i.name AS name, i.grams AS grams, i.isDrink AS isDrink,
+               i.caffeineMg AS caffeineMg, m.timestamp AS timestamp, m.date AS date
+        FROM meal_log_items i JOIN meal_logs m ON i.mealLogId = m.id
+        WHERE m.date BETWEEN :from AND :to AND m.mealType != 'water'
+        ORDER BY m.timestamp
+    """)
+    fun getCaffeineRowsInRange(from: String, to: String): Flow<List<CaffeineRow>>
+
+    /** Set an item's caffeine directly (items with no ingredient breakdown to recompute from). */
+    @Query("UPDATE meal_log_items SET caffeineMg = :caffeineMg WHERE id = :id")
+    suspend fun updateItemCaffeine(id: Long, caffeineMg: Float?)
+
+    /** Meals on [from]..[to] with at least one item whose caffeine isn't known yet (tracker backfill). */
+    @Query("""
+        SELECT DISTINCT i.mealLogId FROM meal_log_items i JOIN meal_logs m ON i.mealLogId = m.id
+        WHERE m.date BETWEEN :from AND :to AND i.caffeineMg IS NULL AND m.mealType != 'water'
+    """)
+    suspend fun getMealLogIdsMissingCaffeine(from: String, to: String): List<Long>
 
     /** Get the meal type for a specific log item (via its parent meal log). */
     @Query("""
@@ -294,7 +336,8 @@ interface MealLogDao {
            vitaminA = :vitaminA, vitaminC = :vitaminC, vitaminD = :vitaminD,
            calcium = :calcium, iron = :iron, potassium = :potassium, sodium = :sodium,
            vitaminB12 = :vitaminB12, folate = :folate, vitaminB6 = :vitaminB6,
-           magnesium = :magnesium, zinc = :zinc, vitaminE = :vitaminE
+           magnesium = :magnesium, zinc = :zinc, vitaminE = :vitaminE,
+           caffeineMg = :caffeineMg
            WHERE id = :id"""
     )
     suspend fun updateItemWithIngredients(
@@ -319,7 +362,8 @@ interface MealLogDao {
         vitaminB6: Float,
         magnesium: Float,
         zinc: Float,
-        vitaminE: Float
+        vitaminE: Float,
+        caffeineMg: Float?
     )
 
     @Query(
@@ -329,7 +373,8 @@ interface MealLogDao {
            vitaminA = :vitaminA, vitaminC = :vitaminC, vitaminD = :vitaminD,
            calcium = :calcium, iron = :iron, potassium = :potassium, sodium = :sodium,
            vitaminB12 = :vitaminB12, folate = :folate, vitaminB6 = :vitaminB6,
-           magnesium = :magnesium, zinc = :zinc, vitaminE = :vitaminE
+           magnesium = :magnesium, zinc = :zinc, vitaminE = :vitaminE,
+           caffeineMg = :caffeineMg
            WHERE id = :id"""
     )
     suspend fun updateItem(
@@ -353,7 +398,8 @@ interface MealLogDao {
         vitaminB6: Float,
         magnesium: Float,
         zinc: Float,
-        vitaminE: Float
+        vitaminE: Float,
+        caffeineMg: Float?
     )
 
     /**

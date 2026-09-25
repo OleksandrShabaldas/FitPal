@@ -9,10 +9,15 @@ import com.fitpal.app.data.local.entity.UsdaFoodEntity
 import com.fitpal.app.data.repository.GalleryRepository
 import com.fitpal.app.data.repository.MealRepository
 import com.fitpal.app.data.repository.NutritionRepository
+import com.fitpal.app.data.repository.mealLogMeta
 import com.fitpal.app.domain.MealLogContext
 import com.fitpal.app.domain.HealthScorer
 import com.fitpal.app.domain.model.DetectedFood
 import com.fitpal.app.domain.model.DietaryWarning
+import com.fitpal.app.domain.model.EatenAt
+import com.fitpal.app.domain.model.EatenAtState
+import com.fitpal.app.domain.model.LogDecision
+import com.fitpal.app.domain.model.MealContext
 import com.fitpal.app.domain.model.Micronutrients
 import com.fitpal.app.domain.model.Ingredient
 import com.fitpal.app.domain.model.MealInsights
@@ -23,6 +28,7 @@ import com.fitpal.app.ml.FoodAnalysisPipeline
 import com.fitpal.app.ml.JobKind
 import com.fitpal.app.ml.JobStatus
 import com.fitpal.app.ml.ModelManager
+import com.fitpal.app.ml.PhotoTimestamp
 import com.fitpal.app.ui.navigation.Screen
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -105,8 +111,38 @@ class AnalysisViewModel @Inject constructor(
     val mealType: StateFlow<String> = _mealType
     fun setMealType(type: String) {
         _mealType.value = type
-        jobManager.updateMealType(type)
+        if (ownsJob()) jobManager.updateMealType(type)
     }
+
+    /** When the meal was eaten — the photo's own time when it's recent, else "now" until picked. */
+    private val eatenAtState = EatenAtState()
+    val eatenAt: StateFlow<EatenAt> = eatenAtState.value
+
+    /** Situation tags ("Home", "Family meal"…) — pickable while the AI works. */
+    private val _tags = MutableStateFlow<Set<String>>(emptySet())
+    val tags: StateFlow<Set<String>> = _tags
+
+    fun pickEatenTime(time: java.time.LocalTime) {
+        eatenAtState.pick(time)
+        if (ownsJob()) jobManager.updateEatenAt(eatenAtState.current)
+    }
+
+    /** Apply an older photo's capture time that was only offered (moves the log date to match). */
+    fun usePhotoSuggestion() {
+        val taken = eatenAtState.current.photoSuggestion ?: return
+        setLogDate(taken.toLocalDate())
+        eatenAtState.usePhotoTime(taken.toLocalTime())
+        if (ownsJob()) jobManager.updateEatenAt(eatenAtState.current)
+    }
+
+    fun toggleTag(tag: String) {
+        _tags.value = MealContext.toggle(_tags.value, tag)
+        if (ownsJob()) jobManager.updateTags(_tags.value)
+    }
+
+    /** True when the background job is this screen's photo (so on-screen edits apply to it). */
+    private fun ownsJob(): Boolean =
+        jobManager.current?.let { it.kind == JobKind.IMAGE && it.imageUri == sourceImageUri } == true
 
     /**
      * On-demand health analysis for the current foods, shown right here before logging. The service
@@ -139,18 +175,19 @@ class AnalysisViewModel @Inject constructor(
         return MealInsights(scored.score, scored.factors, emptyList(), "", "", emptyList())
     }
 
-    /** The day this meal will be logged to — starts from Home's "+" (or today), user-editable. */
-    private val _logDate = MutableStateFlow(
+    /** The day Home was showing when "+" was tapped, if any (a photo mustn't move the meal off it). */
+    private val pendingDate: java.time.LocalDate? =
         mealLogContext.consumeDate()?.let { runCatching { java.time.LocalDate.parse(it) }.getOrNull() }
-            ?: java.time.LocalDate.now()
-    )
+
+    /** The day this meal will be logged to — starts from Home's "+" (or today), user-editable. */
+    private val _logDate = MutableStateFlow(pendingDate ?: java.time.LocalDate.now())
     val logDate: StateFlow<java.time.LocalDate> = _logDate
 
     private fun logDateIso(): String = _logDate.value.format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE)
 
     fun setLogDate(date: java.time.LocalDate) {
         _logDate.value = date
-        jobManager.updateTargetDate(logDateIso())
+        if (ownsJob()) jobManager.updateTargetDate(logDateIso())
     }
 
     private val sourceImageUri: String? = savedStateHandle.get<String>(Screen.Analysis.ARG_IMAGE_URI)
@@ -169,13 +206,44 @@ class AnalysisViewModel @Inject constructor(
             existing != null && existing.kind == JobKind.IMAGE && existing.imageUri == imageUri -> {
                 _mealType.value = existing.mealType
                 existing.targetDate?.let { iso -> runCatching { java.time.LocalDate.parse(iso) }.getOrNull()?.let { _logDate.value = it } }
+                eatenAtState.set(existing.eatenAt)
+                _tags.value = existing.tags
                 _uiState.update { it.copy(imageUri = existing.imageUri ?: imageUri) }
             }
             imageUri == null -> _uiState.update { it.copy(needsImage = true) }
             !modelManager.isLlmReady -> _uiState.update { it.copy(needsModel = true) }
-            else -> _uiState.update { it.copy(readyToAnalyze = true) }
+            else -> {
+                _uiState.update { it.copy(readyToAnalyze = true) }
+                readPhotoTime(imageUri)
+            }
         }
         observeJob()
+    }
+
+    /**
+     * File the meal at the photo's own capture time: applied on its own when the photo is recent (a
+     * meal you're logging now), otherwise only offered — a re-used old photo shouldn't back-date
+     * today's meal. The photo's time also counts as proof for the fasting warning.
+     */
+    private fun readPhotoTime(uri: String) {
+        viewModelScope.launch {
+            val taken = withContext(Dispatchers.IO) {
+                runCatching { PhotoTimestamp.read(context, Uri.parse(uri)) }.getOrNull()
+            } ?: return@launch
+            // Don't overrule a time the user already picked by hand while this was loading.
+            if (eatenAtState.current.time != null) return@launch
+            val today = java.time.LocalDate.now()
+            val explicitDate = pendingDate != null && pendingDate != today
+            val applied = EatenAt.autoApply(taken, _logDate.value, explicitDate)
+            if (applied != null) {
+                val (date, time) = applied
+                if (date != _logDate.value) setLogDate(date)
+                eatenAtState.usePhotoTime(time)
+            } else {
+                eatenAtState.suggestPhoto(taken)
+            }
+            if (ownsJob()) jobManager.updateEatenAt(eatenAtState.current)
+        }
     }
 
     fun setNote(text: String) {
@@ -228,7 +296,10 @@ class AnalysisViewModel @Inject constructor(
     private fun startAnalysisJob() {
         val uri = sourceImageUri ?: return
         _uiState.update { it.copy(readyToAnalyze = false, isAnalyzing = true, error = null, progressMessage = "Starting…") }
-        jobManager.startImageJob(uri, _uiState.value.note, _mealType.value, logDateIso())
+        jobManager.startImageJob(
+            uri, _uiState.value.note, _mealType.value, logDateIso(),
+            eatenAt = eatenAtState.current, tags = _tags.value
+        )
     }
 
     /** User chose to analyse despite the dietary-rule warning. */
@@ -404,8 +475,8 @@ class AnalysisViewModel @Inject constructor(
         }
     }
 
-    /** Log everything on screen as a meal. */
-    fun logMeal() {
+    /** Log everything on screen as a meal. [decision] = what the fasting check decided. */
+    fun logMeal(decision: LogDecision = LogDecision.NONE) {
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true) }
             try {
@@ -416,7 +487,8 @@ class AnalysisViewModel @Inject constructor(
                     photoPath = savedPhoto,
                     insights = _uiState.value.insights,
                     date = logDateIso(),
-                    source = _uiState.value.aiSource
+                    source = _uiState.value.aiSource,
+                    meta = mealLogMeta(_logDate.value, eatenAtState.current, decision, _tags.value)
                 )
                 // The user handled it — stop the background service so it doesn't auto-save again.
                 jobManager.completeByUser()
@@ -431,7 +503,12 @@ class AnalysisViewModel @Inject constructor(
      * #2 — "copy to another date": log the current meal to an ADDITIONAL day, without leaving the
      * screen (so the user can still log it to the primary date too). Sets a one-shot confirmation.
      */
-    fun copyToDate(date: java.time.LocalDate, mealType: String? = null, copies: Int = 1) {
+    fun copyToDate(
+        date: java.time.LocalDate,
+        mealType: String? = null,
+        copies: Int = 1,
+        decision: LogDecision = LogDecision.NONE
+    ) {
         val n = copies.coerceIn(1, 20)
         viewModelScope.launch {
             try {
@@ -444,7 +521,9 @@ class AnalysisViewModel @Inject constructor(
                         photoPath = savedPhoto,
                         insights = _uiState.value.insights,
                         date = date.format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE),
-                        source = _uiState.value.aiSource
+                        source = _uiState.value.aiSource,
+                        // A copy is another way to log — it lands "now" on its day, keeps the tags.
+                        meta = mealLogMeta(date, EatenAt(), decision, _tags.value)
                     )
                 }
                 val label = com.fitpal.app.ui.component.logDateLabel(date).lowercase()
@@ -507,7 +586,9 @@ class AnalysisViewModel @Inject constructor(
             caloriesPer100g = food.caloriesPer100g,
             proteinPer100g = food.proteinPer100g,
             fatPer100g = food.fatPer100g,
-            carbsPer100g = food.carbsPer100g
+            carbsPer100g = food.carbsPer100g,
+            // Linked to its database row so the background check can fill its fibre/vitamins once.
+            sourceFoodId = food.fdcId
         )
         _uiState.update { state ->
             val foods = state.detectedFoods.toMutableList()

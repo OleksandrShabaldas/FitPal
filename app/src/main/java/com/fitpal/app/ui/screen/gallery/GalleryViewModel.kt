@@ -75,10 +75,14 @@ class GalleryViewModel @Inject constructor(
     }
 
     /** One-tap: log a saved food to the chosen day, into the chosen (or time-of-day) category. */
-    fun quickLog(id: Long) {
+    fun quickLog(id: Long, decision: com.fitpal.app.domain.model.LogDecision = com.fitpal.app.domain.model.LogDecision.NONE) {
         viewModelScope.launch {
             val food = galleryRepository.toDomainModel(id) ?: return@launch
-            mealRepository.logMeal(listOf(food), mealType, date = logDateIso())
+            val day = runCatching { java.time.LocalDate.parse(logDateIso()) }.getOrNull() ?: java.time.LocalDate.now()
+            mealRepository.logMeal(
+                listOf(food), mealType, date = logDateIso(),
+                meta = com.fitpal.app.data.repository.mealLogMeta(day, com.fitpal.app.domain.model.EatenAt(), decision)
+            )
             galleryRepository.markUsed(id)
             _logged.value = true
         }

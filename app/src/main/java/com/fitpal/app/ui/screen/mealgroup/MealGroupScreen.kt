@@ -112,8 +112,8 @@ fun MealGroupScreen(
             copiesChooser = true,
             onConfirmMeal = { date, meal, copies ->
                 showCopyPicker = false
-                fastingGuard.attempt(isForToday = date == java.time.LocalDate.now()) {
-                    viewModel.copyToDate(date, meal, copies)
+                fastingGuard.attempt(isForToday = date == java.time.LocalDate.now()) { decision ->
+                    viewModel.copyToDate(date, meal, copies, decision)
                 }
             },
             onConfirm = {},
@@ -223,7 +223,13 @@ fun MealGroupScreen(
                                         style = MaterialTheme.typography.titleLarge, color = GoldLight
                                     )
                                 }
-                                Spacer(Modifier.height(8.dp))
+                                Spacer(Modifier.height(4.dp))
+                                // When it was eaten — tap to correct it.
+                                com.fitpal.app.ui.component.EatenAtChip(
+                                    eatenAt = state.eatenAt,
+                                    onPick = viewModel::setMealTime
+                                )
+                                Spacer(Modifier.height(4.dp))
                                 Text(
                                     "Tap a dish to edit it, or its name to rename it.",
                                     style = MaterialTheme.typography.bodySmall, color = CreamMuted
@@ -237,11 +243,14 @@ fun MealGroupScreen(
                                 MealTypeSelector(selected = state.mealType, onSelected = viewModel::setMealType)
                                 Spacer(Modifier.height(14.dp))
                                 Text(
-                                    "Where was this meal? (optional)",
+                                    "Where & who with (optional)",
                                     style = MaterialTheme.typography.labelMedium, color = CreamMuted
                                 )
                                 Spacer(Modifier.height(6.dp))
-                                MealContextSelector(selected = state.context, onSelected = viewModel::setMealContext)
+                                MealContextSelector(
+                                    selected = com.fitpal.app.domain.model.MealContext.parse(state.context),
+                                    onToggle = viewModel::toggleMealContext
+                                )
                             }
                         }
                         state.coachingTip?.let { tip ->

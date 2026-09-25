@@ -30,8 +30,10 @@ data class MealGroupUiState(
     val mealType: String = "",
     /** The name the user gave this whole meal, or null while it's unnamed. */
     val mealName: String? = null,
-    /** The one-tap situation tag on this meal ("Home"/"Restaurant"/…), or null if untagged. */
+    /** The one-tap situation tags on this meal ("Home, Family meal"), or null if untagged. */
     val context: String? = null,
+    /** When this meal was eaten (its time source says whether it came from the photo). */
+    val eatenAt: com.fitpal.app.domain.model.EatenAt = com.fitpal.app.domain.model.EatenAt(),
     /** A meal-aware coaching note the background worker may attach; null when there's nothing useful. */
     val coachingTip: CoachingTip? = null,
     /** The day this meal is logged on — so "copy to date" can center on it. */
@@ -94,18 +96,32 @@ class MealGroupViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         context = meal?.context,
-                        coachingTip = meal?.let { m -> mealRepository.coachingTipFor(m) }
+                        coachingTip = meal?.let { m -> mealRepository.coachingTipFor(m) },
+                        eatenAt = meal?.let { m -> com.fitpal.app.domain.model.eatenAtOf(m.timestamp, m.timeSource) }
+                            ?: it.eatenAt
                     )
                 }
             }
         }
     }
 
-    /** Set (or clear, by re-tapping) the one-tap situation tag on this whole meal. */
-    fun setMealContext(context: String?) {
-        val next = if (context == _uiState.value.context) null else context
+    /** Toggle one situation tag on this whole meal (a meal can carry several). */
+    fun toggleMealContext(tag: String) {
+        val next = com.fitpal.app.domain.model.MealContext.format(
+            com.fitpal.app.domain.model.MealContext.toggle(
+                com.fitpal.app.domain.model.MealContext.parse(_uiState.value.context), tag
+            )
+        )
         _uiState.update { it.copy(context = next) }
         viewModelScope.launch { mealRepository.updateMealContext(mealLogId, next) }
+    }
+
+    /**
+     * Move this meal to another time on the same day. Free — it never spends or refunds a fasting
+     * pass (a "log anyway" meal keeps breaking its day's fast wherever it moves).
+     */
+    fun setMealTime(time: java.time.LocalTime) {
+        viewModelScope.launch { mealRepository.updateMealTime(mealLogId, time) }
     }
 
     // ---- Inline editing (per dish), persisted to the DB; the Flow reconciles totals ----
@@ -189,12 +205,17 @@ class MealGroupViewModel @Inject constructor(
     }
 
     /** Copy the whole meal (all dishes) onto another day, into the chosen meal category. */
-    fun copyToDate(date: LocalDate, mealType: String? = null, copies: Int = 1) {
+    fun copyToDate(
+        date: LocalDate,
+        mealType: String? = null,
+        copies: Int = 1,
+        decision: com.fitpal.app.domain.model.LogDecision = com.fitpal.app.domain.model.LogDecision.NONE
+    ) {
         val n = copies.coerceIn(1, 20)
         viewModelScope.launch {
             try {
                 repeat(n) {
-                    mealRepository.copyMealToDate(mealLogId, date.format(DateTimeFormatter.ISO_LOCAL_DATE), mealType)
+                    mealRepository.copyMealToDate(mealLogId, date.format(DateTimeFormatter.ISO_LOCAL_DATE), mealType, decision)
                 }
                 val label = logDateLabel(date).lowercase()
                 _uiState.update {

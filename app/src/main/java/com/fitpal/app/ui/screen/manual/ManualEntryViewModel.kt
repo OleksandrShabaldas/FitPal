@@ -7,9 +7,13 @@ import com.fitpal.app.data.repository.GalleryRepository
 import com.fitpal.app.data.repository.MealRepository
 import com.fitpal.app.data.repository.NutritionRepository
 import com.fitpal.app.data.repository.SettingsRepository
+import com.fitpal.app.data.repository.mealLogMeta
 import com.fitpal.app.domain.MealLogContext
 import com.fitpal.app.domain.model.DietaryWarning
+import com.fitpal.app.domain.model.EatenAt
+import com.fitpal.app.domain.model.EatenAtState
 import com.fitpal.app.domain.model.Ingredient
+import com.fitpal.app.domain.model.LogDecision
 import com.fitpal.app.domain.model.ServingPreset
 import com.fitpal.app.ml.DietaryGate
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -89,6 +93,14 @@ class ManualEntryViewModel @Inject constructor(
     fun setLogDate(date: java.time.LocalDate) { _logDate.value = date }
     private fun logDateIso(): String = _logDate.value.format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE)
 
+    /** When the meal was eaten — "now" unless the user picks a time. */
+    private val eatenAtState = EatenAtState()
+    val eatenAt: StateFlow<EatenAt> = eatenAtState.value
+    fun pickEatenTime(time: java.time.LocalTime) = eatenAtState.pick(time)
+
+    /** The fasting check's decision, held across the dietary-rule warning. */
+    private var pendingDecision: LogDecision = LogDecision.NONE
+
     init {
         // Make sure the built-in foods are available for searching.
         viewModelScope.launch { nutritionRepository.ensureSeeded() }
@@ -136,7 +148,10 @@ class ManualEntryViewModel @Inject constructor(
             fatPer100g = food.fatPer100g,
             carbsPer100g = food.carbsPer100g,
             waterMlPer100g = waterFor(drink, food.carbsPer100g, food.proteinPer100g, food.fatPer100g),
-            isDrink = drink
+            isDrink = drink,
+            // Linked to its database row: the background check fills its fibre/vitamins/caffeine
+            // once, and every later log of the same food is complete straight from the cache.
+            sourceFoodId = food.fdcId
         )
         searchJob?.cancel()
         _uiState.update {
@@ -219,9 +234,11 @@ class ManualEntryViewModel @Inject constructor(
         }
     }
 
-    fun logMeal() {
+    /** Log the meal. [decision] = what the fasting check decided. */
+    fun logMeal(decision: LogDecision = LogDecision.NONE) {
         val items = _uiState.value.draft
         if (items.isEmpty()) return
+        pendingDecision = decision
         viewModelScope.launch {
             val isToday = _logDate.value == java.time.LocalDate.now()
             val warning = dietaryGate.checkKnownFoods(items.map { it.total.name to it.total.calories }, isToday)
@@ -246,7 +263,10 @@ class ManualEntryViewModel @Inject constructor(
         if (items.isEmpty()) return
         _uiState.update { it.copy(isSaving = true) }
         try {
-            mealRepository.logItems(items.map { it.total }, _mealType.value, date = logDateIso())
+            mealRepository.logItems(
+                items.map { it.total }, _mealType.value, date = logDateIso(),
+                meta = mealLogMeta(_logDate.value, eatenAtState.current, pendingDecision)
+            )
             _uiState.update { it.copy(isSaving = false, saved = true) }
         } catch (e: Exception) {
             _uiState.update { it.copy(isSaving = false) }

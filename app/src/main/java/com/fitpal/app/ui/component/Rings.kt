@@ -183,11 +183,39 @@ fun MacroRingsRow(
 @Composable
 private fun MacroRing(name: String, current: Float, target: Float, color: Color, isCap: Boolean) {
     val over = isCap && target > 0f && current > target
-    val arcColor = if (over) MacroOver else color
-    val frac = if (target > 0f) current / target else 0f
-    val animFrac by animateFloatAsState(targetValue = frac, animationSpec = tween(600), label = "macroFrac")
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(name, style = MaterialTheme.typography.labelMedium, color = CreamMuted)
+    MiniRing(
+        label = name,
+        centerText = current.roundToInt().toString(),
+        footText = if (target > 0f) "of ${target.roundToInt()}g" else "—",
+        fraction = if (target > 0f) current / target else 0f,
+        color = if (over) MacroOver else color,
+        emphasis = if (over) MacroOver else null
+    )
+}
+
+/**
+ * The small labelled ring shared by the macro row and the Home drawer's food-limit / caffeine rings:
+ * a label above, the number inside, a short line below. [fraction] fills the arc (clamped to one
+ * turn). [emphasis] recolours the number and the foot line (e.g. red once a limit is passed; amber
+ * when close). [onClick] makes the whole ring tappable.
+ */
+@Composable
+fun MiniRing(
+    label: String,
+    centerText: String,
+    footText: String,
+    fraction: Float,
+    color: Color,
+    modifier: Modifier = Modifier,
+    emphasis: Color? = null,
+    onClick: (() -> Unit)? = null
+) {
+    val animFrac by animateFloatAsState(targetValue = fraction, animationSpec = tween(600), label = "miniRingFrac")
+    Column(
+        modifier = modifier.then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = CreamMuted, maxLines = 1)
         Spacer(Modifier.height(4.dp))
         Box(Modifier.size(42.dp), contentAlignment = Alignment.Center) {
             Canvas(Modifier.fillMaxSize()) {
@@ -197,19 +225,21 @@ private fun MacroRing(name: String, current: Float, target: Float, color: Color,
                 val tl = Offset(inset, inset)
                 drawArc(Color.White.copy(alpha = 0.09f), -90f, 360f, false, tl, arcSize, style = Stroke(sw, cap = StrokeCap.Round))
                 val sweep = animFrac.coerceIn(0f, 1f) * 360f
-                drawArc(arcColor, -90f, sweep, false, tl, arcSize, style = Stroke(sw, cap = StrokeCap.Round))
+                drawArc(color, -90f, sweep, false, tl, arcSize, style = Stroke(sw, cap = StrokeCap.Round))
             }
             Text(
-                text = current.roundToInt().toString(),
+                text = centerText,
                 style = MaterialTheme.typography.titleSmall,
-                color = if (over) MacroOver else Cream
+                color = emphasis ?: Cream,
+                maxLines = 1
             )
         }
         Spacer(Modifier.height(4.dp))
         Text(
-            text = if (target > 0f) "of ${target.roundToInt()}g" else "—",
+            text = footText,
             style = MaterialTheme.typography.labelMedium,
-            color = if (over) MacroOver.copy(alpha = 0.9f) else CreamFaint
+            color = emphasis?.copy(alpha = 0.9f) ?: CreamFaint,
+            maxLines = 1
         )
     }
 }

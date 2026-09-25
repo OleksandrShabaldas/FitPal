@@ -134,6 +134,38 @@ class HomeViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    /** Whether the food-limit + caffeine drawer on the main card is open (remembered across restarts). */
+    val heroDrawerOpen: StateFlow<Boolean> = settingsRepository.heroDrawerOpen
+    fun toggleHeroDrawer() = settingsRepository.setHeroDrawerOpen(!settingsRepository.heroDrawerOpen.value)
+
+    /**
+     * The caffeine tracker for the viewed day (null while the tracker is off). Doses cover that day
+     * and the one before, so a late coffee still counts after midnight. An item whose caffeine hasn't
+     * been checked yet falls back to a built-in typical amount (marked as an estimate).
+     */
+    val caffeineView: StateFlow<com.fitpal.app.ui.component.CaffeineView?> =
+        combine(_selectedDate, settingsRepository.caffeineSettings) { date, s -> date to s }
+            .flatMapLatest { (date, s) ->
+                if (!s.enabled) return@flatMapLatest flowOf(null)
+                val dayIso = date.format(dateFormat)
+                mealRepository.caffeineRowsInRange(date.minusDays(1).format(dateFormat), dayIso).map { rows ->
+                    val withMg = rows.mapNotNull { r ->
+                        val mg = r.caffeineMg ?: com.fitpal.app.domain.Caffeine.estimateMg(r.name, r.grams)
+                        if (mg == null || mg < 1f) null
+                        else r to com.fitpal.app.domain.CaffeineDose(r.timestamp, mg, r.name, estimated = r.caffeineMg == null)
+                    }
+                    val dayDoses = withMg.filter { it.first.date == dayIso }.map { it.second }
+                    com.fitpal.app.ui.component.CaffeineView(
+                        settings = s,
+                        doses = withMg.map { it.second },
+                        dayDoses = dayDoses,
+                        dayTotalMg = dayDoses.sumOf { it.mg.toDouble() }.toFloat(),
+                        isToday = date == LocalDate.now()
+                    )
+                }
+            }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
     /** Micros for the selected date. */
     val dailyMicros: StateFlow<DailyMicros> = selectedDateString
         .flatMapLatest { mealRepository.getDailyMicros(it) }
@@ -280,11 +312,6 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch { mealRepository.logWater(ml, date = selectedDateIso()) }
     }
 
-    /** Log a weight measurement. */
-    fun logWeight(kg: Float) {
-        viewModelScope.launch { weightRepository.logWeight(kg) }
-    }
-
     /** SET the hand-entered steps for the viewed day (replaces, doesn't add; may be negative). */
     fun setManualSteps(steps: Int) {
         viewModelScope.launch {
@@ -320,10 +347,16 @@ class HomeViewModel @Inject constructor(
     }
 
     /** Duplicate a logged entry onto another day ([copies] times), into the chosen meal category. */
-    fun copyItemToDate(item: MealLogItemEntity, date: java.time.LocalDate, mealType: String? = null, copies: Int = 1) {
+    fun copyItemToDate(
+        item: MealLogItemEntity,
+        date: java.time.LocalDate,
+        mealType: String? = null,
+        copies: Int = 1,
+        decision: com.fitpal.app.domain.model.LogDecision = com.fitpal.app.domain.model.LogDecision.NONE
+    ) {
         viewModelScope.launch {
             repeat(copies.coerceIn(1, 20)) {
-                mealRepository.copyItemToDate(item, date.format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE), mealType)
+                mealRepository.copyItemToDate(item, date.format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE), mealType, decision)
             }
         }
     }

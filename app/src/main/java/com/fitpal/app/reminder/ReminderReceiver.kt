@@ -75,8 +75,8 @@ class ReminderReceiver : BroadcastReceiver() {
                 }
             }
         } else if (kind == ReminderKind.WEIGHT) {
-            // The weigh-in nudge opens Home AND pops the weight dialog straight up — but only if
-            // today's weight isn't already logged, so we don't nag after the user has weighed in.
+            // The weigh-in nudge opens the weigh-in itself (its own destination, so it can't get
+            // lost on the way in) — but only if today's weight isn't logged yet, so we don't nag.
             val pending = goAsync()
             CoroutineScope(Dispatchers.IO).launch {
                 try {
@@ -84,10 +84,7 @@ class ReminderReceiver : BroadcastReceiver() {
                         entryPoint(context).weightRepository().hasLoggedOn(LocalDate.now())
                     }.getOrDefault(false)
                     if (!alreadyLogged) {
-                        postNotification(
-                            context, kind, Screen.Home.route, CHANNEL_REMINDERS, "Reminders",
-                            homeAction = MainActivity.HOME_ACTION_LOG_WEIGHT
-                        )
+                        postNotification(context, kind, Screen.WeighIn.route, CHANNEL_REMINDERS, "Reminders")
                     }
                 } finally {
                     pending.finish()
@@ -155,15 +152,14 @@ class ReminderReceiver : BroadcastReceiver() {
         kind: ReminderKind,
         route: String,
         channelId: String,
-        channelName: String,
-        homeAction: String? = null
+        channelName: String
     ) {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
         manager.createNotificationChannel(
             NotificationChannel(channelId, channelName, NotificationManager.IMPORTANCE_DEFAULT)
         )
         val notifId = NOTIF_KIND_BASE + kind.ordinal
-        val pi = openIntent(context, route, notifId, homeAction)
+        val pi = openIntent(context, route, notifId)
         val notification = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(android.R.drawable.ic_popup_reminder)
             .setContentTitle(kind.notifTitle)
@@ -174,11 +170,10 @@ class ReminderReceiver : BroadcastReceiver() {
         runCatching { manager.notify(notifId, notification) }
     }
 
-    private fun openIntent(context: Context, route: String, requestCode: Int, homeAction: String? = null): PendingIntent {
+    private fun openIntent(context: Context, route: String, requestCode: Int): PendingIntent {
         val open = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
             putExtra(MainActivity.EXTRA_NAV_ROUTE, route)
-            if (homeAction != null) putExtra(MainActivity.EXTRA_HOME_ACTION, homeAction)
         }
         return PendingIntent.getActivity(
             context, requestCode, open,

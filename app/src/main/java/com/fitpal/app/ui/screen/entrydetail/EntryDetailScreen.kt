@@ -211,8 +211,8 @@ fun EntryDetailScreen(
             copiesChooser = true,
             onConfirmMeal = { date, meal, copies ->
                 showCopyPicker = false
-                fastingGuard.attempt(isForToday = date == java.time.LocalDate.now()) {
-                    viewModel.copyToDate(date, meal, copies)
+                fastingGuard.attempt(isForToday = date == java.time.LocalDate.now()) { decision ->
+                    viewModel.copyToDate(date, meal, copies, decision)
                 }
             },
             onConfirm = {},
@@ -302,7 +302,9 @@ fun EntryDetailScreen(
                                     item = item,
                                     mealType = state.mealType,
                                     onMealTypeSelected = viewModel::setMealType,
-                                    onRename = { showRename = true }
+                                    onRename = { showRename = true },
+                                    eatenAt = state.eatenAt,
+                                    onPickTime = viewModel::setMealTime
                                 )
                             }
                             state.coachingTip?.let { tip ->
@@ -311,11 +313,14 @@ fun EntryDetailScreen(
                             item {
                                 Column(modifier = Modifier.fillMaxWidth().glass().padding(16.dp)) {
                                     Text(
-                                        "Where was this meal? (optional)",
+                                        "Where & who with (optional)",
                                         style = MaterialTheme.typography.labelMedium, color = CreamMuted
                                     )
                                     Spacer(Modifier.height(10.dp))
-                                    MealContextSelector(selected = state.context, onSelected = viewModel::setMealContext)
+                                    MealContextSelector(
+                                        selected = com.fitpal.app.domain.model.MealContext.parse(state.context),
+                                        onToggle = viewModel::toggleMealContext
+                                    )
                                 }
                             }
                             item {
@@ -474,7 +479,9 @@ private fun HeaderCard(
     item: MealLogItemEntity,
     mealType: String,
     onMealTypeSelected: (String) -> Unit,
-    onRename: () -> Unit
+    onRename: () -> Unit,
+    eatenAt: com.fitpal.app.domain.model.EatenAt,
+    onPickTime: (java.time.LocalTime) -> Unit
 ) {
     Column(modifier = Modifier.fillMaxWidth().glass().padding(18.dp)) {
         // The name is the one thing here you edit by tapping it — everything the app can name
@@ -513,6 +520,12 @@ private fun HeaderCard(
                 style = MaterialTheme.typography.titleLarge, color = GoldLight
             )
         }
+        // When it was eaten — tap to correct it (moves the whole meal it belongs to).
+        com.fitpal.app.ui.component.EatenAtChip(
+            eatenAt = eatenAt,
+            onPick = onPickTime,
+            modifier = Modifier.padding(top = 4.dp)
+        )
         // Meal category, compact and on one line, right in the header.
         Spacer(Modifier.height(14.dp))
         val mealIndex = MealTypes.ALL.indexOf(mealType).coerceAtLeast(0)

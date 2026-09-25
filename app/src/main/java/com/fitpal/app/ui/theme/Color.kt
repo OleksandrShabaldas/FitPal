@@ -58,6 +58,14 @@ val MacroOver = Color(0xFFE0584A)     // exceeded a "stay-under" limit
 // ---- Calorie figure ----
 val CalorieColor = Color(0xFFF3CE7C)  // warm gold
 
+// ---- Food-limit + caffeine rings (the Home hero drawer) ----
+// Each limit has its own identity colour (like the macros); any of them turns MacroOver red once
+// its cap is passed. Caffeine is a warm coffee brown.
+val DessertColor = Color(0xFFE9A6C3)      // rose
+val FriedColor = Color(0xFFE59A5B)        // fried-golden orange
+val SugaryDrinkColor = Color(0xFF7FC4E8)  // soda blue
+val CaffeineColor = Color(0xFFC9A27E)     // latte
+
 // ---- Per-domain accents ----
 val AccentToday = Color(0xFFF3CE7C)
 val AccentActivity = Color(0xFF5FD0C4)

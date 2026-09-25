@@ -80,5 +80,12 @@ data class MealLogItemEntity(
      * reopening the entry shows the count you left it on instead of resetting to 1.
      */
     @ColumnInfo(defaultValue = "1")
-    val servings: Int = 1
+    val servings: Int = 1,
+    /**
+     * Caffeine in this portion (mg). Null = not known yet — a database food before its background
+     * check, or an entry logged before caffeine was tracked; the caffeine tracker then falls back to
+     * a built-in estimate from the name ([com.fitpal.app.domain.Caffeine.estimateMg]). 0 = checked,
+     * none.
+     */
+    val caffeineMg: Float? = null
 )

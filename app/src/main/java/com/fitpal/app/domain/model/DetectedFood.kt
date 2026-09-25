@@ -48,6 +48,10 @@ data class DetectedFood(
     /** Net pure water across all ingredients (ml) — for hydration tracking. */
     val totalWaterMl: Float
         get() = ingredients.sumOf { it.waterMl.toDouble() }.toFloat()
+
+    /** Caffeine across all ingredients (mg), or null while any of them is unknown. */
+    val totalCaffeineMg: Float?
+        get() = totalCaffeineOf(ingredients)
 }
 
 /**

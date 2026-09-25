@@ -5,7 +5,11 @@ import android.content.Intent
 import android.net.Uri
 import androidx.core.content.ContextCompat
 import com.fitpal.app.data.repository.MealRepository
+import com.fitpal.app.data.repository.SettingsRepository
+import com.fitpal.app.data.repository.mealLogMeta
 import com.fitpal.app.domain.model.DetectedFood
+import com.fitpal.app.domain.model.EatenAt
+import com.fitpal.app.domain.model.LogDecision
 import com.fitpal.app.domain.model.MealInsights
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CompletableDeferred
@@ -59,7 +63,11 @@ data class AnalysisJob(
     val description: String = "",
     val status: JobStatus = JobStatus.Running("Starting…"),
     /** True once the meal has been logged (by the user or by auto-save) — don't save twice. */
-    val saved: Boolean = false
+    val saved: Boolean = false,
+    /** When the meal was eaten, as set on screen (photo time / picked / now) — an auto-save keeps it. */
+    val eatenAt: EatenAt = EatenAt(),
+    /** Situation tags picked while waiting ("Home", "Family meal"…) — an auto-save keeps them. */
+    val tags: Set<String> = emptySet()
 )
 
 /**
@@ -72,7 +80,8 @@ data class AnalysisJob(
 class AnalysisJobManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val mealRepository: MealRepository,
-    private val appForegroundState: AppForegroundState
+    private val appForegroundState: AppForegroundState,
+    private val settingsRepository: SettingsRepository
 ) {
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -94,16 +103,31 @@ class AnalysisJobManager @Inject constructor(
         }
     }
 
-    fun startImageJob(imageUri: String, note: String, mealType: String, targetDate: String?) {
+    fun startImageJob(
+        imageUri: String,
+        note: String,
+        mealType: String,
+        targetDate: String?,
+        eatenAt: EatenAt = EatenAt(),
+        tags: Set<String> = emptySet()
+    ) {
         _state.value = AnalysisJob(
             id = UUID.randomUUID().toString(), kind = JobKind.IMAGE,
-            mealType = mealType, targetDate = targetDate, imageUri = imageUri, note = note
+            mealType = mealType, targetDate = targetDate, imageUri = imageUri, note = note,
+            eatenAt = eatenAt, tags = tags
         )
         launchService()
     }
 
-    fun startTextJob(description: String, mealType: String, targetDate: String?) {
+    fun startTextJob(
+        description: String,
+        mealType: String,
+        targetDate: String?,
+        eatenAt: EatenAt = EatenAt(),
+        tags: Set<String> = emptySet()
+    ) {
         prepareTextJob(description, mealType, targetDate)
+        _state.update { it?.copy(eatenAt = eatenAt, tags = tags) }
         launchService()
     }
 
@@ -186,6 +210,12 @@ class AnalysisJobManager @Inject constructor(
     /** Apply the log date the user picked on-screen (ISO, or null = today), so an auto-save uses it. */
     fun updateTargetDate(dateIso: String?) = _state.update { it?.copy(targetDate = dateIso) }
 
+    /** Apply the eaten time the user set on-screen, so an auto-save uses it. */
+    fun updateEatenAt(eatenAt: EatenAt) = _state.update { it?.copy(eatenAt = eatenAt) }
+
+    /** Apply the situation tags the user picked on-screen, so an auto-save uses them. */
+    fun updateTags(tags: Set<String>) = _state.update { it?.copy(tags = tags) }
+
     /** Clear the job entirely once it's been logged or dismissed. */
     fun clear() { _state.value = null }
 
@@ -215,13 +245,16 @@ class AnalysisJobManager @Inject constructor(
         appScope.launch {
             try {
                 val photo = if (job.kind == JobKind.IMAGE) persistImage(job.imageUri) else null
+                val logDate = job.targetDate?.let { runCatching { java.time.LocalDate.parse(it) }.getOrNull() }
+                    ?: java.time.LocalDate.now()
                 mealRepository.logMeal(
                     foods = status.foods,
                     mealType = job.mealType,
                     photoPath = photo,
                     insights = status.insights,
                     date = job.targetDate,
-                    source = status.source
+                    source = status.source,
+                    meta = mealLogMeta(logDate, job.eatenAt, autoSaveDecision(job, logDate), job.tags)
                 )
             } catch (_: Exception) {
                 // Best effort — nothing more we can do if the save fails as we're shutting down.
@@ -230,6 +263,20 @@ class AnalysisJobManager @Inject constructor(
                 stopService()
             }
         }
+    }
+
+    /**
+     * An auto-save never shows the fasting prompt (nobody's there to answer it), so it can't spend a
+     * pass either: a meal auto-saved for today during a fast — without a photo proving it was eaten
+     * inside the window — counts as logged during the fast, exactly like "log anyway".
+     */
+    private fun autoSaveDecision(job: AnalysisJob, logDate: java.time.LocalDate): LogDecision {
+        val schedule = settingsRepository.fastingSchedule.value
+        if (!schedule.enabled || logDate != java.time.LocalDate.now()) return LogDecision.NONE
+        val now = java.time.LocalTime.now().let { it.hour * 60 + it.minute }
+        if (schedule.isEatingAt(now)) return LogDecision.NONE
+        val photoProof = job.eatenAt.isPhotoTime && schedule.isEatingAt(job.eatenAt.minuteOfDay())
+        return if (photoProof) LogDecision.NONE else LogDecision(loggedDuringFast = true)
     }
 
     private fun launchService() {

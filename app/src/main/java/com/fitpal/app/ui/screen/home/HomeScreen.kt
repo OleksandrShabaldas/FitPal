@@ -71,6 +71,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -156,9 +157,8 @@ fun HomeScreen(
     onExerciseClick: (Long) -> Unit = {},
     onOpenWater: (String) -> Unit = {},
     onSwipeToNextScreen: () -> Unit = {},
-    /** A one-shot action from a notification (e.g. open the weigh-in dialog); null otherwise. */
-    pendingAction: String? = null,
-    onActionHandled: () -> Unit = {},
+    /** Open the shared weigh-in (the same one the weigh-in notification opens). */
+    onOpenWeighIn: () -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val nutrition by viewModel.dailyNutrition.collectAsStateWithLifecycle()
@@ -185,6 +185,17 @@ fun HomeScreen(
     val fitnessGoal by viewModel.fitnessGoal.collectAsStateWithLifecycle()
     val weeklyBalanceKcal by viewModel.weeklyBalanceKcal.collectAsStateWithLifecycle()
     val dietaryStatuses by viewModel.dietaryStatuses.collectAsStateWithLifecycle()
+    val heroDrawerOpen by viewModel.heroDrawerOpen.collectAsStateWithLifecycle()
+    val caffeineView by viewModel.caffeineView.collectAsStateWithLifecycle()
+    var showCaffeine by remember { mutableStateOf(false) }
+    // A once-a-minute clock so "caffeine in your body now" keeps draining while Home is open.
+    var nowMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(caffeineView != null) {
+        while (caffeineView != null) {
+            nowMillis = System.currentTimeMillis()
+            kotlinx.coroutines.delay(60_000L)
+        }
+    }
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         viewModel.clearPendingMealType()
@@ -195,21 +206,9 @@ fun HomeScreen(
     var editingType by remember { mutableStateOf(MealTypes.BREAKFAST) }
     var showCalendar by remember { mutableStateOf(false) }
     var showStepDialog by remember { mutableStateOf(false) }
-    var showWeightDialog by remember { mutableStateOf(false) }
     // Copying a logged entry onto today counts as eating now, so it must pass the same fasting gate
     // (warn + "I ate this earlier" grace) as any other log — a copy is just another way to log.
     val fastingGuard = rememberFastingGuard()
-
-    // The weigh-in reminder opens Home and asks us to pop the weight dialog straight up, so the
-    // notification lands the user on the logging step instead of just the Home screen.
-    LaunchedEffect(pendingAction) {
-        if (pendingAction == com.fitpal.app.MainActivity.HOME_ACTION_LOG_WEIGHT) {
-            // logWeight() always writes today's weight regardless of the viewed day, so opening the
-            // dialog is enough — no need to jump the Home view back to today.
-            showWeightDialog = true
-            onActionHandled()
-        }
-    }
 
     // Calories burned are added back to the day's eating budget: 50% of (rougher) exercise burn,
     // and the step-calorie estimate in full (it's already trimmed by the user's step setting).
@@ -350,7 +349,11 @@ fun HomeScreen(
                                 fat = nutrition.fat, fatTarget = targets?.fatG?.toFloat() ?: 0f,
                                 carbs = nutrition.carbs, carbTarget = targets?.carbsG?.toFloat() ?: 0f,
                                 fiber = nutrition.fiber, fiberTarget = targets?.fiberG?.toFloat() ?: 0f,
-                                dietaryStatuses = dietaryStatuses
+                                drawer = com.fitpal.app.ui.component.HeroDrawerState(dietaryStatuses, caffeineView),
+                                drawerOpen = heroDrawerOpen,
+                                onToggleDrawer = viewModel::toggleHeroDrawer,
+                                nowMillis = nowMillis,
+                                onOpenCaffeine = { showCaffeine = true }
                             )
                         }
 
@@ -405,7 +408,7 @@ fun HomeScreen(
                         }
 
                         "weight" -> item(key = "weight") {
-                            WeightCard(latestWeight = latestWeight?.weightKg, onLog = { showWeightDialog = true })
+                            WeightCard(latestWeight = latestWeight?.weightKg, onLog = onOpenWeighIn)
                         }
                     }
                 }
@@ -426,8 +429,8 @@ fun HomeScreen(
             },
             onDelete = { viewModel.deleteItem(item.id); editingItem = null },
             onCopyToDate = { date, meal, copies ->
-                fastingGuard.attempt(isForToday = date == java.time.LocalDate.now()) {
-                    viewModel.copyItemToDate(item, date, meal, copies)
+                fastingGuard.attempt(isForToday = date == java.time.LocalDate.now()) { decision ->
+                    viewModel.copyItemToDate(item, date, meal, copies, decision)
                 }
                 editingItem = null
             },
@@ -465,12 +468,14 @@ fun HomeScreen(
         )
     }
 
-    if (showWeightDialog) {
-        WeightLogDialog(
-            initialKg = latestWeight?.weightKg,
-            onSave = { kg -> viewModel.logWeight(kg); showWeightDialog = false },
-            onDismiss = { showWeightDialog = false }
-        )
+    if (showCaffeine) {
+        caffeineView?.let { view ->
+            com.fitpal.app.ui.component.CaffeineDetailDialog(
+                view = view,
+                nowMillis = nowMillis,
+                onDismiss = { showCaffeine = false }
+            )
+        }
     }
 }
 
@@ -643,19 +648,43 @@ private fun HeroCard(
     fat: Float, fatTarget: Float,
     carbs: Float, carbTarget: Float,
     fiber: Float, fiberTarget: Float,
-    dietaryStatuses: List<com.fitpal.app.domain.model.DietaryRuleStatus> = emptyList()
+    drawer: com.fitpal.app.ui.component.HeroDrawerState = com.fitpal.app.ui.component.HeroDrawerState(),
+    drawerOpen: Boolean = false,
+    onToggleDrawer: () -> Unit = {},
+    nowMillis: Long = System.currentTimeMillis(),
+    onOpenCaffeine: () -> Unit = {}
 ) {
     val pager = rememberPagerState(pageCount = { 2 })
     Column(modifier = Modifier.fillMaxWidth().glass().padding(vertical = 14.dp, horizontal = 16.dp)) {
+        // The food-limit + caffeine rings, folded away behind a small arrow so the hero stays calm.
+        // A dot on the arrow speaks up when a limit is close (amber) or passed (red).
+        if (!drawer.isEmpty) {
+            com.fitpal.app.ui.component.HeroDrawerHandle(
+                open = drawerOpen,
+                alertColor = drawer.alertColor,
+                onToggle = onToggleDrawer,
+                modifier = Modifier.offset(y = (-6).dp)
+            )
+            AnimatedVisibility(
+                visible = drawerOpen,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                Column {
+                    com.fitpal.app.ui.component.HeroDrawerRings(
+                        state = drawer,
+                        nowMillis = nowMillis,
+                        onOpenCaffeine = onOpenCaffeine,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                    Spacer(Modifier.height(12.dp))
+                }
+            }
+        }
         // A slim fasting timer above the ring — only for today, and only when fasting is enabled.
         val fastingSchedule = LocalFastingSchedule.current
         if (fastingSchedule.enabled && isToday) {
             FastingStrip(fastingSchedule)
-        }
-        // A quiet dietary-rule line above the ring — only for today, and only for a rule you're
-        // near or over. With headroom it stays hidden, so the hero never clutters.
-        if (isToday) {
-            dietaryStatuses.filter { it.isRelevant }.forEach { DietaryStrip(it) }
         }
         HorizontalPager(state = pager, modifier = Modifier.fillMaxWidth().height(280.dp)) { page ->
             Column(
@@ -774,50 +803,6 @@ private fun FastingStrip(schedule: FastingSchedule) {
 }
 
 private fun currentMinutes(): Int = java.time.LocalTime.now().let { it.hour * 60 + it.minute }
-
-// ======================== DIETARY-RULE STRIP ========================
-
-/**
- * A quiet one-line dietary-rule status that sits above the calorie ring — one per rule you're near
- * or over (rules with headroom don't render at all, so the hero stays clean). Same slim grammar as
- * [FastingStrip]: a coloured dot + a line + a thin bar. Amber when approaching, red when reached.
- */
-@Composable
-private fun DietaryStrip(status: com.fitpal.app.domain.model.DietaryRuleStatus) {
-    val over = status.isOver
-    val accent = if (over) MacroOver else Gold
-    val noun = com.fitpal.app.ui.component.dietaryNoun(status.kind).replaceFirstChar { it.uppercase() }
-    Column(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(7.dp).clip(CircleShape).background(accent))
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = if (over) "$noun · limit reached" else "$noun · almost at your limit",
-                style = MaterialTheme.typography.labelLarge,
-                color = Cream,
-                modifier = Modifier.weight(1f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = "${status.consumedKcal} / ${status.limitKcal} kcal",
-                style = MaterialTheme.typography.labelSmall,
-                color = accent
-            )
-        }
-        Spacer(Modifier.height(6.dp))
-        Box(
-            Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(50))
-                .background(Color.White.copy(alpha = 0.10f))
-        ) {
-            Box(
-                Modifier.fillMaxWidth(status.fraction.coerceIn(0f, 1f)).height(4.dp)
-                    .clip(RoundedCornerShape(50)).background(accent)
-            )
-        }
-    }
-}
 
 // ======================== MEAL CATEGORY SECTION ========================
 
@@ -1202,26 +1187,6 @@ private fun WeightCard(latestWeight: Float?, onLog: () -> Unit) {
             color = GoldLight
         )
     }
-}
-
-@Composable
-private fun WeightLogDialog(initialKg: Float?, onSave: (Float) -> Unit, onDismiss: () -> Unit) {
-    var text by remember { mutableStateOf(initialKg?.let { "%.1f".format(it) } ?: "") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Log weight") },
-        text = {
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it.filter { c -> c.isDigit() || c == '.' } },
-                label = { Text("Weight (kg)") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                singleLine = true
-            )
-        },
-        confirmButton = { TextButton(onClick = { text.toFloatOrNull()?.let(onSave) }) { Text("Save") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    )
 }
 
 @Composable

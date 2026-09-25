@@ -37,14 +37,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import com.fitpal.app.ui.component.AddIngredientDialog
 import com.fitpal.app.ui.component.AiSourceBadge
+import com.fitpal.app.ui.component.AnalysingStrip
 import com.fitpal.app.ui.component.BackdropTheme
 import com.fitpal.app.ui.component.DatePickerDialog
+import com.fitpal.app.ui.component.EatenAtChip
 import com.fitpal.app.ui.component.GlassTopBar
 import com.fitpal.app.ui.component.DietaryWarningDialog
 import com.fitpal.app.ui.component.GradientBackdrop
+import com.fitpal.app.ui.component.MealContextSelector
 import com.fitpal.app.ui.component.MealItemCard
+import com.fitpal.app.ui.component.WhileYouWaitCard
+import com.fitpal.app.ui.theme.glass
 import com.fitpal.app.ui.component.MealTotalRow
 import com.fitpal.app.ui.component.MealTypeSelector
 import com.fitpal.app.ui.component.toMealItemContent
@@ -66,6 +73,8 @@ fun DescribeFoodScreen(
     val drinkPresets by viewModel.drinkPresets.collectAsStateWithLifecycle()
     val mealType by viewModel.mealType.collectAsStateWithLifecycle()
     val logDate by viewModel.logDate.collectAsStateWithLifecycle()
+    val eatenAt by viewModel.eatenAt.collectAsStateWithLifecycle()
+    val tags by viewModel.tags.collectAsStateWithLifecycle()
     val fastingGuard = rememberFastingGuard()
     val context = androidx.compose.ui.platform.LocalContext.current
     var addIngredientFor by remember { mutableStateOf<Int?>(null) }
@@ -188,12 +197,27 @@ fun DescribeFoodScreen(
                         }
                     }
 
-                    state.isAnalyzing -> Column(Modifier.fillMaxWidth().padding(top = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        AiSourceBadge(state.aiSource)
-                        Spacer(Modifier.height(12.dp))
-                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.height(8.dp))
-                        Text("Thinking… online can take a moment, and the first on-device run is slower.", style = MaterialTheme.typography.bodyMedium, color = CreamMuted)
+                    // The AI is reading the description: progress, then the details only the user knows.
+                    state.isAnalyzing -> Column(
+                        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(top = 12.dp, bottom = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        AnalysingStrip(
+                            message = state.progressMessage.ifBlank {
+                                "Thinking… online can take a moment, and the first on-device run is slower."
+                            },
+                            source = state.aiSource
+                        )
+                        WhileYouWaitCard(
+                            mealType = mealType,
+                            onMealType = viewModel::setMealType,
+                            eatenAt = eatenAt,
+                            onPickTime = viewModel::pickEatenTime,
+                            tags = tags,
+                            onToggleTag = viewModel::toggleTag,
+                            // The meal picker is already right above, next to the description.
+                            showMealType = false
+                        )
                     }
 
                     state.noMatchesFound -> Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
@@ -234,6 +258,17 @@ fun DescribeFoodScreen(
                                 onRename = { viewModel.renameFood(index, it) }
                             )
                         }
+                        // The situation tags picked while waiting stay editable here.
+                        item {
+                            Column(modifier = Modifier.fillMaxWidth().glass().padding(16.dp)) {
+                                Text(
+                                    "Where & who with (optional)",
+                                    style = MaterialTheme.typography.labelMedium, color = CreamMuted
+                                )
+                                Spacer(Modifier.height(10.dp))
+                                MealContextSelector(selected = tags, onToggle = viewModel::toggleTag)
+                            }
+                        }
                     }
 
                     else -> Text(
@@ -246,7 +281,21 @@ fun DescribeFoodScreen(
             if (state.foods.isNotEmpty()) {
                 Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
                     MealTotalRow(totalCalories = state.totalCalories, itemCount = state.foods.size)
-                    Button(onClick = { fastingGuard.attempt(isForToday = logDate == java.time.LocalDate.now()) { viewModel.logMeal() } }, modifier = Modifier.fillMaxWidth(), enabled = !state.isSaving) {
+                    EatenAtChip(
+                        eatenAt = eatenAt,
+                        onPick = viewModel::pickEatenTime,
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
+                    Button(
+                        onClick = {
+                            fastingGuard.attempt(
+                                isForToday = logDate == java.time.LocalDate.now(),
+                                eatenAt = eatenAt.time
+                            ) { decision -> viewModel.logMeal(decision) }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !state.isSaving
+                    ) {
                         Icon(Icons.Default.Check, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
                         Text(if (state.isSaving) "Saving…" else "Log meal")

@@ -31,8 +31,21 @@ class SettingsViewModel @Inject constructor(
     private val networkMonitor: NetworkMonitor,
     private val reminderManager: com.fitpal.app.reminder.ReminderManager,
     private val watchLink: com.fitpal.app.wear.WatchLink,
-    private val updateManager: com.fitpal.app.update.UpdateManager
+    private val updateManager: com.fitpal.app.update.UpdateManager,
+    private val mealRepository: com.fitpal.app.data.repository.MealRepository
 ) : ViewModel() {
+
+    // ---- Caffeine tracker ----
+    val caffeineSettings: StateFlow<com.fitpal.app.domain.CaffeineSettings> = settingsRepository.caffeineSettings
+
+    fun setCaffeineEnabled(enabled: Boolean) {
+        settingsRepository.setCaffeineEnabled(enabled)
+        // Check the last two days' drinks right away, so "in your body now" is right from the start.
+        if (enabled) viewModelScope.launch { runCatching { mealRepository.backfillCaffeine() } }
+    }
+
+    fun setCaffeineDailyLimit(mg: Int) = settingsRepository.setCaffeineDailyLimit(mg)
+    fun setCaffeineHalfLife(hours: Float) = settingsRepository.setCaffeineHalfLife(hours)
 
     // ---- App updates (GitHub releases; this build is sideloaded) ----
     val updateState: StateFlow<com.fitpal.app.update.UpdateUiState> = updateManager.state

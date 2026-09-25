@@ -49,4 +49,5 @@ const val NUTRITION_LABEL_PROMPT: String =
         "values per serving, convert to per 100 g using the serving size printed on it. Set \"grams\" " +
         "to the amount a person most likely ate: the serving size printed on the label, or the net " +
         "package weight if it's a single-serving pack; if no serving size is given, use 100. Use the " +
-        "product's name from the label."
+        "product's name from the label. If the label states caffeine (energy drinks, coffee drinks " +
+        "usually do), set \"caffeine\" to its mg per 100 g/ml; otherwise estimate it (0 if none)."

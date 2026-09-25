@@ -86,6 +86,7 @@ val SETTINGS_CATEGORIES = listOf(
     SettingsCategoryInfo("presets", "Quick-add & meal times", "Tap amounts for food and drinks, and meal time windows"),
     SettingsCategoryInfo("fasting", "Fasting", "Your eating window and the fasting log warning"),
     SettingsCategoryInfo("rules", "Food rules", "Daily limits for dessert, fried food and sugary drinks"),
+    SettingsCategoryInfo("caffeine", "Caffeine", "See the caffeine still in your body and when it wears off"),
     SettingsCategoryInfo("ai", "AI", "Online Gemini key, models and on-device model"),
     SettingsCategoryInfo("personalize", "Personalize", "Reorder and show or hide cards on each screen"),
     SettingsCategoryInfo("data", "Data & about", "Back up, restore, clear data and app info")
@@ -101,6 +102,8 @@ fun SettingsCategoryScreen(
     onManageModels: () -> Unit,
     onCustomizeScreen: (String) -> Unit,
     onBack: () -> Unit,
+    /** Open the first-run intro again (it starts from your current settings). */
+    onReplayIntro: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     GradientBackdrop(theme = BackdropTheme.TODAY) {
@@ -134,6 +137,9 @@ fun SettingsCategoryScreen(
                 "rules" -> {
                     DietaryRulesSection(viewModel)
                 }
+                "caffeine" -> {
+                    CaffeineSection(viewModel)
+                }
                 "ai" -> {
                     OnlineAiSection(viewModel)
                     PersonalContextSection(viewModel)
@@ -147,7 +153,7 @@ fun SettingsCategoryScreen(
                 "data" -> {
                     UpdatesSection(viewModel)
                     DataSection(viewModel)
-                    AboutSection(viewModel)
+                    AboutSection(viewModel, onReplayIntro)
                 }
             }
         }
@@ -1477,7 +1483,7 @@ private fun DataSection(viewModel: SettingsViewModel) {
 }
 
 @Composable
-private fun AboutSection(viewModel: SettingsViewModel) {
+private fun AboutSection(viewModel: SettingsViewModel, onReplayIntro: () -> Unit) {
     val onlineAiEnabled by viewModel.onlineAiEnabled.collectAsStateWithLifecycle()
     val geminiApiKey by viewModel.geminiApiKey.collectAsStateWithLifecycle()
     Box(modifier = Modifier.fillMaxWidth().glass()) {
@@ -1492,6 +1498,99 @@ private fun AboutSection(viewModel: SettingsViewModel) {
                 label = "Mode",
                 value = if (onlineAiEnabled && !geminiApiKey.isNullOrBlank()) "Online + offline fallback" else "Fully offline"
             )
+            Spacer(Modifier.height(12.dp))
+            OutlinedButton(onClick = onReplayIntro, modifier = Modifier.fillMaxWidth()) {
+                Text("Replay the intro")
+            }
+            Text(
+                "Walks through what FitPal does again, starting from your current settings — nothing is reset.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 6.dp)
+            )
+        }
+    }
+}
+
+/**
+ * The caffeine tracker: on/off, the daily limit, and how fast this person clears caffeine (its
+ * half-life) — which is what "still in your body" is worked out from. Shown in the drawer on Home's
+ * main card.
+ */
+@Composable
+private fun CaffeineSection(viewModel: SettingsViewModel) {
+    val s by viewModel.caffeineSettings.collectAsStateWithLifecycle()
+    Box(modifier = Modifier.fillMaxWidth().glass()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Caffeine tracker", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "See how much caffeine is still in your body, today's total, and roughly when it'll " +
+                            "be low enough not to get in the way of sleep. It lives in the little drawer on Home's main card.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                Switch(checked = s.enabled, onCheckedChange = { viewModel.setCaffeineEnabled(it) })
+            }
+
+            if (s.enabled) {
+                Spacer(Modifier.height(12.dp))
+                var limitText by remember { mutableStateOf(s.dailyLimitMg.toString()) }
+                OutlinedTextField(
+                    value = limitText,
+                    onValueChange = { t ->
+                        limitText = t.filter { it.isDigit() }.take(4)
+                        limitText.toIntOrNull()?.let(viewModel::setCaffeineDailyLimit)
+                    },
+                    label = { Text("Daily limit") },
+                    suffix = { Text("mg") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    "400 mg a day is the usual limit for healthy adults — about four cups of brewed coffee. " +
+                        "Less if you're pregnant or sensitive to it.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+                Text("How fast you clear it", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(8.dp))
+                val speeds = listOf(3f, 5f, 7f)
+                val selected = speeds.indices.minByOrNull { kotlin.math.abs(speeds[it] - s.halfLifeHours) } ?: 1
+                com.fitpal.app.ui.component.SegmentedPills(
+                    labels = listOf("Fast · 3 h", "Average · 5 h", "Slow · 7 h"),
+                    selectedIndex = selected,
+                    accent = com.fitpal.app.ui.theme.GoldLight,
+                    onSelect = { viewModel.setCaffeineHalfLife(speeds[it]) }
+                )
+                Text(
+                    "The time your body takes to clear half of it. About 5 hours for most people — faster if " +
+                        "you smoke, slower in pregnancy, on some medicines, or if an afternoon coffee still " +
+                        "keeps you up.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+                Text("Where the numbers come from", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "The AI estimates caffeine for your photos and descriptions. Foods from the database, " +
+                        "barcodes and your collection get a quick one-time check (with the quick models from " +
+                        "AI settings), saved per food so each one is only checked once. Offline, coffee, tea, " +
+                        "colas and energy drinks use typical values until that check runs.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
         }
     }
 }

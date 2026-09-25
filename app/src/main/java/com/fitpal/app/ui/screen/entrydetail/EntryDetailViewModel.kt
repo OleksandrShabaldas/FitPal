@@ -47,8 +47,10 @@ data class EntryDetailUiState(
      * ([MealLogItemEntity.servings]) so reopening the entry shows what you last set it to.
      */
     val servings: Int = 1,
-    /** The one-tap situation tag on this entry's meal ("Home"/"Restaurant"/…), or null. */
+    /** The one-tap situation tags on this entry's meal ("Home, Family meal"), or null. */
     val context: String? = null,
+    /** When this entry's meal was eaten (its time source says whether it came from the photo). */
+    val eatenAt: com.fitpal.app.domain.model.EatenAt = com.fitpal.app.domain.model.EatenAt(),
     /** A meal-aware coaching note the background worker may attach; null when there's nothing useful. */
     val coachingTip: com.fitpal.app.domain.model.CoachingTip? = null,
     val isLoading: Boolean = true,
@@ -109,19 +111,34 @@ class EntryDetailViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         context = meal?.context,
-                        coachingTip = meal?.let { m -> mealRepository.coachingTipFor(m) }
+                        coachingTip = meal?.let { m -> mealRepository.coachingTipFor(m) },
+                        eatenAt = meal?.let { m -> com.fitpal.app.domain.model.eatenAtOf(m.timestamp, m.timeSource) }
+                            ?: it.eatenAt
                     )
                 }
             }
         }
     }
 
-    /** Set (or clear, by re-tapping) the one-tap situation tag on this entry's meal. */
-    fun setMealContext(context: String?) {
+    /** Toggle one situation tag on this entry's meal (a meal can carry several). */
+    fun toggleMealContext(tag: String) {
         val item = _uiState.value.item ?: return
-        val next = if (context == _uiState.value.context) null else context
+        val next = com.fitpal.app.domain.model.MealContext.format(
+            com.fitpal.app.domain.model.MealContext.toggle(
+                com.fitpal.app.domain.model.MealContext.parse(_uiState.value.context), tag
+            )
+        )
         _uiState.update { it.copy(context = next) }
         viewModelScope.launch { mealRepository.updateMealContext(item.mealLogId, next) }
+    }
+
+    /**
+     * Move this entry's meal to another time on the same day. Free — it never spends or refunds a
+     * fasting pass (a "log anyway" meal keeps breaking its day's fast wherever it moves).
+     */
+    fun setMealTime(time: java.time.LocalTime) {
+        val item = _uiState.value.item ?: return
+        viewModelScope.launch { mealRepository.updateMealTime(item.mealLogId, time) }
     }
 
     /**
@@ -282,7 +299,8 @@ class EntryDetailViewModel @Inject constructor(
             caloriesPer100g = food.caloriesPer100g,
             proteinPer100g = food.proteinPer100g,
             fatPer100g = food.fatPer100g,
-            carbsPer100g = food.carbsPer100g
+            carbsPer100g = food.carbsPer100g,
+            sourceFoodId = food.fdcId
         )
         val current = _uiState.value.ingredients + ingredient
         // Clear the search after adding.
@@ -360,7 +378,8 @@ class EntryDetailViewModel @Inject constructor(
             caloriesPer100g = food.caloriesPer100g,
             proteinPer100g = food.proteinPer100g,
             fatPer100g = food.fatPer100g,
-            carbsPer100g = food.carbsPer100g
+            carbsPer100g = food.carbsPer100g,
+            sourceFoodId = food.fdcId
         )
         _uiState.update { it.copy(searchQuery = "", searchResults = emptyList()) }
         persistIngredients(current)
@@ -525,13 +544,18 @@ class EntryDetailViewModel @Inject constructor(
     }
 
     /** Copy this logged entry onto another day ([copies] times), into the chosen meal category. */
-    fun copyToDate(date: java.time.LocalDate, mealType: String? = null, copies: Int = 1) {
+    fun copyToDate(
+        date: java.time.LocalDate,
+        mealType: String? = null,
+        copies: Int = 1,
+        decision: com.fitpal.app.domain.model.LogDecision = com.fitpal.app.domain.model.LogDecision.NONE
+    ) {
         val item = _uiState.value.item ?: return
         val n = copies.coerceIn(1, 20)
         viewModelScope.launch {
             try {
                 repeat(n) {
-                    mealRepository.copyItemToDate(item, date.format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE), mealType)
+                    mealRepository.copyItemToDate(item, date.format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE), mealType, decision)
                 }
                 val label = com.fitpal.app.ui.component.logDateLabel(date).lowercase()
                 _uiState.update {
