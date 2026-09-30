@@ -43,7 +43,11 @@ class WearStatsPublisher @Inject constructor(
         }
     }
 
-    private suspend fun buildSnapshot(): StatsSnapshot {
+    /**
+     * Today's numbers, exactly as Home computes them. Also what the home-screen widgets draw from
+     * ([com.fitpal.app.widget.WidgetDataSource]), so the watch, the widgets and Home always agree.
+     */
+    suspend fun buildSnapshot(): StatsSnapshot {
         val today = LocalDate.now().toString()
 
         val nutrition = mealRepository.getDailyNutrition(today).first()

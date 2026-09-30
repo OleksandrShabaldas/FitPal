@@ -109,10 +109,12 @@
             android:foregroundServiceType="dataSync"
             tools:node="merge" />
 
-        <!-- Home-screen quick-log widget (snap a meal / add food) -->
+        <!-- Home-screen widgets (com.fitpal.app.widget). Quick log keeps its original class name so
+             widgets placed by earlier versions keep working. -->
         <receiver
             android:name=".widget.FitPalWidgetProvider"
-            android:exported="false">
+            android:exported="false"
+            android:label="@string/widget_label_quick_log">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
@@ -120,6 +122,103 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/fitpal_widget_info" />
         </receiver>
+        <receiver
+            android:name=".widget.TodayWidgetProvider"
+            android:exported="false"
+            android:label="@string/widget_label_today">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_today_info" />
+        </receiver>
+        <receiver
+            android:name=".widget.MacrosWidgetProvider"
+            android:exported="false"
+            android:label="@string/widget_label_macros">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_macros_info" />
+        </receiver>
+        <receiver
+            android:name=".widget.WaterWidgetProvider"
+            android:exported="false"
+            android:label="@string/widget_label_water">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_water_info" />
+        </receiver>
+        <receiver
+            android:name=".widget.FastingWidgetProvider"
+            android:exported="false"
+            android:label="@string/widget_label_fasting">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_fasting_info" />
+        </receiver>
+        <receiver
+            android:name=".widget.WeekWidgetProvider"
+            android:exported="false"
+            android:label="@string/widget_label_week">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_week_info" />
+        </receiver>
+        <receiver
+            android:name=".widget.WeightWidgetProvider"
+            android:exported="false"
+            android:label="@string/widget_label_weight">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_weight_info" />
+        </receiver>
+        <receiver
+            android:name=".widget.CaffeineWidgetProvider"
+            android:exported="false"
+            android:label="@string/widget_label_caffeine">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_caffeine_info" />
+        </receiver>
+
+        <!-- Widget work without opening the app: the water "+", the widget clock, gallery pins. -->
+        <receiver
+            android:name=".widget.WidgetActionReceiver"
+            android:exported="false" />
+
+        <!-- Pick a widget's look when it's added (and again from its long-press menu). The launcher
+             starts it, so it has to be exported. -->
+        <activity
+            android:name=".widget.WidgetConfigActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:screenOrientation="portrait"
+            android:taskAffinity=""
+            android:theme="@style/Theme.FitPal"
+            tools:ignore="LockedOrientationActivity">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
 
         <!-- Optional daily "log your day" reminder; re-armed on boot -->
         <receiver

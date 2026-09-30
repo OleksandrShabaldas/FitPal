@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Widget picker preview card (green): the app's backdrop colours, a glow top-right, a hairline edge. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="22dp" />
+            <gradient
+                android:angle="315"
+                android:startColor="#FF182C16"
+                android:centerColor="#FF121E10"
+                android:endColor="#FF0E0B0A" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="22dp" />
+            <gradient
+                android:type="radial"
+                android:centerX="0.85"
+                android:centerY="0.05"
+                android:gradientRadius="140dp"
+                android:startColor="#52B6E06E"
+                android:endColor="#00000000" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="22dp" />
+            <stroke
+                android:width="1dp"
+                android:color="#24FFFFFF" />
+        </shape>
+    </item>
+</layer-list>

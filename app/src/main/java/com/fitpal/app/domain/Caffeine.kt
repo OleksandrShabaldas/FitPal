@@ -77,6 +77,17 @@ object Caffeine {
         return null
     }
 
+    /**
+     * A logged item as a dose: its checked caffeine ([checkedMg]), else the built-in estimate from its
+     * name (flagged as an estimate); null when it has none worth counting. The one rule Home's tracker
+     * and the caffeine widget share.
+     */
+    fun dose(atMillis: Long, name: String, grams: Float, checkedMg: Float?): CaffeineDose? {
+        val mg = checkedMg ?: estimateMg(name, grams) ?: return null
+        if (mg < 1f) return null
+        return CaffeineDose(atMillis, mg, name, estimated = checkedMg == null)
+    }
+
     /** The level sampled evenly from [fromMillis] to [toMillis] — the detail chart's line. */
     fun curve(doses: List<CaffeineDose>, fromMillis: Long, toMillis: Long, points: Int, halfLifeHours: Float): List<Float> {
         if (points < 2 || toMillis <= fromMillis) return emptyList()

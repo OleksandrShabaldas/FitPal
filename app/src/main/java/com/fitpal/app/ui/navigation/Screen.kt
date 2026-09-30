@@ -22,6 +22,8 @@ sealed class Screen(val route: String) {
     data object WeighIn : Screen("weigh_in")
     /** Write feedback to the developer (opens the email app, pre-filled). */
     data object Feedback : Screen("feedback")
+    /** Every home-screen widget, previewed in the look you pick, with "Add to home screen". */
+    data object WidgetGallery : Screen("widget_gallery")
     data object AddFood : Screen("add_food")
     /** Global fuzzy search over everything the user has ever logged (foods + exercises). */
     data object Search : Screen("search")

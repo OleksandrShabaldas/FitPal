@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Widget picker art: protein, fat, carbs and fibre rings. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="50dp"
+    android:viewportWidth="200"
+    android:viewportHeight="50">
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M25,8 A17,17 0 1,1 24.99,8"
+        android:strokeWidth="5"
+        android:strokeColor="#24FFFFFF" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M25,8 A17,17 0 1,1 24.99,8"
+        android:strokeLineCap="round"
+        android:strokeWidth="5"
+        android:strokeColor="#FFF0997B"
+        android:trimPathEnd="0.6" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M75,8 A17,17 0 1,1 74.99,8"
+        android:strokeWidth="5"
+        android:strokeColor="#24FFFFFF" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M75,8 A17,17 0 1,1 74.99,8"
+        android:strokeLineCap="round"
+        android:strokeWidth="5"
+        android:strokeColor="#FFF2C14E"
+        android:trimPathEnd="0.7" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M125,8 A17,17 0 1,1 124.99,8"
+        android:strokeWidth="5"
+        android:strokeColor="#24FFFFFF" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M125,8 A17,17 0 1,1 124.99,8"
+        android:strokeLineCap="round"
+        android:strokeWidth="5"
+        android:strokeColor="#FFA6CF6E"
+        android:trimPathEnd="0.65" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M175,8 A17,17 0 1,1 174.99,8"
+        android:strokeWidth="5"
+        android:strokeColor="#24FFFFFF" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M175,8 A17,17 0 1,1 174.99,8"
+        android:strokeLineCap="round"
+        android:strokeWidth="5"
+        android:strokeColor="#FFB89E8A"
+        android:trimPathEnd="0.55" />
+</vector>

@@ -17,8 +17,15 @@ data class FastingSchedule(
     val eatEndMin: Int = 20 * 60,     // 20:00
     val warnOnLog: Boolean = true,
     /** Post a notification when the fast begins (window closes) and ends (window opens). */
-    val notify: Boolean = false
+    val notify: Boolean = false,
+    /** How firmly the fast is held — see [FastingIntensity]. */
+    val intensity: FastingIntensity = FastingIntensity.NORMAL,
+    /** How Home's main card draws the timer — see [FastingStyle]. */
+    val style: FastingStyle = FastingStyle.BAR
 ) {
+    /** Fasting is on and set to [FastingIntensity.INTENSE]: the full-screen stop + the Home reminder. */
+    val isIntense: Boolean get() = enabled && intensity == FastingIntensity.INTENSE
+
     /** True if [nowMin] (minutes since midnight) is inside the eating window. */
     fun isEatingAt(nowMin: Int): Boolean = FastingWindow.isEating(eatStartMin, eatEndMin, nowMin)
 
@@ -50,6 +57,22 @@ data class FastingSchedule(
 
 /** Which side of the eating window "now" falls on. */
 enum class FastingPhase { FASTING, EATING }
+
+/**
+ * How firmly FitPal holds you to the fast (Settings → Fasting). Both keep the log-time check;
+ * INTENSE adds friction *before* you start: a full-screen stop on Add food that you swipe past, and a
+ * reminder that drops in every time you open Home.
+ */
+enum class FastingIntensity(val label: String, val blurb: String) {
+    NORMAL("Normal", "A quiet timer on Home, and a check before you log food."),
+    INTENSE("Intense", "A full-screen stop on Add food you have to swipe past, and a reminder every time you open Home.")
+}
+
+/** How the fasting timer is drawn on Home's main card. */
+enum class FastingStyle(val label: String, val blurb: String) {
+    BAR("Horizontal", "A slim bar above the calorie ring."),
+    RING("Circle", "An arc around the calorie ring.")
+}
 
 /**
  * A snapshot of where the clock sits in the fasting cycle. [minutesLeftInPhase] counts down to the

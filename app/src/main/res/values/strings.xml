@@ -19,7 +19,23 @@
     <string name="no_meals_yet">No meals logged yet today</string>
     <string name="gallery_empty">Your food gallery is empty.\nSave foods after scanning to build it up.</string>
     <string name="widget_title">FitPal</string>
-    <string name="widget_snap">Snap a meal</string>
-    <string name="widget_add">Add food</string>
-    <string name="widget_description">Quickly snap or add a meal</string>
+
+    <!-- Home-screen widgets: the names and one-liners shown in the launcher's widget picker and in
+         Settings → Home-screen widgets (WidgetKind reads these, so both say the same thing). -->
+    <string name="widget_label_today">Today</string>
+    <string name="widget_today_description">Your calorie ring — what\'s left to eat today, with macros when it\'s wider.</string>
+    <string name="widget_label_quick_log">Quick log</string>
+    <string name="widget_quick_log_description">Snap, describe or search — straight into logging a meal.</string>
+    <string name="widget_label_macros">Macros</string>
+    <string name="widget_macros_description">Protein, fat, carbs and fibre against your targets.</string>
+    <string name="widget_label_water">Water</string>
+    <string name="widget_water_description">How much you\'ve drunk — tap + to log a glass without opening FitPal.</string>
+    <string name="widget_label_fasting">Fasting timer</string>
+    <string name="widget_fasting_description">A live countdown to your eating window, or to the end of it.</string>
+    <string name="widget_label_week">Your week</string>
+    <string name="widget_week_description">Seven days of calories against your goal, and your logging streak.</string>
+    <string name="widget_label_weight">Weight</string>
+    <string name="widget_weight_description">Your latest weigh-in and which way it\'s heading.</string>
+    <string name="widget_label_caffeine">Caffeine</string>
+    <string name="widget_caffeine_description">How much caffeine is still in you, and when it\'s easy on sleep.</string>
 </resources>

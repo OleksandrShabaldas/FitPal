@@ -150,9 +150,7 @@ class HomeViewModel @Inject constructor(
                 val dayIso = date.format(dateFormat)
                 mealRepository.caffeineRowsInRange(date.minusDays(1).format(dateFormat), dayIso).map { rows ->
                     val withMg = rows.mapNotNull { r ->
-                        val mg = r.caffeineMg ?: com.fitpal.app.domain.Caffeine.estimateMg(r.name, r.grams)
-                        if (mg == null || mg < 1f) null
-                        else r to com.fitpal.app.domain.CaffeineDose(r.timestamp, mg, r.name, estimated = r.caffeineMg == null)
+                        com.fitpal.app.domain.Caffeine.dose(r.timestamp, r.name, r.grams, r.caffeineMg)?.let { r to it }
                     }
                     val dayDoses = withMg.filter { it.first.date == dayIso }.map { it.second }
                     com.fitpal.app.ui.component.CaffeineView(

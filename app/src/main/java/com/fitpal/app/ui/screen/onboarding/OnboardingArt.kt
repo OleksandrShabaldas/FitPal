@@ -47,7 +47,8 @@ import kotlin.random.Random
 
 /**
  * A big ring that draws itself to [target] on first show, with a soft breathing glow behind it —
- * the intro's echo of the Home calorie ring. [content] sits in the middle.
+ * the intro's echo of the Home calorie ring. [content] sits in the middle. Gold by default; the
+ * intense-fasting stop draws it in the fasting blue via [colors] + [glow].
  */
 @Composable
 fun GlowRing(
@@ -55,6 +56,8 @@ fun GlowRing(
     diameter: Dp,
     modifier: Modifier = Modifier,
     durationMs: Int = 1400,
+    colors: List<Color> = listOf(Gold, GoldLight, Gold),
+    glow: Color = Gold,
     content: @Composable () -> Unit = {}
 ) {
     val sweep = remember { Animatable(0f) }
@@ -72,7 +75,7 @@ fun GlowRing(
             // Warm halo behind the ring.
             drawCircle(
                 brush = Brush.radialGradient(
-                    listOf(Gold.copy(alpha = 0.28f * breathe), Color.Transparent),
+                    listOf(glow.copy(alpha = 0.28f * breathe), Color.Transparent),
                     center = c, radius = size.minDimension * 0.62f * breathe
                 ),
                 radius = size.minDimension * 0.62f * breathe, center = c
@@ -83,7 +86,7 @@ fun GlowRing(
             val tl = Offset(inset, inset)
             drawArc(Color.White.copy(alpha = 0.08f), -90f, 360f, false, tl, arcSize, style = Stroke(sw, cap = StrokeCap.Round))
             drawArc(
-                brush = Brush.sweepGradient(listOf(Gold, GoldLight, Gold), center = c),
+                brush = Brush.sweepGradient(colors, center = c),
                 startAngle = -90f, sweepAngle = 360f * sweep.value, useCenter = false,
                 topLeft = tl, size = arcSize, style = Stroke(sw, cap = StrokeCap.Round)
             )

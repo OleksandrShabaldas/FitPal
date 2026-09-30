@@ -30,9 +30,11 @@ import com.fitpal.app.domain.MacroPlan
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -75,6 +77,8 @@ import com.fitpal.app.ui.component.MarkdownText
 import com.fitpal.app.ui.component.fastingClockLabel
 import com.fitpal.app.ui.component.fastingCountdownLabel
 import com.fitpal.app.ui.theme.glass
+import com.fitpal.app.ui.theme.accentGlass
+import com.fitpal.app.ui.theme.glassSoft
 import kotlin.math.roundToInt
 
 /** The settings categories shown on the hub, in order. */
@@ -84,7 +88,7 @@ val SETTINGS_CATEGORIES = listOf(
     SettingsCategoryInfo("profile", "Profile & goals", "Sex, age, height, fitness goal and calorie target"),
     SettingsCategoryInfo("activity", "Activity & health", "Step calories and Samsung Health sync"),
     SettingsCategoryInfo("presets", "Quick-add & meal times", "Tap amounts for food and drinks, and meal time windows"),
-    SettingsCategoryInfo("fasting", "Fasting", "Your eating window and the fasting log warning"),
+    SettingsCategoryInfo("fasting", "Fasting", "Your eating window, how the timer looks, and how strict it is"),
     SettingsCategoryInfo("rules", "Food rules", "Daily limits for dessert, fried food and sugary drinks"),
     SettingsCategoryInfo("caffeine", "Caffeine", "See the caffeine still in your body and when it wears off"),
     SettingsCategoryInfo("ai", "AI", "Online Gemini key, models and on-device model"),
@@ -1120,6 +1124,45 @@ private fun FastingSection(viewModel: SettingsViewModel) {
                     }
                 }
 
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+                Text("Timer on Home", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.height(8.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    com.fitpal.app.domain.model.FastingStyle.entries.forEach { style ->
+                        FastingChoiceTile(
+                            selected = schedule.style == style,
+                            title = style.label,
+                            blurb = style.blurb,
+                            onClick = { viewModel.setFastingStyle(style) },
+                            modifier = Modifier.weight(1f)
+                        ) { com.fitpal.app.ui.component.FastingStyleThumbnail(style) }
+                    }
+                }
+
+                Spacer(Modifier.height(14.dp))
+                Text("Intensity", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.height(8.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    com.fitpal.app.domain.model.FastingIntensity.entries.forEach { level ->
+                        val selected = schedule.intensity == level
+                        FastingChoiceTile(
+                            selected = selected,
+                            title = level.label,
+                            blurb = level.blurb,
+                            onClick = { viewModel.setFastingIntensity(level) },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = if (level == com.fitpal.app.domain.model.FastingIntensity.INTENSE)
+                                    Icons.Default.Bolt else Icons.Default.HourglassEmpty,
+                                contentDescription = null,
+                                tint = if (selected) com.fitpal.app.ui.theme.GoldLight else com.fitpal.app.ui.theme.CreamMuted,
+                                modifier = Modifier.padding(vertical = 14.dp).size(30.dp)
+                            )
+                        }
+                    }
+                }
+
                 Spacer(Modifier.height(6.dp))
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -1148,6 +1191,48 @@ private fun FastingSection(viewModel: SettingsViewModel) {
                 }
             }
         }
+    }
+}
+
+/**
+ * One selectable tile in the fasting pickers (timer style, intensity): a small picture, a title and
+ * one line on what it does. The chosen one lights up gold, like the feedback screen's topic tiles.
+ */
+@Composable
+private fun FastingChoiceTile(
+    selected: Boolean,
+    title: String,
+    blurb: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    art: @Composable () -> Unit
+) {
+    val shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp)
+    Column(
+        modifier = modifier
+            .then(
+                if (selected) Modifier.accentGlass(com.fitpal.app.ui.theme.GoldLight, shape)
+                else Modifier.glassSoft(shape)
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        art()
+        Spacer(Modifier.height(6.dp))
+        Text(
+            title,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = if (selected) com.fitpal.app.ui.theme.GoldLight else com.fitpal.app.ui.theme.Cream
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            blurb,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
     }
 }
 

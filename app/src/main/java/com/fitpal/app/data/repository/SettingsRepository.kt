@@ -316,7 +316,13 @@ class SettingsRepository @Inject constructor(
         eatStartMin = prefs.getInt(KEY_FAST_EAT_START, 12 * 60),
         eatEndMin = prefs.getInt(KEY_FAST_EAT_END, 20 * 60),
         warnOnLog = prefs.getBoolean(KEY_FASTING_WARN, true),
-        notify = prefs.getBoolean(KEY_FASTING_NOTIFY, false)
+        notify = prefs.getBoolean(KEY_FASTING_NOTIFY, false),
+        intensity = com.fitpal.app.domain.model.FastingIntensity.entries
+            .firstOrNull { it.name == prefs.getString(KEY_FASTING_INTENSITY, null) }
+            ?: com.fitpal.app.domain.model.FastingIntensity.NORMAL,
+        style = com.fitpal.app.domain.model.FastingStyle.entries
+            .firstOrNull { it.name == prefs.getString(KEY_FASTING_STYLE, null) }
+            ?: com.fitpal.app.domain.model.FastingStyle.BAR
     )
 
     private val _fastingSchedule = MutableStateFlow(loadFastingSchedule())
@@ -343,6 +349,18 @@ class SettingsRepository @Inject constructor(
     fun setFastingNotify(notify: Boolean) {
         prefs.edit().putBoolean(KEY_FASTING_NOTIFY, notify).apply()
         _fastingSchedule.value = _fastingSchedule.value.copy(notify = notify)
+    }
+
+    /** Normal = the quiet timer + log check; Intense adds the full-screen stop and the Home reminder. */
+    fun setFastingIntensity(intensity: com.fitpal.app.domain.model.FastingIntensity) {
+        prefs.edit().putString(KEY_FASTING_INTENSITY, intensity.name).apply()
+        _fastingSchedule.value = _fastingSchedule.value.copy(intensity = intensity)
+    }
+
+    /** Horizontal bar above the calorie ring, or an arc around it. */
+    fun setFastingStyle(style: com.fitpal.app.domain.model.FastingStyle) {
+        prefs.edit().putString(KEY_FASTING_STYLE, style.name).apply()
+        _fastingSchedule.value = _fastingSchedule.value.copy(style = style)
     }
 
     // --- Dietary rules (per-category daily kcal caps: dessert / fried / sugary drinks) ---
@@ -890,6 +908,8 @@ class SettingsRepository @Inject constructor(
         private const val KEY_FAST_EAT_END = "fasting_eat_end"
         private const val KEY_FASTING_WARN = "fasting_warn_on_log"
         private const val KEY_FASTING_NOTIFY = "fasting_notify"
+        private const val KEY_FASTING_INTENSITY = "fasting_intensity"
+        private const val KEY_FASTING_STYLE = "fasting_style"
         private const val KEY_HIDDEN_FOODS = "hidden_food_ids"
         private const val KEY_FASTING_GRACE = "fasting_grace"
         private const val KEY_CAFFEINE_ENABLED = "caffeine_enabled"

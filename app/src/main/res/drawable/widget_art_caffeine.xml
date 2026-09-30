@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Widget picker art: the caffeine ring. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="120dp"
+    android:height="120dp"
+    android:viewportWidth="120"
+    android:viewportHeight="120">
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M60,12 A48,48 0 1,1 59.99,12"
+        android:strokeWidth="9"
+        android:strokeColor="#24FFFFFF" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M60,12 A48,48 0 1,1 59.99,12"
+        android:strokeLineCap="round"
+        android:strokeWidth="9"
+        android:strokeColor="#FFC9A27E"
+        android:trimPathEnd="0.34" />
+</vector>

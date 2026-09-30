@@ -32,6 +32,7 @@ class MainActivity : ComponentActivity() {
 
     @Inject lateinit var settingsRepository: SettingsRepository
     @Inject lateinit var updateManager: UpdateManager
+    @Inject lateinit var focusedDate: com.fitpal.app.domain.FocusedDate
 
     // A route a notification / widget / share asked us to open.
     private var pendingRoute by mutableStateOf<String?>(null)
@@ -106,6 +107,9 @@ class MainActivity : ComponentActivity() {
 
     private fun routeFor(intent: Intent?): String? {
         if (intent == null) return null
+        // A widget showing today's numbers was tapped: bring Home (and Analytics) back to today, even
+        // if they were left browsing another day.
+        if (intent.getBooleanExtra(EXTRA_FOCUS_TODAY, false)) focusedDate.set(java.time.LocalDate.now())
         if (intent.action == Intent.ACTION_SEND && intent.type?.startsWith("image/") == true) {
             val uri = IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
             if (uri != null) return Screen.Analysis.buildRoute(uri.toString())
@@ -118,6 +122,8 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_NAV_ROUTE = "fitpal.nav_route"
+        /** Set by widgets that show today: open on today rather than whatever day was being browsed. */
+        const val EXTRA_FOCUS_TODAY = "fitpal.focus_today"
         /** Legacy: older weigh-in notifications asked Home to open its weight dialog (see [routeFor]). */
         private const val EXTRA_HOME_ACTION = "fitpal.home_action"
         private const val HOME_ACTION_LOG_WEIGHT = "log_weight"

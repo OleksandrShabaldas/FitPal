@@ -23,6 +23,7 @@ class FitPalApplication : Application() {
         fun reminderManager(): ReminderManager
         fun watchLink(): com.fitpal.app.wear.WatchLink
         fun updateManager(): com.fitpal.app.update.UpdateManager
+        fun widgetUpdater(): com.fitpal.app.widget.WidgetUpdater
     }
 
     override fun onCreate() {
@@ -37,6 +38,20 @@ class FitPalApplication : Application() {
         // complications have fresh data without the user opening anything.
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
             runCatching { entryPoint.watchLink().pushIfConnected() }
+        }
+
+        // Home-screen widgets: redraw them now (the app may have just been updated, or the day moved
+        // on), then keep them in step with every change while the process lives. And, on Android 15+,
+        // give the launcher's widget picker real previews.
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            runCatching {
+                val widgets = entryPoint.widgetUpdater()
+                if (widgets.hasAnyWidget()) {
+                    widgets.startWatching()
+                    widgets.updateAll()
+                }
+            }
+            runCatching { com.fitpal.app.widget.WidgetPreviews.publishOnce(this@FitPalApplication) }
         }
 
         // Once-a-day look for a newer GitHub release (this build is sideloaded, so there's no

@@ -87,6 +87,8 @@ class SettingsViewModel @Inject constructor(
     fun setFastingWindow(eatStartMin: Int, eatEndMin: Int) { settingsRepository.setFastingWindow(eatStartMin, eatEndMin); reminderManager.reschedule() }
     fun setFastingWarnOnLog(warn: Boolean) = settingsRepository.setFastingWarnOnLog(warn)
     fun setFastingNotify(notify: Boolean) { settingsRepository.setFastingNotify(notify); reminderManager.reschedule() }
+    fun setFastingIntensity(intensity: com.fitpal.app.domain.model.FastingIntensity) = settingsRepository.setFastingIntensity(intensity)
+    fun setFastingStyle(style: com.fitpal.app.domain.model.FastingStyle) = settingsRepository.setFastingStyle(style)
 
     // ---- Foods hidden from database search ----
     val hiddenFoodIds: StateFlow<Set<String>> = settingsRepository.hiddenFoodIds

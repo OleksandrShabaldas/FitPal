@@ -16,6 +16,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.MailOutline
+import androidx.compose.material.icons.filled.Widgets
 import com.fitpal.app.ui.theme.Cream
 import com.fitpal.app.ui.theme.CreamMuted
 import com.fitpal.app.ui.theme.GoldLight
@@ -42,6 +43,8 @@ import com.fitpal.app.ui.theme.glass
 fun SettingsScreen(
     onOpenCategory: (String) -> Unit,
     onOpenFeedback: () -> Unit = {},
+    /** Settings → Home-screen widgets: the widget gallery. */
+    onOpenWidgets: () -> Unit = {},
     onSwipeToCollection: () -> Unit = {},
     onBack: () -> Unit = {},
 ) {
@@ -80,6 +83,35 @@ fun SettingsScreen(
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                }
+            }
+
+            // The widget gallery: a place to see and add FitPal's home-screen widgets.
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .glass()
+                    .clickable(onClick = onOpenWidgets)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Widgets, contentDescription = null, tint = GoldLight, modifier = Modifier.size(22.dp))
+                    Spacer(Modifier.width(14.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Home-screen widgets", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "Calories, water, fasting and more at a glance — pick a look and add them",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
 

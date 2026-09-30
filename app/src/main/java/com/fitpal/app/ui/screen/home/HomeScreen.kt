@@ -14,6 +14,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Canvas
@@ -56,9 +58,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material.icons.filled.LocalFireDepartment
-import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Icon
@@ -108,8 +108,8 @@ import com.fitpal.app.data.local.entity.ExerciseEntryEntity
 import com.fitpal.app.data.local.entity.MealLogItemEntity
 import com.fitpal.app.domain.DayScore
 import com.fitpal.app.domain.HomeCoachTip
-import com.fitpal.app.domain.model.FastingSchedule
 import com.fitpal.app.domain.model.MealTypes
+import com.fitpal.app.domain.model.FastingStyle
 import com.fitpal.app.domain.model.Micronutrients
 import com.fitpal.app.ui.component.CalorieRing
 import com.fitpal.app.ui.component.DatePickerDialog
@@ -118,11 +118,13 @@ import com.fitpal.app.ui.component.GlassCapsule
 import com.fitpal.app.ui.component.GradientBackdrop
 import com.fitpal.app.ui.component.BackdropTheme
 import com.fitpal.app.ui.component.LocalFastingSchedule
+import com.fitpal.app.ui.component.FastingBanner
+import com.fitpal.app.ui.component.FastingRingAround
+import com.fitpal.app.ui.component.FastingStrip
+import com.fitpal.app.ui.component.minuteOfDayNow
 import com.fitpal.app.ui.component.MacroRingsRow
 import com.fitpal.app.ui.component.MealTypeSelector
 import com.fitpal.app.ui.component.MicronutrientBars
-import com.fitpal.app.ui.component.fastingClockLabel
-import com.fitpal.app.ui.component.fastingCountdownLabel
 import com.fitpal.app.ui.theme.AccentGarden
 import com.fitpal.app.ui.theme.AccentTrends
 import com.fitpal.app.ui.theme.CalorieColor
@@ -202,6 +204,17 @@ fun HomeScreen(
         viewModel.syncHealthConnect()
     }
 
+    // INTENSE fasting: a reminder drops in each time Home is opened during a fast — opening the app,
+    // switching to the Home tab, coming back from another screen. ON_START rather than ON_RESUME, so
+    // closing a dialog over Home (which only pauses it) doesn't count as opening it again.
+    val fastingSchedule = LocalFastingSchedule.current
+    var fastingBannerVisible by remember { mutableStateOf(false) }
+    LifecycleEventEffect(Lifecycle.Event.ON_START) {
+        if (fastingSchedule.isIntense && fastingSchedule.stateAt(minuteOfDayNow()).isFasting) {
+            fastingBannerVisible = true
+        }
+    }
+
     var editingItem by remember { mutableStateOf<MealLogItemEntity?>(null) }
     var editingType by remember { mutableStateOf(MealTypes.BREAKFAST) }
     var showCalendar by remember { mutableStateOf(false) }
@@ -241,6 +254,7 @@ fun HomeScreen(
     }
 
     GradientBackdrop(theme = BackdropTheme.TODAY) {
+        Box(Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize().nestedScroll(searchBarScroll)) {
         AnimatedVisibility(
             visible = searchBarVisible,
@@ -413,6 +427,16 @@ fun HomeScreen(
                     }
                 }
             }
+        }
+        }
+
+        AnimatedVisibility(
+            visible = fastingBannerVisible,
+            modifier = Modifier.align(Alignment.TopCenter).padding(horizontal = 16.dp, vertical = 8.dp),
+            enter = slideInVertically { -it } + fadeIn(),
+            exit = slideOutVertically { -it } + fadeOut()
+        ) {
+            FastingBanner(schedule = fastingSchedule, onDismiss = { fastingBannerVisible = false })
         }
         }
     }
@@ -681,30 +705,51 @@ private fun HeroCard(
                 }
             }
         }
-        // A slim fasting timer above the ring — only for today, and only when fasting is enabled.
+        // The fasting timer — only for today, and only when fasting is enabled. Horizontal style: a slim
+        // strip above the ring. Circle style: an arc wrapped around the ring itself (see below).
         val fastingSchedule = LocalFastingSchedule.current
-        if (fastingSchedule.enabled && isToday) {
+        val showFasting = fastingSchedule.enabled && isToday
+        val fastingAroundRing = showFasting && fastingSchedule.style == FastingStyle.RING
+        if (showFasting && !fastingAroundRing) {
             FastingStrip(fastingSchedule)
         }
-        HorizontalPager(state = pager, modifier = Modifier.fillMaxWidth().height(280.dp)) { page ->
+        // The arc (and its line of text) needs more room than the bare ring; the strip's space goes to it.
+        HorizontalPager(state = pager, modifier = Modifier.fillMaxWidth().height(if (fastingAroundRing) 322.dp else 280.dp)) { page ->
             Column(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 if (page == 0) {
-                    CalorieRing(
-                        consumed = consumed, goal = goal, tier = tier, diameter = 150.dp,
-                        balanceScore = balanceScore, balanceHint = balanceHint
-                    )
-                    if (activityKcal > 0) {
-                        Spacer(Modifier.height(8.dp))
+                    val calorieRing: @Composable () -> Unit = {
+                        CalorieRing(
+                            consumed = consumed, goal = goal, tier = tier, diameter = 150.dp,
+                            balanceScore = balanceScore, balanceHint = balanceHint
+                        )
+                    }
+                    val activityLine: @Composable () -> Unit = {
                         Text(
                             text = "${"%,d".format(baseGoal)} base + ${"%,d".format(activityKcal)} activity",
                             style = MaterialTheme.typography.labelMedium,
                             color = CreamFaint
                         )
                     }
-                    Spacer(Modifier.height(14.dp))
+                    if (fastingAroundRing) {
+                        // The arc opens at the bottom, right where the "base + activity" line sits.
+                        FastingRingAround(
+                            schedule = fastingSchedule,
+                            ringDiameter = 150.dp,
+                            inGap = if (activityKcal > 0) activityLine else null,
+                            ring = calorieRing
+                        )
+                        Spacer(Modifier.height(10.dp))
+                    } else {
+                        calorieRing()
+                        if (activityKcal > 0) {
+                            Spacer(Modifier.height(8.dp))
+                            activityLine()
+                        }
+                        Spacer(Modifier.height(14.dp))
+                    }
                     MacroRingsRow(
                         protein = protein, proteinTarget = proteinTarget,
                         fat = fat, fatTarget = fatTarget,
@@ -741,68 +786,6 @@ private fun HeroCard(
         }
     }
 }
-
-// ======================== FASTING STRIP ========================
-
-/**
- * The slim intermittent-fasting timer that sits above the calorie ring on the Hero card. One line —
- * "Fasting · 3h 12m until 12:00 PM" / "Eating window · 5h left" — plus a thin bar that fills as the
- * current phase completes. Ticks ~every 30s; deliberately quiet so it never competes with the hero
- * calorie number (one hero number per surface).
- */
-@Composable
-private fun FastingStrip(schedule: FastingSchedule) {
-    var nowMin by remember { mutableStateOf(currentMinutes()) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            nowMin = currentMinutes()
-            kotlinx.coroutines.delay(30_000L)
-        }
-    }
-    val state = schedule.stateAt(nowMin)
-    val fasting = state.isFasting
-    val accent = if (fasting) AccentTrends else GoldLight
-    Column(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                imageVector = if (fasting) Icons.Default.HourglassEmpty else Icons.Default.Restaurant,
-                contentDescription = null,
-                tint = accent,
-                modifier = Modifier.size(15.dp)
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = if (fasting)
-                    "Fasting · ${fastingCountdownLabel(state.minutesLeftInPhase)} until ${fastingClockLabel(state.nextChangeMin)}"
-                else
-                    "Eating window · ${fastingCountdownLabel(state.minutesLeftInPhase)} left",
-                style = MaterialTheme.typography.labelLarge,
-                color = Cream,
-                modifier = Modifier.weight(1f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = if (fasting) "can't eat yet" else "go ahead",
-                style = MaterialTheme.typography.labelSmall,
-                color = accent
-            )
-        }
-        Spacer(Modifier.height(6.dp))
-        Box(
-            Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(50))
-                .background(Color.White.copy(alpha = 0.10f))
-        ) {
-            Box(
-                Modifier.fillMaxWidth(state.progressFraction.coerceIn(0f, 1f)).height(4.dp)
-                    .clip(RoundedCornerShape(50)).background(accent)
-            )
-        }
-    }
-}
-
-private fun currentMinutes(): Int = java.time.LocalTime.now().let { it.hour * 60 + it.minute }
 
 // ======================== MEAL CATEGORY SECTION ========================
 

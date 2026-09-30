@@ -45,6 +45,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.dialog
 import com.fitpal.app.ui.screen.feedback.FeedbackScreen
 import com.fitpal.app.ui.screen.weighin.WeighInRoute
+import com.fitpal.app.ui.screen.widgets.WidgetGalleryScreen
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.fitpal.app.R
@@ -88,14 +89,6 @@ fun FitPalNavHost(
     // Shared blur source: the nav bar samples whatever the screens draw behind it.
     val hazeState = remember { HazeState() }
 
-    // A notification (e.g. "meal analysed — tap to review") asked us to open a screen.
-    LaunchedEffect(pendingRoute) {
-        if (pendingRoute != null) {
-            navController.navigate(pendingRoute) { launchSingleTop = true }
-            onPendingRouteHandled()
-        }
-    }
-
     // Ask once for notification permission (Android 13+) so background-analysis updates show. On a
     // first launch the intro asks at its reminders step instead (with the reason next to it), so the
     // system prompt doesn't pop over the welcome screen.
@@ -136,6 +129,25 @@ fun FitPalNavHost(
             popUpTo(navController.graph.findStartDestination().id) { saveState = true }
             launchSingleTop = true
             restoreState = true
+        }
+    }
+
+    // A notification ("meal analysed — tap to review") or a home-screen widget asked for a screen.
+    // A main tab lands on the tab itself, clearing whatever was open over it — not a tab-bar switch,
+    // which would restore that tab's saved sub-screens (a widget tap would reopen the last screen
+    // instead of Home). Anything else opens over whatever's showing.
+    LaunchedEffect(pendingRoute) {
+        if (pendingRoute != null) {
+            val tabs = setOf(Screen.Home.route, Screen.Analytics.route, Screen.Collection.route, Screen.Settings.route)
+            if (pendingRoute in tabs) {
+                navController.navigate(pendingRoute) {
+                    popUpTo(navController.graph.findStartDestination().id)
+                    launchSingleTop = true
+                }
+            } else {
+                navController.navigate(pendingRoute) { launchSingleTop = true }
+            }
+            onPendingRouteHandled()
         }
     }
 
@@ -183,6 +195,10 @@ fun FitPalNavHost(
 
             composable(Screen.Feedback.route) {
                 FeedbackScreen(onBack = safeBack)
+            }
+
+            composable(Screen.WidgetGallery.route) {
+                WidgetGalleryScreen(onBack = safeBack)
             }
 
             composable(Screen.Home.route) {
@@ -259,6 +275,7 @@ fun FitPalNavHost(
                     onManualEntry = { navController.navigate(Screen.ManualEntry.route) },
                     onCustomFood = { navController.navigate(Screen.CustomFood.buildRoute()) },
                     onLogExercise = { navController.navigate(Screen.LogExercise.route) },
+                    onOpenWeighIn = { navController.navigate(Screen.WeighIn.route) },
                     onLogged = goHome,
                     onBack = safeBack
                 )
@@ -351,6 +368,7 @@ fun FitPalNavHost(
                 SettingsScreen(
                     onOpenCategory = { id -> navController.navigate(Screen.SettingsCategory.buildRoute(id)) },
                     onOpenFeedback = { navController.navigate(Screen.Feedback.route) },
+                    onOpenWidgets = { navController.navigate(Screen.WidgetGallery.route) },
                     onSwipeToCollection = { navTo(Screen.Collection.route) },
                     onBack = safeBack
                 )
