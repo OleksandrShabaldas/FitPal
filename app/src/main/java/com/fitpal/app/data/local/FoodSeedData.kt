@@ -14,7 +14,7 @@ import com.fitpal.app.data.local.entity.UsdaFoodEntity
  */
 object FoodSeedData {
 
-    val foods: List<UsdaFoodEntity> = listOf(
+    private val base: List<UsdaFoodEntity> = listOf(
         //          fdcId  description                       kcal  prot  fat   carb  serving  category
         UsdaFoodEntity(-1,  "Chicken breast (grilled)",      165f, 31f,  3.6f, 0f,    150f, "Protein"),
         UsdaFoodEntity(-2,  "Chicken thigh (cooked)",        209f, 26f,  11f,  0f,    140f, "Protein"),
@@ -200,4 +200,34 @@ object FoodSeedData {
         UsdaFoodEntity(-154, "Scrambled eggs", 149f, 10f, 11f, 1.6f, 120f, "Prepared"),
         UsdaFoodEntity(-155, "Omelette", 154f, 11f, 12f, 0.6f, 150f, "Prepared")
     )
+
+    /**
+     * Dietary fibre per 100 g by seed id (USDA FoodData Central averages). Without it a database
+     * apple logged with 0 g fibre until the online check ran — and stayed at 0 whenever it couldn't.
+     * Foods left out genuinely have none (meat, dairy, oils, drinks) or vary too much to guess
+     * (tempeh, protein bars); 0 means "unknown" to the background check, which fills those.
+     */
+    private val fiberPer100g: Map<Int, Float> = mapOf(
+        -10 to 2.3f, -11 to 0.4f, -12 to 1.8f, -13 to 1f, -14 to 1.8f, -15 to 2.7f, -16 to 6f, -17 to 10.6f,
+        -18 to 2.8f, -19 to 2.6f, -20 to 2.8f, -21 to 2.2f, -22 to 1.2f, -23 to 0.5f, -24 to 2f, -25 to 1.7f,
+        -26 to 1f, -27 to 2.7f, -28 to 2f, -29 to 1.8f, -30 to 3.3f, -31 to 2.6f, -32 to 2.4f, -33 to 2.4f,
+        -34 to 2f, -35 to 2.4f, -36 to 0.9f, -37 to 6.7f, -42 to 8.7f, -43 to 7.9f, -44 to 7.6f, -45 to 12.5f,
+        -46 to 6f, -48 to 2.3f, -49 to 1.3f, -50 to 3.8f, -51 to 0.2f, -53 to 0.3f, -55 to 3.3f, -56 to 0.8f,
+        -57 to 0.6f, -59 to 6f, -60 to 1.5f, -61 to 1.6f, -62 to 1.5f, -63 to 1f, -67 to 3.4f, -85 to 0.7f,
+        -86 to 5.8f, -87 to 2.1f, -88 to 3.4f, -89 to 1.4f, -90 to 2.7f, -91 to 3f, -92 to 6f, -93 to 2.5f,
+        -94 to 2.6f, -95 to 1.2f, -96 to 2.5f, -97 to 2f, -98 to 1f, -99 to 3f, -100 to 1.3f, -101 to 1.6f,
+        -102 to 2.1f, -103 to 5.1f, -104 to 2.1f, -105 to 2.8f, -106 to 1.6f, -107 to 0.5f, -108 to 4.1f, -109 to 2.6f,
+        -110 to 2.1f, -111 to 3.1f, -112 to 1.5f, -113 to 0.4f, -114 to 1.4f, -115 to 1.6f, -116 to 3f, -117 to 2.1f,
+        -118 to 6.5f, -119 to 2.8f, -120 to 1.4f, -121 to 7f, -122 to 3.7f, -123 to 6.4f, -124 to 5.2f, -125 to 6.7f,
+        -126 to 3.3f, -127 to 8.6f, -128 to 34.4f, -134 to 0.2f, -135 to 0.2f, -137 to 0.2f, -139 to 10.9f, -140 to 3.4f,
+        -141 to 3.5f, -142 to 14.5f, -143 to 2f, -144 to 1.4f, -145 to 1.5f, -146 to 3f, -148 to 1.5f, -149 to 1f,
+        -150 to 1.5f, -151 to 0.9f, -152 to 0.4f, -153 to 2.5f
+    )
+
+    /** The built-in foods, each with its fibre. */
+    val foods: List<UsdaFoodEntity> =
+        base.map { food -> fiberPer100g[food.fdcId]?.let { food.copy(fiberPer100g = it) } ?: food }
+
+    /** The shipped fibre for a seed food id (negative), or null when it isn't one we know. */
+    fun fiberFor(fdcId: Int): Float? = fiberPer100g[fdcId]
 }

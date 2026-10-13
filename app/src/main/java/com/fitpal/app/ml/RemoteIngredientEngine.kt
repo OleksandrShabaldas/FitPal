@@ -41,7 +41,8 @@ class RemoteIngredientEngine @Inject constructor(
         // Pure extraction (turn words into foods) — perception, not reasoning. Lean prompt, fast.
         val raw = gemini.generate(
             FoodPrompts.describeOnline(text), temperature = 0.15f, jsonMode = true,
-            thinkingLevel = FAST, onProgress = onProgress, onModel = onModel
+            thinkingLevel = FAST, onProgress = onProgress, onModel = onModel,
+            hedgeAfterMs = HEDGE_TEXT_MS, readTimeoutMs = EXTRACTION_READ_TIMEOUT_MS
         )
         return FoodJsonParser.parseFoods(raw)
     }
@@ -71,7 +72,9 @@ class RemoteIngredientEngine @Inject constructor(
             jsonMode = true,
             thinkingLevel = FAST,
             onProgress = onProgress,
-            onModel = onModel
+            onModel = onModel,
+            hedgeAfterMs = HEDGE_PHOTO_MS,
+            readTimeoutMs = EXTRACTION_READ_TIMEOUT_MS
         )
         onProgress("Reading the AI's answer…")
         return FoodJsonParser.parseVisionResult(raw)
@@ -163,5 +166,16 @@ class RemoteIngredientEngine @Inject constructor(
         /** Thinking levels: fast for perception/extraction, deep for analysis/reasoning. */
         private const val FAST = "low"
         private const val DEEP = "high"
+
+        /**
+         * The calls someone sits and watches (photo / description → foods) are hedged: if the model
+         * is still silent after this long, the next model is asked in parallel and the first answer
+         * wins (see [GeminiClient.generate]). A normal low-thinking extraction answers well inside it.
+         */
+        private const val HEDGE_PHOTO_MS = 25_000L
+        private const val HEDGE_TEXT_MS = 20_000L
+
+        /** An extraction that hasn't answered in 90 s has stalled — give up on that model, don't wait 180. */
+        private const val EXTRACTION_READ_TIMEOUT_MS = 90_000
     }
 }

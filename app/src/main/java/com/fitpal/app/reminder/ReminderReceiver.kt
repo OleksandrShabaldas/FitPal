@@ -34,6 +34,7 @@ class ReminderReceiver : BroadcastReceiver() {
         fun reminderManager(): ReminderManager
         fun reviewGenerator(): ReviewGenerator
         fun weightRepository(): WeightRepository
+        fun settingsRepository(): com.fitpal.app.data.repository.SettingsRepository
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -83,7 +84,10 @@ class ReminderReceiver : BroadcastReceiver() {
                     val alreadyLogged = runCatching {
                         entryPoint(context).weightRepository().hasLoggedOn(LocalDate.now())
                     }.getOrDefault(false)
-                    if (!alreadyLogged) {
+                    // Only on the weekdays the user picked (guards an alarm armed before they changed them).
+                    val pickedToday = LocalDate.now().dayOfWeek in
+                        entryPoint(context).settingsRepository().reminderStateFor(kind).days
+                    if (!alreadyLogged && pickedToday) {
                         postNotification(context, kind, Screen.WeighIn.route, CHANNEL_REMINDERS, "Reminders")
                     }
                 } finally {

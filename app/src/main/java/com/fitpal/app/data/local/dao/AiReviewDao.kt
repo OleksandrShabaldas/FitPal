@@ -21,6 +21,10 @@ interface AiReviewDao {
     @Query("DELETE FROM ai_reviews WHERE period = :period AND periodKey = :periodKey")
     suspend fun delete(period: String, periodKey: String)
 
+    /** The most recently written overviews (any period), newest first — the coach's memory. */
+    @Query("SELECT * FROM ai_reviews ORDER BY generatedAt DESC LIMIT :limit")
+    suspend fun recent(limit: Int): List<AiReviewEntity>
+
     /** Housekeeping: drop saved reviews older than the given cutoff (epoch millis). */
     @Query("DELETE FROM ai_reviews WHERE generatedAt < :cutoffMillis")
     suspend fun deleteOlderThan(cutoffMillis: Long)

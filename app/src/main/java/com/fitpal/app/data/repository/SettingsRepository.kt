@@ -251,13 +251,24 @@ class SettingsRepository @Inject constructor(
         _reminderMinutes.value = clamped
     }
 
+    // --- One-time data repairs (each runs once per install, then remembers it's done) ---
+
+    fun isRepairDone(name: String): Boolean = prefs.getBoolean("repair_$name", false)
+
+    fun markRepairDone(name: String) {
+        prefs.edit().putBoolean("repair_$name", true).apply()
+    }
+
     // --- Extra reminders (meals, weigh-in, AI overviews) — generic, keyed by ReminderKind ---
 
     private fun loadReminders(): Map<String, com.fitpal.app.domain.model.ReminderState> =
         com.fitpal.app.domain.model.ReminderKind.entries.associate { k ->
             k.key to com.fitpal.app.domain.model.ReminderState(
                 enabled = prefs.getBoolean("rem_${k.key}_on", k.defaultEnabled),
-                minutes = prefs.getInt("rem_${k.key}_min", k.defaultMinutes)
+                minutes = prefs.getInt("rem_${k.key}_min", k.defaultMinutes),
+                days = com.fitpal.app.domain.model.ReminderState.daysFromMask(
+                    prefs.getInt("rem_${k.key}_days", com.fitpal.app.domain.model.ReminderState.ALL_DAYS_MASK)
+                )
             )
         }
 
@@ -272,6 +283,15 @@ class SettingsRepository @Inject constructor(
         prefs.edit()
             .putBoolean("rem_${kind.key}_on", enabled)
             .putInt("rem_${kind.key}_min", minutes.coerceIn(0, 24 * 60 - 1))
+            .apply()
+        _reminders.value = loadReminders()
+    }
+
+    /** The weekdays a reminder fires on. An empty set is ignored, so at least one day always stays on. */
+    fun setReminderDays(kind: com.fitpal.app.domain.model.ReminderKind, days: Set<java.time.DayOfWeek>) {
+        if (days.isEmpty()) return
+        prefs.edit()
+            .putInt("rem_${kind.key}_days", com.fitpal.app.domain.model.ReminderState.daysToMask(days))
             .apply()
         _reminders.value = loadReminders()
     }

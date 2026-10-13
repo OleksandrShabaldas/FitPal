@@ -18,5 +18,11 @@ data class UsdaFoodEntity(
     val fatPer100g: Float,
     val carbsPer100g: Float,
     val commonServingGrams: Float? = null,
-    val foodCategory: String? = null
+    val foodCategory: String? = null,
+    /**
+     * Dietary fibre per 100 g; 0 = not known. The built-in foods ship it, USDA imports read nutrient
+     * 1079 and Open Food Facts its `fiber_100g`, so a database apple comes with its fibre straight
+     * away, offline. Whatever is still 0 is filled later by the background check (NutrientFiller).
+     */
+    val fiberPer100g: Float = 0f
 )

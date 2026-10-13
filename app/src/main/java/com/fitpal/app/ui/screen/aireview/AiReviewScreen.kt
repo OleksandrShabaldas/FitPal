@@ -21,16 +21,27 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.QuestionAnswer
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -112,6 +123,10 @@ fun AiReviewScreen(
                             Text(state.subtitle, style = MaterialTheme.typography.bodyMedium, color = CreamMuted)
                             Spacer(Modifier.height(12.dp))
                         }
+                        state.staleNote?.takeIf { state.modelReady }?.let { note ->
+                            StaleBanner(note = note, onRefresh = viewModel::regenerate)
+                            Spacer(Modifier.height(12.dp))
+                        }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = GoldLight, modifier = Modifier.size(20.dp))
                             Spacer(Modifier.width(8.dp))
@@ -157,6 +172,18 @@ fun AiReviewScreen(
                                     )
                                 }
                             }
+                        }
+
+                        // The coach's closing question — answered here, read by the next overview.
+                        state.followUpQuestion?.let { question ->
+                            Spacer(Modifier.height(12.dp))
+                            FollowUpQuestionCard(
+                                question = question,
+                                options = state.followUpOptions,
+                                answer = state.followUpAnswer,
+                                onAnswer = viewModel::answerFollowUp,
+                                onEdit = viewModel::editFollowUp
+                            )
                         }
                     }
 
@@ -216,6 +243,141 @@ private fun CoachActionCard(
             Text(label, style = MaterialTheme.typography.labelMedium, color = accent, fontWeight = FontWeight.SemiBold)
         }
         Text(body, style = MaterialTheme.typography.bodyMedium, color = Cream)
+    }
+}
+
+/**
+ * Shown on a saved overview when food was logged after it was written: its numbers (and any "target
+ * missed") may be out of date. One tap rewrites it with everything logged so far.
+ */
+@Composable
+private fun StaleBanner(note: String, onRefresh: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .glassSoft()
+            .clickable(onClick = onRefresh)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(note, style = MaterialTheme.typography.bodyMedium, color = Cream)
+            Text(
+                "Refresh to include everything you've logged so far.",
+                style = MaterialTheme.typography.bodySmall,
+                color = CreamMuted
+            )
+        }
+        Spacer(Modifier.width(10.dp))
+        Row(
+            modifier = Modifier.glass(CircleShape).padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Default.Refresh, contentDescription = null, tint = GoldLight, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(4.dp))
+            Text("Refresh", style = MaterialTheme.typography.labelLarge, color = Cream)
+        }
+    }
+}
+
+/**
+ * The coach's question at the end of every overview. Tap a suggested answer or write your own; it's
+ * saved against this overview and the next one builds on it. Once answered, the answer shows with a
+ * quiet "Change" — the newest answer is the one the coach reads.
+ */
+@Composable
+private fun FollowUpQuestionCard(
+    question: String,
+    options: List<String>,
+    answer: String?,
+    onAnswer: (String) -> Unit,
+    onEdit: () -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth().glass().padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.QuestionAnswer, contentDescription = null, tint = GoldLight, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("Your coach asks", style = MaterialTheme.typography.titleSmall, color = Cream)
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(question, style = MaterialTheme.typography.bodyLarge, color = Cream)
+        Spacer(Modifier.height(12.dp))
+
+        if (answer != null) {
+            Text("You said: “$answer”", style = MaterialTheme.typography.bodyMedium, color = CreamMuted)
+            Spacer(Modifier.height(6.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Your next overview will take this into account.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = CreamMuted,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    "Change",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = GoldLight,
+                    modifier = Modifier.clickable(onClick = onEdit).padding(horizontal = 6.dp, vertical = 4.dp)
+                )
+            }
+        } else {
+            FollowUpAnswerInput(question, options, onAnswer)
+        }
+    }
+}
+
+/** The tap-answers + free-text box of [FollowUpQuestionCard], shown until the question is answered. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun FollowUpAnswerInput(question: String, options: List<String>, onAnswer: (String) -> Unit) {
+    Column {
+        if (options.isNotEmpty()) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                options.forEach { option ->
+                    Box(
+                        modifier = Modifier
+                            .glassSoft(CircleShape)
+                            .clickable { onAnswer(option) }
+                            .padding(horizontal = 14.dp, vertical = 9.dp)
+                    ) {
+                        Text(option, style = MaterialTheme.typography.labelLarge, color = Cream)
+                    }
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+        }
+
+        var text by rememberSaveable(question) { mutableStateOf("") }
+        OutlinedTextField(
+            value = text,
+            onValueChange = { if (it.length <= 300) text = it },
+            placeholder = { Text(if (options.isEmpty()) "Your answer" else "Or in your own words") },
+            maxLines = 4,
+            keyboardOptions = KeyboardOptions(
+                capitalization = KeyboardCapitalization.Sentences,
+                imeAction = ImeAction.Send
+            ),
+            keyboardActions = KeyboardActions(onSend = { if (text.isNotBlank()) onAnswer(text) }),
+            trailingIcon = {
+                IconButton(onClick = { onAnswer(text) }, enabled = text.isNotBlank()) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.Send,
+                        contentDescription = "Send answer",
+                        tint = if (text.isNotBlank()) GoldLight else CreamMuted
+                    )
+                }
+            },
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "Your answer goes into your next overview.",
+            style = MaterialTheme.typography.bodySmall,
+            color = CreamMuted
+        )
     }
 }
 

@@ -14,6 +14,7 @@ import com.fitpal.app.ml.AiSource
 import com.fitpal.app.ml.ContextQuestionGenerator
 import com.fitpal.app.ml.FoodAnalysisPipeline
 import com.fitpal.app.ml.ModelManager
+import com.fitpal.app.ml.ReviewText
 import com.fitpal.app.ui.navigation.Screen
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -44,7 +45,18 @@ data class AiReviewUiState(
     /** Live stage shown while generating (gathering data → sending → waiting → …). */
     val progress: String = "",
     /** A check-in question to ask before generating; when non-null, shown instead of the review. */
-    val contextQuestion: ContextQuestion? = null
+    val contextQuestion: ContextQuestion? = null,
+    /** The coach's question at the end of the overview (QUESTION: line), and its tap-answers. */
+    val followUpQuestion: String? = null,
+    val followUpOptions: List<String> = emptyList(),
+    /** What the user answered to [followUpQuestion] (null = not answered yet). */
+    val followUpAnswer: String? = null,
+    /**
+     * Set when this overview may be out of date — food was logged (or changed) after it was written,
+     * so its numbers, and any "target missed" it mentions, may no longer hold. The screen shows it
+     * with a refresh. Null = up to date (or nothing to say).
+     */
+    val staleNote: String? = null
 )
 
 @HiltViewModel
@@ -81,10 +93,8 @@ class AiReviewViewModel @Inject constructor(
             // Already generated for this period? Show it instantly.
             val saved = aiReviewRepository.get(period, periodKey)
             if (saved != null) {
-                val p = parseReview(saved.text)
-                _uiState.update {
-                    it.copy(isLoading = false, review = p.prose, focus = p.focus, watch = p.watch, aiSource = saved.source)
-                }
+                showReview(saved.text, saved.source)
+                _uiState.update { it.copy(staleNote = staleNoteFor(saved)) }
                 return@launch
             }
             if (!reviewGenerator.canGenerate()) {
@@ -131,9 +141,29 @@ class AiReviewViewModel @Inject constructor(
         if (!reviewGenerator.canGenerate()) return
         viewModelScope.launch {
             aiReviewRepository.delete(period, periodKey)
-            _uiState.update { it.copy(isLoading = true, review = null, error = null, contextQuestion = null) }
+            _uiState.update {
+                it.copy(isLoading = true, review = null, error = null, contextQuestion = null, staleNote = null)
+            }
             generate()
         }
+    }
+
+    /**
+     * The user answered the coach's end-of-overview question. Saved against this overview, so the
+     * next overview reads it ("you asked…, they said…") and builds on it.
+     */
+    fun answerFollowUp(answer: String) {
+        val question = _uiState.value.followUpQuestion ?: return
+        val clean = answer.trim().take(MAX_ANSWER_CHARS).ifBlank { return }
+        _uiState.update { it.copy(followUpAnswer = clean) }
+        viewModelScope.launch {
+            runCatching { contextNoteRepository.saveFollowUp(period, periodKey, question, clean) }
+        }
+    }
+
+    /** Re-open the answer box to change what was said (the newest answer is the one that counts). */
+    fun editFollowUp() {
+        _uiState.update { it.copy(followUpAnswer = null) }
     }
 
     private suspend fun generate() {
@@ -146,37 +176,48 @@ class AiReviewViewModel @Inject constructor(
         }
         // Read back so the online/on-device badge reflects which engine produced it.
         val saved = aiReviewRepository.get(period, periodKey)
-        val p = parseReview(text)
-        _uiState.update {
-            it.copy(isLoading = false, review = p.prose, focus = p.focus, watch = p.watch, aiSource = saved?.source, progress = "")
-        }
+        showReview(text, saved?.source)
+        _uiState.update { it.copy(progress = "") }
     }
 
-    private data class ParsedReview(val prose: String, val focus: String?, val watch: String?)
+    /**
+     * Is a saved overview out of date? Written before more food was logged, it can't know about the
+     * 10 PM snack — and may call a target "missed" that's since been met. Overviews saved with the
+     * totals they were written from are compared exactly; older ones only know when they were
+     * written, so they're flagged if that was before their day/week/month was over.
+     */
+    private suspend fun staleNoteFor(saved: com.fitpal.app.data.repository.SavedReview): String? {
+        if (saved.dataSignature != null) {
+            val current = runCatching { reviewGenerator.currentSignature(period, periodKey) }.getOrNull()
+            return if (current != null && current != saved.dataSignature) "You've logged more since this was written" else null
+        }
+        val periodEnd = when (period) {
+            "weekly" -> parseDateOr(periodKey, LocalDate.now()).plusDays(6)
+            "monthly" -> parseMonthOr(periodKey, YearMonth.now()).atEndOfMonth()
+            else -> parseDateOr(periodKey, LocalDate.now())
+        }
+        val endMillis = periodEnd.plusDays(1).atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val noun = when (period) { "weekly" -> "week"; "monthly" -> "month"; else -> "day" }
+        return if (saved.generatedAt in 1 until endMillis) "Written before this $noun was over" else null
+    }
 
     /**
-     * Split the coach's two action cards off the prose. The model ends the review with `FOCUS:` and
-     * `WATCH:` lines (see [com.fitpal.app.ml.FoodPrompts]); we lift those into the green/red cards and
-     * keep them out of the body. Tolerant of markdown bold/bullets around the tags, and of older
-     * reviews that have no such lines (both come back null → no cards).
+     * Show a review: the prose, the coach's two action cards and its closing question — all lifted
+     * off the tagged lines the model ends with (see [ReviewText]). Older reviews without those lines
+     * just show prose. A question already answered shows the answer instead of the answer box.
      */
-    private fun parseReview(text: String): ParsedReview {
-        var focus: String? = null
-        var watch: String? = null
-        val prose = StringBuilder()
-        text.lines().forEach { line ->
-            val m = CARD_LINE.find(line)
-            if (m == null) {
-                prose.appendLine(line)
-                return@forEach
-            }
-            val body = m.groupValues[2].trim().trim('*', '_', ' ').ifBlank { null }
-            when (m.groupValues[1]) {
-                "FOCUS" -> if (focus == null) focus = body
-                "WATCH" -> if (watch == null) watch = body
-            }
+    private suspend fun showReview(text: String, source: AiSource?) {
+        val p = ReviewText.parse(text)
+        val answered = p.question?.let { q ->
+            runCatching { contextNoteRepository.getFollowUp(period, periodKey) }.getOrNull()
+                ?.takeIf { it.question == q }?.answer
         }
-        return ParsedReview(prose.toString().trim(), focus, watch)
+        _uiState.update {
+            it.copy(
+                isLoading = false, review = p.prose, focus = p.focus, watch = p.watch, aiSource = source,
+                followUpQuestion = p.question, followUpOptions = p.answers, followUpAnswer = answered
+            )
+        }
     }
 
     // ---------- Period helpers ----------
@@ -210,11 +251,6 @@ class AiReviewViewModel @Inject constructor(
         try { YearMonth.parse(s) } catch (e: Exception) { fallback }
 
     private companion object {
-        /**
-         * A `FOCUS:`/`WATCH:` card line, tolerating leading markdown (**, -, >, #). Uppercase-only on
-         * purpose (the prompt always emits it that way) so a prose sentence like "Watch your portions"
-         * can't be misread as a card.
-         */
-        private val CARD_LINE = Regex("^[\\s*_#>\\-]*(FOCUS|WATCH)\\s*:\\s*(.+)$")
+        const val MAX_ANSWER_CHARS = 300
     }
 }

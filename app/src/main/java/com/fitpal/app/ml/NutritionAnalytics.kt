@@ -138,7 +138,10 @@ data class NutritionBrief(
         }
 
         targetHitRates?.let {
-            sb.appendLine("• Last ${it.days} days met: calories at/under target ${it.caloriesUnderOrAt}/${it.days}, protein ${it.proteinMet}/${it.days}, fibre ${it.fiberMet}/${it.days}")
+            // On a daily review these are the days BEFORE the one being reviewed — say so, or the coach
+            // reads "fibre 2/7" as a verdict on the reviewed day itself.
+            val window = if (isDaily) "The ${it.days} logged days BEFORE this one (not including it)" else "Last ${it.days} logged days"
+            sb.appendLine("• $window met: calories at/under base target ${it.caloriesUnderOrAt}/${it.days}, protein ${it.proteinMet}/${it.days}, fibre ${it.fiberMet}/${it.days}")
         }
 
         if (proteinByMeal.isNotEmpty()) {

@@ -22,5 +22,10 @@ data class AiReviewEntity(
     /** Which AI produced it — "ONLINE" / "OFFLINE" (see [com.fitpal.app.ml.AiSource]); null if unknown. */
     val source: String? = null,
     /** The exact model that produced it ("gemini-3-flash-preview", "Gemma 3n E4B"); null if unknown. */
-    val model: String? = null
+    val model: String? = null,
+    /**
+     * The logged totals it was written from (see `ReviewGenerator.dataSignature`). When today's totals
+     * no longer match — food logged after it was written — the screen offers a refresh. Null = unknown.
+     */
+    val dataSignature: String? = null
 )

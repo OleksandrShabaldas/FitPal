@@ -1,7 +1,27 @@
 package com.fitpal.app.domain.model
 
-/** Enabled state + time (minutes since midnight) for one reminder. */
-data class ReminderState(val enabled: Boolean, val minutes: Int)
+import java.time.DayOfWeek
+
+/**
+ * Enabled state + time (minutes since midnight) for one reminder, plus the weekdays it fires on
+ * (every day unless the user picked some, e.g. a weigh-in only on Mondays and Thursdays).
+ */
+data class ReminderState(
+    val enabled: Boolean,
+    val minutes: Int,
+    val days: Set<DayOfWeek> = ALL_DAYS
+) {
+    companion object {
+        val ALL_DAYS: Set<DayOfWeek> = DayOfWeek.entries.toSet()
+        const val ALL_DAYS_MASK = 0b1111111
+
+        /** Days as a 7-bit mask (bit 0 = Monday ... bit 6 = Sunday), for storage. */
+        fun daysToMask(days: Set<DayOfWeek>): Int = days.fold(0) { acc, d -> acc or (1 shl (d.value - 1)) }
+
+        fun daysFromMask(mask: Int): Set<DayOfWeek> =
+            DayOfWeek.entries.filterTo(mutableSetOf()) { mask and (1 shl (it.value - 1)) != 0 }
+    }
+}
 
 /**
  * The optional, user-configurable reminders the app can post. Each is an independent daily (or
@@ -38,4 +58,7 @@ enum class ReminderKind(
 
     /** True for the two reminders that generate an AI review when they fire. */
     val isOverview: Boolean get() = this == DAILY_OVERVIEW || this == WEEKLY_OVERVIEW
+
+    /** Reminders whose Settings row offers a weekday picker (a weigh-in is often a few days a week). */
+    val supportsDays: Boolean get() = this == WEIGHT
 }

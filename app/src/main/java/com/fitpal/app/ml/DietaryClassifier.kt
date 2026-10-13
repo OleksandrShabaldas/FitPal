@@ -24,6 +24,11 @@ import javax.inject.Singleton
  *
  * Every method fails **open and quiet**: on any error it degrades to the heuristic (or empty), never
  * throwing, so classification can never block or break a log.
+ *
+ * **Logging never waits on the network.** [quickTags] answers instantly from the AI answers already
+ * remembered for a food (or the keyword match); the log is saved with those, and [tagFoods] then
+ * refines the tags in the background (see `MealRepository`). The AI answers are remembered per food +
+ * rule note, so the pre-log gate's check and the log right after it never ask the model twice.
  */
 @Singleton
 class DietaryClassifier @Inject constructor(
@@ -40,15 +45,56 @@ class DietaryClassifier @Inject constructor(
             settings.activeFastModels().any { !settings.isModelQuotaExhaustedToday(it) }
 
     /**
-     * Tag each of [names] with the subset of [kinds] it belongs to (aligned to the input order).
-     * Used at log time to tag items for the daily tally, and by the gate for known foods.
+     * Tag each of [names] with the subset of [kinds] it belongs to (aligned to the input order), asking
+     * the online model about any food it hasn't judged yet. Used by the gate for known foods (with a
+     * short [timeoutMs] — someone is waiting on it) and by the background refinement after a log.
      */
-    suspend fun tagFoods(names: List<String>, kinds: Set<DietaryRuleKind>): List<Set<DietaryRuleKind>> {
+    suspend fun tagFoods(
+        names: List<String>,
+        kinds: Set<DietaryRuleKind>,
+        timeoutMs: Long = TIMEOUT_MS
+    ): List<Set<DietaryRuleKind>> {
         if (names.isEmpty() || kinds.isEmpty()) return names.map { emptySet() }
-        if (canUseOnline()) {
-            aiTagFoods(names, kinds)?.let { return it }
+        val unknown = names.filter { cachedTags(it, kinds) == null }.distinct()
+        if (unknown.isNotEmpty() && canUseOnline()) {
+            aiTagFoods(unknown, kinds, timeoutMs)?.let { answers ->
+                unknown.forEachIndexed { i, name -> remember(name, kinds, answers.getOrElse(i) { emptySet() }) }
+            }
         }
-        return names.map { heuristicTags(it, kinds) }
+        return quickTags(names, kinds)
+    }
+
+    /**
+     * The tags for [names] right now, with no network: the AI's remembered answer for a food when
+     * there is one, otherwise the offline keyword match. This is what a log is saved with, so pressing
+     * "Log" never waits on the AI.
+     */
+    fun quickTags(names: List<String>, kinds: Set<DietaryRuleKind>): List<Set<DietaryRuleKind>> {
+        if (kinds.isEmpty()) return names.map { emptySet() }
+        return names.map { cachedTags(it, kinds) ?: heuristicTags(it, kinds) }
+    }
+
+    // ---- Remembered AI answers (per food + per rule note, so editing a note re-asks) ----
+
+    private val answers = object : LinkedHashMap<String, Boolean>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Boolean>?) = size > MAX_REMEMBERED
+    }
+
+    private fun answerKey(name: String, kind: DietaryRuleKind): String =
+        "${kind.id}|${settings.dietaryRuleFor(kind).definition.trim().hashCode()}|${name.trim().lowercase()}"
+
+    /** The AI's remembered tags for [name] across [kinds], or null if any kind hasn't been judged. */
+    private fun cachedTags(name: String, kinds: Set<DietaryRuleKind>): Set<DietaryRuleKind>? = synchronized(answers) {
+        val result = mutableSetOf<DietaryRuleKind>()
+        for (kind in kinds) {
+            val yes = answers[answerKey(name, kind)] ?: return null
+            if (yes) result += kind
+        }
+        result
+    }
+
+    private fun remember(name: String, kinds: Set<DietaryRuleKind>, tags: Set<DietaryRuleKind>) = synchronized(answers) {
+        kinds.forEach { kind -> answers[answerKey(name, kind)] = kind in tags }
     }
 
     /**
@@ -57,7 +103,8 @@ class DietaryClassifier @Inject constructor(
      */
     suspend fun screenImage(bitmap: Bitmap, note: String, kinds: Set<DietaryRuleKind>): Set<DietaryRuleKind> {
         if (kinds.isEmpty() || !canUseOnline()) return emptySet()
-        val raw = safeGenerate(prompt = screenPrompt(kinds, imageNote = note), image = bitmap) ?: return emptySet()
+        val raw = safeGenerate(prompt = screenPrompt(kinds, imageNote = note), image = bitmap, timeoutMs = GATE_TIMEOUT_MS)
+            ?: return emptySet()
         return parseIdList(raw).mapNotNull { DietaryRuleKind.fromId(it) }.toSet().intersect(kinds)
     }
 
@@ -65,7 +112,7 @@ class DietaryClassifier @Inject constructor(
     suspend fun screenText(text: String, kinds: Set<DietaryRuleKind>): Set<DietaryRuleKind> {
         if (kinds.isEmpty() || text.isBlank()) return emptySet()
         if (canUseOnline()) {
-            val raw = safeGenerate(prompt = screenPrompt(kinds, description = text))
+            val raw = safeGenerate(prompt = screenPrompt(kinds, description = text), timeoutMs = GATE_TIMEOUT_MS)
             if (raw != null) return parseIdList(raw).mapNotNull { DietaryRuleKind.fromId(it) }.toSet().intersect(kinds)
         }
         return heuristicTags(text, kinds)
@@ -73,7 +120,11 @@ class DietaryClassifier @Inject constructor(
 
     // ---- Online ----
 
-    private suspend fun aiTagFoods(names: List<String>, kinds: Set<DietaryRuleKind>): List<Set<DietaryRuleKind>>? {
+    private suspend fun aiTagFoods(
+        names: List<String>,
+        kinds: Set<DietaryRuleKind>,
+        timeoutMs: Long
+    ): List<Set<DietaryRuleKind>>? {
         val foodsJson = JSONArray().apply { names.forEach { put(it) } }.toString()
         val prompt = buildString {
             append("You label foods by which of these categories each one belongs to.\n\n")
@@ -86,7 +137,7 @@ class DietaryClassifier @Inject constructor(
             append("each inner array holding the matching category ids. ")
             append("Example for [\"Tiramisu\",\"Grilled chicken\",\"Cola\"]: [[\"dessert\"],[],[\"drink\"]]")
         }
-        val raw = safeGenerate(prompt = prompt) ?: return null
+        val raw = safeGenerate(prompt = prompt, timeoutMs = timeoutMs) ?: return null
         val matrix = parseIdMatrix(raw, names.size) ?: return null
         return matrix.map { ids -> ids.mapNotNull { DietaryRuleKind.fromId(it) }.toSet().intersect(kinds) }
     }
@@ -124,8 +175,8 @@ class DietaryClassifier @Inject constructor(
         }
     }
 
-    private suspend fun safeGenerate(prompt: String, image: Bitmap? = null): String? =
-        withTimeoutOrNull(TIMEOUT_MS) {
+    private suspend fun safeGenerate(prompt: String, image: Bitmap? = null, timeoutMs: Long): String? =
+        withTimeoutOrNull(timeoutMs) {
             runCatching {
                 gemini.generate(
                     prompt = prompt,
@@ -180,10 +231,14 @@ class DietaryClassifier @Inject constructor(
         return runCatching { JSONArray(raw.substring(start, end + 1)) }.getOrNull()
     }
 
-    private companion object {
-        const val TAG = "DietaryClassifier"
-        // Last-resort outer bound — sits just above GeminiClient's fast-mode socket timeouts
-        // (~8s connect + 12s read), which are the real cap; on timeout we fall back to the heuristic.
-        const val TIMEOUT_MS = 22_000L
+    companion object {
+        private const val TAG = "DietaryClassifier"
+        // Background refinement bound — sits just above GeminiClient's fast-mode socket timeouts
+        // (~8s connect + 12s read); on timeout we keep the heuristic. Cancellation closes the socket,
+        // so this is a real cap now, not a hint.
+        private const val TIMEOUT_MS = 22_000L
+        /** When a person is waiting on the answer (the pre-log gate): short, then the keyword match. */
+        const val GATE_TIMEOUT_MS = 6_000L
+        private const val MAX_REMEMBERED = 400
     }
 }

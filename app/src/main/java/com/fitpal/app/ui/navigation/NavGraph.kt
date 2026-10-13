@@ -366,7 +366,7 @@ fun FitPalNavHost(
 
             composable(Screen.Settings.route) {
                 SettingsScreen(
-                    onOpenCategory = { id -> navController.navigate(Screen.SettingsCategory.buildRoute(id)) },
+                    onOpenCategory = { id, focus -> navController.navigate(Screen.SettingsCategory.buildRoute(id, focus)) },
                     onOpenFeedback = { navController.navigate(Screen.Feedback.route) },
                     onOpenWidgets = { navController.navigate(Screen.WidgetGallery.route) },
                     onSwipeToCollection = { navTo(Screen.Collection.route) },
@@ -376,11 +376,19 @@ fun FitPalNavHost(
 
             composable(
                 route = Screen.SettingsCategory.route,
-                arguments = listOf(navArgument(Screen.SettingsCategory.ARG_CATEGORY) { type = NavType.StringType })
+                arguments = listOf(
+                    navArgument(Screen.SettingsCategory.ARG_CATEGORY) { type = NavType.StringType },
+                    navArgument(Screen.SettingsCategory.ARG_FOCUS) {
+                        type = NavType.StringType
+                        nullable = true
+                        defaultValue = null
+                    }
+                )
             ) { backStackEntry ->
                 val category = backStackEntry.arguments?.getString(Screen.SettingsCategory.ARG_CATEGORY) ?: ""
                 SettingsCategoryScreen(
                     category = category,
+                    focus = backStackEntry.arguments?.getString(Screen.SettingsCategory.ARG_FOCUS),
                     onManageModels = { navController.navigate(Screen.ModelSetup.route) },
                     onCustomizeScreen = { screenId -> navController.navigate(Screen.CustomizeWidgets.buildRoute(screenId)) },
                     onReplayIntro = { navController.navigate(Screen.Onboarding.buildRoute(replay = true)) },

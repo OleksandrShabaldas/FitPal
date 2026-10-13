@@ -12,9 +12,13 @@ interface ContextNoteDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(note: ContextNoteEntity)
 
-    /** The answer already given for this exact period+date, if any — so we don't re-ask. */
-    @Query("SELECT * FROM context_notes WHERE period = :period AND date = :date ORDER BY timestamp DESC LIMIT 1")
+    /** The check-in answer already given for this exact period+date, if any — so we don't re-ask. */
+    @Query("SELECT * FROM context_notes WHERE kind = 'checkin' AND period = :period AND date = :date ORDER BY timestamp DESC LIMIT 1")
     suspend fun getForPeriod(period: String, date: String): ContextNoteEntity?
+
+    /** The latest answer to the coach's end-of-overview question for one overview ([date] = its period key). */
+    @Query("SELECT * FROM context_notes WHERE kind = 'followup' AND period = :period AND date = :date ORDER BY timestamp DESC LIMIT 1")
+    suspend fun getFollowUp(period: String, date: String): ContextNoteEntity?
 
     /**
      * Recent answers (any period) on/after [sinceDate], newest first — fed into a review as
@@ -22,7 +26,7 @@ interface ContextNoteDao {
      */
     @Query("""
         SELECT * FROM context_notes
-        WHERE date >= :sinceDate AND answer != 'skipped'
+        WHERE kind = 'checkin' AND date >= :sinceDate AND answer != 'skipped'
         ORDER BY timestamp DESC
         LIMIT :limit
     """)

@@ -56,7 +56,7 @@ import com.fitpal.app.data.local.entity.WeightEntryEntity
         UsdaFoodEntity::class,
         WeightEntryEntity::class
     ],
-    version = 30,
+    version = 31,
     exportSchema = true
 )
 abstract class FitPalDatabase : RoomDatabase() {
@@ -509,6 +509,23 @@ abstract class FitPalDatabase : RoomDatabase() {
                         checkedAt INTEGER NOT NULL
                     )
                 """)
+            }
+        }
+
+        /**
+         * v30 -> v31: fibre in the food database, and a coach that remembers.
+         *  - `usda_foods.fiberPer100g`: database foods carry their fibre (0 = unknown), so a database
+         *    apple isn't logged with 0 g fibre.
+         *  - `context_notes.kind`: "checkin" (the question asked before an unusual day's overview) or
+         *    "followup" (the coach's question at the end of an overview, answered for the next one).
+         *  - `ai_reviews.dataSignature`: the logged totals an overview was written from, so a later
+         *    visit can tell it's out of date (food logged after it was written).
+         */
+        val MIGRATION_30_31 = object : Migration(30, 31) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE usda_foods ADD COLUMN fiberPer100g REAL NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE context_notes ADD COLUMN kind TEXT NOT NULL DEFAULT 'checkin'")
+                db.execSQL("ALTER TABLE ai_reviews ADD COLUMN dataSignature TEXT")
             }
         }
     }

@@ -93,10 +93,15 @@ sealed class Screen(val route: String) {
         fun buildRoute(id: Long): String = "exercise_detail/$id"
     }
 
-    /** One category of settings opened from the Settings hub (Android-style sub-screen). */
-    data object SettingsCategory : Screen("settings_category/{category}") {
+    /**
+     * One category of settings opened from the Settings hub (Android-style sub-screen). [ARG_FOCUS]
+     * (optional) is a section to scroll to and highlight — set by a settings search result.
+     */
+    data object SettingsCategory : Screen("settings_category/{category}?focus={focus}") {
         const val ARG_CATEGORY = "category"
-        fun buildRoute(category: String): String = "settings_category/$category"
+        const val ARG_FOCUS = "focus"
+        fun buildRoute(category: String, focus: String? = null): String =
+            "settings_category/$category" + (focus?.let { "?focus=$it" } ?: "")
     }
 
     /**

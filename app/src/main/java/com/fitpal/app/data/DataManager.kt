@@ -33,7 +33,10 @@ class DataManager @Inject constructor(
         "meal_logs", "meal_log_items", "weight_entries", "step_entries",
         "exercise_entries", "gallery_foods", "gallery_ingredients",
         "gallery_categories", "saved_workouts",
-        "trail_state", "trail_projects", "trail_unlocks", "challenges", "ai_reviews"
+        "trail_state", "trail_projects", "trail_unlocks", "challenges", "ai_reviews",
+        // The coach's memory: your check-in answers and your answers to its end-of-overview questions.
+        // (Older backups don't have it — restore skips a table the file doesn't contain.)
+        "context_notes"
     )
 
     /** Write all user data as JSON to [uri]. Returns true on success. */

@@ -147,6 +147,7 @@ class ManualEntryViewModel @Inject constructor(
             proteinPer100g = food.proteinPer100g,
             fatPer100g = food.fatPer100g,
             carbsPer100g = food.carbsPer100g,
+            fiberPer100g = food.fiberPer100g,
             waterMlPer100g = waterFor(drink, food.carbsPer100g, food.proteinPer100g, food.fatPer100g),
             isDrink = drink,
             // Linked to its database row: the background check fills its fibre/vitamins/caffeine

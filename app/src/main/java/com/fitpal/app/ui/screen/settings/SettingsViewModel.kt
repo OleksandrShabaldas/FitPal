@@ -71,6 +71,9 @@ class SettingsViewModel @Inject constructor(
     fun setReminder(kind: com.fitpal.app.domain.model.ReminderKind, enabled: Boolean, minutes: Int) =
         reminderManager.setReminder(kind, enabled, minutes)
 
+    fun setReminderDays(kind: com.fitpal.app.domain.model.ReminderKind, days: Set<java.time.DayOfWeek>) =
+        reminderManager.setReminderDays(kind, days)
+
     /** Whether exact alarms are currently permitted (drives the "Background reliability" prompt). */
     fun canScheduleExactAlarms(): Boolean = reminderManager.canScheduleExactAlarms()
     /** Re-apply the schedule (e.g. after the user grants the exact-alarm permission). */

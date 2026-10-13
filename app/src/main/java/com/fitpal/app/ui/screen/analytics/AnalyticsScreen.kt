@@ -185,9 +185,10 @@ fun AnalyticsScreen(
     val dayMonth = DateTimeFormatter.ofPattern("d MMM")
     val dayMonthYear = DateTimeFormatter.ofPattern("d MMM yyyy")
     val dailyKey = today.format(iso)
-    // AI weekly/monthly reviews follow the period you're actually viewing.
-    val weekStartKey = anchor.minusDays((anchor.dayOfWeek.value - 1).toLong()).format(iso)
-    val monthKey = java.time.YearMonth.from(anchor).toString()
+    // AI weekly/monthly reviews follow the period you're viewing — except right after one ends, when
+    // "this month" / "this week" means the one just finished (see ReviewPeriods).
+    val weekReview = com.fitpal.app.domain.ReviewPeriods.week(anchor, today)
+    val monthReview = com.fitpal.app.domain.ReviewPeriods.month(anchor, today)
 
     // Two windows. weekDates = the calendar period (Mon–Sun week, or 30 days) — used by logged-days,
     // calorie-balance, macro-balance and the Calories widget. rollingDates = the last N days — used
@@ -814,8 +815,8 @@ fun AnalyticsScreen(
                             Text("AI reviews", style = MaterialTheme.typography.headlineSmall, color = Cream, modifier = Modifier.padding(top = 6.dp))
                         }
                         item { AiReviewCard("Today", "Tap for a review of today", "ai_today", spotlight, viewModel::toggleSpotlight, highlight = highlight == "aihdr") { onOpenReview("daily", dailyKey) } }
-                        item { AiReviewCard("This week", "Tap for your 7-day overview", "ai_week", spotlight, viewModel::toggleSpotlight, highlight = highlight == "aihdr") { onOpenReview("weekly", weekStartKey) } }
-                        item { AiReviewCard("This month", "Tap for your monthly overview", "ai_month", spotlight, viewModel::toggleSpotlight, highlight = highlight == "aihdr") { onOpenReview("monthly", monthKey) } }
+                        item { AiReviewCard(weekReview.title, weekReview.subtitle, "ai_week", spotlight, viewModel::toggleSpotlight, highlight = highlight == "aihdr") { onOpenReview("weekly", weekReview.key) } }
+                        item { AiReviewCard(monthReview.title, monthReview.subtitle, "ai_month", spotlight, viewModel::toggleSpotlight, highlight = highlight == "aihdr") { onOpenReview("monthly", monthReview.key) } }
                     }
                 }
             }

@@ -190,6 +190,14 @@ interface MealLogDao {
     @Query("UPDATE meal_log_items SET caffeineMg = :caffeineMg WHERE id = :id")
     suspend fun updateItemCaffeine(id: Long, caffeineMg: Float?)
 
+    /** Logged items made (at least partly) from a built-in database food — seed ids are negative. */
+    @Query("SELECT * FROM meal_log_items WHERE ingredientsJson LIKE '%\"src\":-%'")
+    suspend fun getItemsWithSeedIngredients(): List<MealLogItemEntity>
+
+    /** Rewrite an item's dietary-rule tags (the background AI refinement after a log). */
+    @Query("UPDATE meal_log_items SET ruleTags = :ruleTags WHERE id = :id")
+    suspend fun updateItemRuleTags(id: Long, ruleTags: String?)
+
     /** Meals on [from]..[to] with at least one item whose caffeine isn't known yet (tracker backfill). */
     @Query("""
         SELECT DISTINCT i.mealLogId FROM meal_log_items i JOIN meal_logs m ON i.mealLogId = m.id

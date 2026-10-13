@@ -4,9 +4,12 @@ import android.graphics.Bitmap
 import android.util.Base64
 import android.util.Log
 import com.fitpal.app.data.repository.SettingsRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -14,6 +17,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
+import java.net.SocketTimeoutException
 import java.net.URL
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -69,7 +73,14 @@ class GeminiClient @Inject constructor(
         models: List<String>? = null,
         // Fast mode for the lightweight dietary-rule check: a single attempt and short socket
         // timeouts, so a slow network can't stall a log (it falls back to the offline heuristic).
-        fast: Boolean = false
+        fast: Boolean = false,
+        // Hedging for the calls a person sits and watches (photo / description analysis): if the
+        // model hasn't answered after this long, ask the next model in parallel and take whichever
+        // answers first. A stalled request on a busy preview model used to hold the screen for up
+        // to 3 minutes; a second, fresh request usually lands in seconds. Null = no hedging.
+        hedgeAfterMs: Long? = null,
+        // Overrides the socket read timeout (default: 180 s, or 12 s in fast mode).
+        readTimeoutMs: Int? = null
     ): String {
         val key = settingsRepository.geminiApiKey.value?.trim()
         if (key.isNullOrBlank()) throw GeminiUnavailableException("No Gemini API key set")
@@ -79,12 +90,22 @@ class GeminiClient @Inject constructor(
         val candidates = (models ?: settingsRepository.activeModels()).filter { !settingsRepository.isModelQuotaExhaustedToday(it) }
         if (candidates.isEmpty()) throw GeminiQuotaException("All AI models are out of free quota for today")
 
+        if (hedgeAfterMs != null) {
+            val (model, text) = raceModels(candidates, hedgeAfterMs, onProgress, settingsRepository::markModelQuotaExhausted) { model, progress ->
+                requestModel(model, prompt, images, temperature, jsonMode, thinkingLevel, key, progress, fast, readTimeoutMs)
+            }
+            onModel(model)
+            return text
+        }
+
         var allQuota = true
         var lastFailure = "Gemini request failed"
         for ((index, model) in candidates.withIndex()) {
+            // Cancelled (the caller timed out or gave up)? Don't start another model.
+            currentCoroutineContext().ensureActive()
             if (index > 0) onProgress("Switching to fallback model: $model…")
             try {
-                val text = requestModel(model, prompt, images, temperature, jsonMode, thinkingLevel, key, onProgress, fast)
+                val text = requestModel(model, prompt, images, temperature, jsonMode, thinkingLevel, key, onProgress, fast, readTimeoutMs)
                 onModel(model)
                 return text
             } catch (e: GeminiQuotaException) {
@@ -129,7 +150,8 @@ class GeminiClient @Inject constructor(
         thinkingLevel: String?,
         key: String,
         onProgress: (String) -> Unit,
-        fast: Boolean = false
+        fast: Boolean = false,
+        readTimeoutMs: Int? = null
     ): String = withContext(Dispatchers.IO) {
         if (images.isNotEmpty()) onProgress("Compressing and encoding the photo…")
         // Rebuildable so we can drop thinkingConfig and retry if a model rejects it (see below).
@@ -144,6 +166,9 @@ class GeminiClient @Inject constructor(
         var lastFailure = "Gemini request failed"
         repeat(attempts) { attempt ->
             var connection: HttpURLConnection? = null
+            // True once the request is sent and we're only waiting for the model — a read timeout
+            // there means the model stalled, which retrying the same model rarely fixes.
+            var waitingForModel = false
             onProgress(if (attempt == 0) "Sending the request to the online AI…"
                        else "Retrying online (attempt ${attempt + 1}/$attempts)…")
             try {
@@ -152,21 +177,23 @@ class GeminiClient @Inject constructor(
                     connectTimeout = if (fast) 8_000 else 30_000
                     // Generous for analysis: a multimodal "thinking" model analysing a photo can take
                     // a while. Fast mode keeps it short so a bad network falls back quickly instead.
-                    readTimeout = if (fast) 12_000 else 180_000
+                    readTimeout = readTimeoutMs ?: if (fast) 12_000 else 180_000
                     doOutput = true
                     setRequestProperty("Content-Type", "application/json")
                     setRequestProperty("x-goog-api-key", key)
                 }
-                connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+                // Bind to a non-null local — the lambdas below capture it, and a captured nullable
+                // `var` can't be smart-cast.
+                val conn = connection
+                disconnectOnCancel(conn) { conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) } }
 
                 // Fetching the response code blocks until the model has finished thinking + answering
                 // — that's the long, silent minute(s) the user stares at. Tick a live elapsed timer +
                 // rotating reassurance on a *separate* thread while this thread is blocked, so the UI
                 // shows something is actually happening instead of one frozen "waiting…" line.
-                // (Bind to a non-null local first — the heartbeat lambda captures it, and a captured
-                // nullable `var` can't be smart-cast.)
-                val conn = connection
-                val code = awaitWithHeartbeat(onProgress) { conn.responseCode }
+                waitingForModel = true
+                val code = awaitWithHeartbeat(onProgress, conn) { conn.responseCode }
+                waitingForModel = false
                 when {
                     code == 429 -> {
                         val err = runCatching { connection.errorStream?.bufferedReader()?.use { it.readText() } }.getOrNull()
@@ -207,12 +234,24 @@ class GeminiClient @Inject constructor(
                         }
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: GeminiQuotaException) {
                 throw e
             } catch (e: GeminiUnavailableException) {
                 throw e
             } catch (e: Exception) {
-                // Network drop / timeout — transient, worth a retry.
+                // Cancelled mid-request (a hedge won, a timeout fired): the closed socket surfaces
+                // here as an IOException — let the cancellation through instead of retrying.
+                ensureActive()
+                // The request went out but the model never answered within the read timeout: it's
+                // stalled. Retrying the same model would just wait the full timeout again, so give
+                // up on it and let the caller move on to the next model.
+                if (waitingForModel && e is SocketTimeoutException) {
+                    Log.w(TAG, "$model didn't answer within the read timeout — moving on")
+                    throw GeminiUnavailableException("The online AI took too long to answer")
+                }
+                // Network drop / connect timeout — transient, worth a retry.
                 lastFailure = e.message ?: "Network error"
                 if (attempt < attempts - 1) onProgress("Connection issue — waiting to retry…")
                 Log.w(TAG, "Network error (attempt ${attempt + 1}/$attempts): ${e.message}")
@@ -243,7 +282,11 @@ class GeminiClient @Inject constructor(
      * [Dispatchers.Default] so it keeps updating an elapsed-time message regardless. Cancelled the
      * instant [block] returns (or throws), so it never outlives the wait.
      */
-    private suspend fun <T> awaitWithHeartbeat(onProgress: (String) -> Unit, block: () -> T): T = coroutineScope {
+    private suspend fun <T> awaitWithHeartbeat(
+        onProgress: (String) -> Unit,
+        conn: HttpURLConnection,
+        block: () -> T
+    ): T = coroutineScope {
         val start = System.currentTimeMillis()
         onProgress(waitingMessage(0))
         val ticker = launch(Dispatchers.Default) {
@@ -253,7 +296,7 @@ class GeminiClient @Inject constructor(
             }
         }
         try {
-            block()
+            disconnectOnCancel(conn, block)
         } finally {
             ticker.cancel()
         }

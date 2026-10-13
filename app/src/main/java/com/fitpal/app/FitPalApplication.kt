@@ -24,6 +24,8 @@ class FitPalApplication : Application() {
         fun watchLink(): com.fitpal.app.wear.WatchLink
         fun updateManager(): com.fitpal.app.update.UpdateManager
         fun widgetUpdater(): com.fitpal.app.widget.WidgetUpdater
+        fun mealRepository(): com.fitpal.app.data.repository.MealRepository
+        fun settingsRepository(): com.fitpal.app.data.repository.SettingsRepository
     }
 
     override fun onCreate() {
@@ -54,6 +56,18 @@ class FitPalApplication : Application() {
             runCatching { com.fitpal.app.widget.WidgetPreviews.publishOnce(this@FitPalApplication) }
         }
 
+        // One-time repair: give foods already logged from the built-in database the fibre they were
+        // saved without (the database didn't carry fibre before DB v31).
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            runCatching {
+                val settings = entryPoint.settingsRepository()
+                if (!settings.isRepairDone(REPAIR_SEED_FIBER)) {
+                    entryPoint.mealRepository().backfillSeedFiber()
+                    settings.markRepairDone(REPAIR_SEED_FIBER)
+                }
+            }
+        }
+
         // Once-a-day look for a newer GitHub release (this build is sideloaded, so there's no
         // store to do it). No-op if the user turned auto-check off or it already ran today.
         runCatching { entryPoint.updateManager().checkOnStartIfDue() }
@@ -80,5 +94,9 @@ class FitPalApplication : Application() {
             override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
             override fun onActivityDestroyed(activity: Activity) {}
         })
+    }
+
+    private companion object {
+        const val REPAIR_SEED_FIBER = "seed_fiber_v31"
     }
 }

@@ -92,6 +92,7 @@ class BarcodeViewModel @Inject constructor(
                             proteinPer100g = product.proteinPer100g,
                             fatPer100g = product.fatPer100g,
                             carbsPer100g = product.carbsPer100g,
+                            fiberPer100g = product.fiberPer100g,
                             waterMlPer100g = if (drink) com.fitpal.app.domain.Drinks.estimateWaterPer100(product.carbsPer100g, product.proteinPer100g, product.fatPer100g) else 0f,
                             isDrink = drink,
                             // Linked to its database row so the background check fills its gaps once.

@@ -15,6 +15,8 @@ import androidx.room.PrimaryKey
  *  - period = "daily" | "weekly"
  *  - date   = the day the question was asked (daily: that day; weekly: the week's anchor date)
  *  - answer = the option the user picked, their free text, or "skipped" if they dismissed it
+ *  - kind   = [KIND_CHECKIN] (asked before an unusual period's overview) or [KIND_FOLLOW_UP] (the
+ *             coach's question at the end of an overview; `date` is then that overview's period key)
  */
 @Entity(
     tableName = "context_notes",
@@ -27,5 +29,11 @@ data class ContextNoteEntity(
     val period: String,
     val question: String,
     val answer: String,
-    val timestamp: Long = System.currentTimeMillis()
-)
+    val timestamp: Long = System.currentTimeMillis(),
+    val kind: String = KIND_CHECKIN
+) {
+    companion object {
+        const val KIND_CHECKIN = "checkin"
+        const val KIND_FOLLOW_UP = "followup"
+    }
+}

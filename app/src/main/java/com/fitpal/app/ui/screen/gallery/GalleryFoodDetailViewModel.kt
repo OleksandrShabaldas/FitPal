@@ -135,6 +135,7 @@ class GalleryFoodDetailViewModel @Inject constructor(
             proteinPer100g = food.proteinPer100g,
             fatPer100g = food.fatPer100g,
             carbsPer100g = food.carbsPer100g,
+            fiberPer100g = food.fiberPer100g,
             sourceFoodId = food.fdcId
         )
         _uiState.update { it.copy(searchQuery = "", searchResults = emptyList()) }
@@ -167,6 +168,7 @@ class GalleryFoodDetailViewModel @Inject constructor(
             proteinPer100g = food.proteinPer100g,
             fatPer100g = food.fatPer100g,
             carbsPer100g = food.carbsPer100g,
+            fiberPer100g = food.fiberPer100g,
             sourceFoodId = food.fdcId
         )
         _uiState.update { it.copy(searchQuery = "", searchResults = emptyList()) }

@@ -24,7 +24,25 @@ class ContextNoteRepository @Inject constructor(
     suspend fun getForPeriod(period: String, date: String): ContextNoteEntity? =
         contextNoteDao.getForPeriod(period, date)
 
-    /** Recent real answers (newest first) since [sinceDate], for feeding into a review. */
+    /** Recent real check-in answers (newest first) since [sinceDate], for feeding into a review. */
     suspend fun getRecentAnswers(sinceDate: String, limit: Int = 10): List<ContextNoteEntity> =
         contextNoteDao.getRecentAnswers(sinceDate, limit)
+
+    /**
+     * Record the user's answer to the coach's end-of-overview question. Stored against that overview
+     * ([period] + [periodKey]) so the next overview can read "you asked X, they said Y". Answering
+     * again just adds a newer row; the latest one wins.
+     */
+    suspend fun saveFollowUp(period: String, periodKey: String, question: String, answer: String) {
+        contextNoteDao.insert(
+            ContextNoteEntity(
+                date = periodKey, period = period, question = question, answer = answer,
+                kind = ContextNoteEntity.KIND_FOLLOW_UP
+            )
+        )
+    }
+
+    /** The answer to an overview's end-of-overview question, if the user gave one. */
+    suspend fun getFollowUp(period: String, periodKey: String): ContextNoteEntity? =
+        contextNoteDao.getFollowUp(period, periodKey)
 }

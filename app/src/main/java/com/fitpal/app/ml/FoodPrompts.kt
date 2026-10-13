@@ -400,6 +400,7 @@ object FoodPrompts {
               realistic and SUSTAINABLE. If nothing needs changing, say so and stop — don't manufacture
               a problem.
             - Refer to the day/period by the REVIEWING date above; never "today"/"yesterday"/"tomorrow".
+            - Whether a target was met comes ONLY from the TARGET CHECK above — never contradict it.
             - NEVER use: "fat-bomb", "solid win", "brilliant move", "treat yourself", "cheat day",
               "cheat meal", "guilty pleasure", "naughty", "clean eating", "be patient with yourself",
               "crushing it".
@@ -407,10 +408,13 @@ object FoodPrompts {
               prose — thorough enough to actually explain, never padded.
 
             After the prose (and BEFORE the HABITS line if you were asked for one), output exactly these
-            two lines — each on its own line, each ONE sentence under ~30 words, each grounded in a
-            SPECIFIC number/food/pattern from THIS data, never generic:
+            four lines — each on its own line. FOCUS and WATCH are each ONE sentence under ~30 words,
+            grounded in a SPECIFIC number/food/pattern from THIS data, never generic, and never a repeat of
+            earlier coaching unless you say why it still matters:
             FOCUS: <the single most useful thing to DO going forward, with a concrete example — a specific food or swap>
             WATCH: <the single most important pattern or risk to keep an eye on, with why it matters and a concrete fix>
+            QUESTION: <ONE short question for the user (under 20 words) whose answer would most improve your next overview — e.g. what got in the way of the FOCUS, or the reason behind a pattern the numbers can't explain>
+            ANSWERS: <2-4 likely short answers they could tap, each under 6 words, separated by " | ">
         """.trimIndent()
     }
 
@@ -487,7 +491,8 @@ object FoodPrompts {
             kg) plus a burn estimate that runs high and logging that runs low — not a reason to eat
             less. Respect the personal context/limitations. Recommend STRATEGIES with concrete examples,
             never brands or clock-times. Refer to the day/period by the REVIEWING date above; never
-            "today"/"yesterday"/"tomorrow".
+            "today"/"yesterday"/"tomorrow". Whether a target was met comes ONLY from the TARGET CHECK
+            above — never contradict it.
 
             TONE: an experienced, level-headed coach who explains their reasoning — not an influencer,
             robot, or cheerleader; advise, don't command. Emotionally neutral about food (calorie-dense
@@ -497,10 +502,13 @@ object FoodPrompts {
             Length: ${if (isDaily) "roughly 250–400" else "roughly 300–450"} words of flowing prose, thorough but not padded.
 
             After the prose (and BEFORE the HABITS line if you were asked for one), output exactly these
-            two lines — each ONE sentence under ~30 words, each grounded in a SPECIFIC number/food/
-            pattern from this data, never generic:
+            four lines. FOCUS and WATCH are each ONE sentence under ~30 words, grounded in a SPECIFIC
+            number/food/pattern from this data, never generic, and never a repeat of earlier coaching
+            unless you say why it still matters:
             FOCUS: <the single most useful thing to DO going forward, with a concrete example — a specific food or swap>
             WATCH: <the single most important pattern or risk to keep an eye on, with why it matters and a concrete fix>
+            QUESTION: <ONE short question for the user (under 20 words) whose answer would most improve your next overview — e.g. what got in the way of the FOCUS, or the reason behind a pattern the numbers can't explain>
+            ANSWERS: <2-4 likely short answers they could tap, each under 6 words, separated by " | ">
         """.trimIndent()
     }
 

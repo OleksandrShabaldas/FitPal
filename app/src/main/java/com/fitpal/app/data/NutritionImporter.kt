@@ -147,7 +147,8 @@ class NutritionImporter @Inject constructor(
                     fatPer100g = n[2],
                     carbsPer100g = n[3],
                     commonServingGrams = null,
-                    foodCategory = null
+                    foodCategory = null,
+                    fiberPer100g = fiberWithinCarbs(n[4], n[3])
                 )
             )
         }
@@ -321,6 +322,7 @@ class NutritionImporter @Inject constructor(
             val iPro = col("protein_100g", "proteins_100g", "protein")
             val iFat = col("fat_100g", "fat")
             val iCarb = col("carbs_100g", "carbohydrates_100g", "carbs")
+            val iFib = col("fiber_100g", "fibre_100g", "fiber", "fibre")
             val iServ = col("serving_g", "serving_quantity", "serving")
             if (iName < 0 || iKcal < 0) {
                 throw IOException("CSV needs at least a name and a kcal column")
@@ -335,12 +337,13 @@ class NutritionImporter @Inject constructor(
                 val pro = if (iPro >= 0) cols.getOrNull(iPro)?.toFloatOrNull() ?: 0f else 0f
                 val fat = if (iFat >= 0) cols.getOrNull(iFat)?.toFloatOrNull() ?: 0f else 0f
                 val carb = if (iCarb >= 0) cols.getOrNull(iCarb)?.toFloatOrNull() ?: 0f else 0f
+                val fib = if (iFib >= 0) cols.getOrNull(iFib)?.toFloatOrNull() ?: 0f else 0f
                 if (kcal <= 0f && pro <= 0f && fat <= 0f && carb <= 0f) return@readLines
                 val code = if (iCode >= 0) cols.getOrNull(iCode)?.trim().orEmpty() else ""
                 val serving = if (iServ >= 0) cols.getOrNull(iServ)?.toFloatOrNull()?.takeIf { it > 0f } else null
                 // Same id scheme as barcode scans, so a scan of an imported product resolves offline.
                 val id = if (code.isNotEmpty()) ("off:$code").hashCode() else (name + kcal).hashCode()
-                batch.add(UsdaFoodEntity(id, name, kcal, pro, fat, carb, serving, "Open Food Facts"))
+                batch.add(UsdaFoodEntity(id, name, kcal, pro, fat, carb, serving, "Open Food Facts", fiberWithinCarbs(fib, carb)))
                 if (batch.size >= BATCH_SIZE) {
                     nutritionDao.insertAllBlocking(batch)
                     inserted += batch.size
@@ -380,7 +383,7 @@ class NutritionImporter @Inject constructor(
                             val slot = NUTRIENT_SLOTS[nid] ?: return@readLines
                             val fdc = cols.getOrNull(idxFdc)?.toIntOrNull() ?: return@readLines
                             val amt = cols.getOrNull(idxAmt)?.toFloatOrNull() ?: return@readLines
-                            out.getOrPut(fdc) { FloatArray(4) }[slot] = amt
+                            out.getOrPut(fdc) { FloatArray(5) }[slot] = amt
                         }
                     }
                     break
@@ -414,7 +417,7 @@ class NutritionImporter @Inject constructor(
                             if (n[0] <= 0f && n[1] <= 0f && n[2] <= 0f && n[3] <= 0f) return@readLines
                             val desc = cols.getOrNull(idxDesc)?.trim().orEmpty()
                             if (desc.isEmpty()) return@readLines
-                            batch.add(UsdaFoodEntity(fdc, desc, n[0], n[1], n[2], n[3], null, "Branded"))
+                            batch.add(UsdaFoodEntity(fdc, desc, n[0], n[1], n[2], n[3], null, "Branded", fiberWithinCarbs(n[4], n[3])))
                             if (batch.size >= BATCH_SIZE) {
                                 nutritionDao.insertAllBlocking(batch)
                                 inserted += batch.size
@@ -528,7 +531,7 @@ class NutritionImporter @Inject constructor(
             val slot = NUTRIENT_SLOTS[nutrientId] ?: return@readLines
             val fdcId = cols.getOrNull(idxFdc)?.toIntOrNull() ?: return@readLines
             val amount = cols.getOrNull(idxAmt)?.toFloatOrNull() ?: return@readLines
-            out.getOrPut(fdcId) { FloatArray(4) }[slot] = amount
+            out.getOrPut(fdcId) { FloatArray(5) }[slot] = amount
         }
     }
 
@@ -579,12 +582,22 @@ class NutritionImporter @Inject constructor(
         private const val BRANDED_URL =
             BASE + "FoodData_Central_branded_food_csv_2026-04-30.zip"
 
-        // USDA nutrient ids -> slot in [kcal, protein, fat, carbs]
+        // USDA nutrient ids -> slot in [kcal, protein, fat, carbs, fibre]
+        /**
+         * Fibre is part of carbs in this app (Atwater with fibre at ~2 kcal/g), so never store more
+         * fibre than carbs; an unknown carb value leaves fibre as given.
+         */
+        fun fiberWithinCarbs(fiber: Float, carbs: Float): Float {
+            val f = fiber.coerceAtLeast(0f)
+            return if (carbs > 0f) f.coerceAtMost(carbs) else f
+        }
+
         private val NUTRIENT_SLOTS = mapOf(
             1008 to 0, // Energy (kcal)
             1003 to 1, // Protein
             1004 to 2, // Total lipid (fat)
-            1005 to 3  // Carbohydrate, by difference
+            1005 to 3, // Carbohydrate, by difference
+            1079 to 4  // Fiber, total dietary
         )
     }
 }

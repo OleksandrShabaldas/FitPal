@@ -2,8 +2,19 @@ package com.fitpal.app.ui.screen.settings
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.runtime.LaunchedEffect
@@ -81,24 +92,10 @@ import com.fitpal.app.ui.theme.accentGlass
 import com.fitpal.app.ui.theme.glassSoft
 import kotlin.math.roundToInt
 
-/** The settings categories shown on the hub, in order. */
-data class SettingsCategoryInfo(val id: String, val title: String, val description: String)
-
-val SETTINGS_CATEGORIES = listOf(
-    SettingsCategoryInfo("profile", "Profile & goals", "Sex, age, height, fitness goal and calorie target"),
-    SettingsCategoryInfo("activity", "Activity & health", "Step calories and Samsung Health sync"),
-    SettingsCategoryInfo("presets", "Quick-add & meal times", "Tap amounts for food and drinks, and meal time windows"),
-    SettingsCategoryInfo("fasting", "Fasting", "Your eating window, how the timer looks, and how strict it is"),
-    SettingsCategoryInfo("rules", "Food rules", "Daily limits for dessert, fried food and sugary drinks"),
-    SettingsCategoryInfo("caffeine", "Caffeine", "See the caffeine still in your body and when it wears off"),
-    SettingsCategoryInfo("ai", "AI", "Online Gemini key, models and on-device model"),
-    SettingsCategoryInfo("personalize", "Personalize", "Reorder and show or hide cards on each screen"),
-    SettingsCategoryInfo("data", "Data & about", "Back up, restore, clear data and app info")
-)
-
-fun settingsCategoryTitle(id: String): String =
-    SETTINGS_CATEGORIES.firstOrNull { it.id == id }?.title ?: "Settings"
-
+/**
+ * One settings category (see [SETTINGS_GROUPS] for what's where). [focus] is a section id from a
+ * settings search: the screen scrolls it into view and outlines it in gold for a moment.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsCategoryScreen(
@@ -108,6 +105,7 @@ fun SettingsCategoryScreen(
     onBack: () -> Unit,
     /** Open the first-run intro again (it starts from your current settings). */
     onReplayIntro: () -> Unit = {},
+    focus: String? = null,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     GradientBackdrop(theme = BackdropTheme.TODAY) {
@@ -119,49 +117,90 @@ fun SettingsCategoryScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             GlassTopBar(title = settingsCategoryTitle(category), onBack = onBack)
+            // Each section carries an anchor id, so a settings search can land right on it.
             when (category) {
                 "profile" -> {
-                    ProfileSection(viewModel)
-                    CalorieGoalSection(viewModel)
-                    MacroTargetsSection(viewModel)
-                }
-                "activity" -> {
-                    StepCaloriesSection(viewModel)
-                    SamsungHealthSection(viewModel)
-                    WatchSection(viewModel)
-                    CalistappSyncSection(viewModel)
+                    SettingsAnchor("profile", focus) { ProfileSection(viewModel) }
+                    SettingsAnchor("calorie_goal", focus) { CalorieGoalSection(viewModel) }
+                    SettingsAnchor("macros", focus) { MacroTargetsSection(viewModel) }
+                    SettingsAnchor("situation", focus) { PersonalContextSection(viewModel) }
                 }
                 "presets" -> {
-                    PresetsSection(viewModel)
-                    MealTimesSection(viewModel)
+                    SettingsAnchor("presets", focus) { PresetsSection(viewModel) }
+                    SettingsAnchor("meal_times", focus) { MealTimesSection(viewModel) }
                 }
                 "fasting" -> {
-                    FastingSection(viewModel)
+                    SettingsAnchor("fasting", focus) { FastingSection(viewModel) }
                 }
                 "rules" -> {
-                    DietaryRulesSection(viewModel)
+                    SettingsAnchor("rules", focus) { DietaryRulesSection(viewModel) }
                 }
                 "caffeine" -> {
-                    CaffeineSection(viewModel)
+                    SettingsAnchor("caffeine", focus) { CaffeineSection(viewModel) }
+                }
+                "reminders" -> {
+                    SettingsAnchor("reminder_daily", focus) { DailyReminderCard(viewModel) }
+                    SettingsAnchor("reminder_meals", focus) { MealRemindersCard(viewModel) }
+                    SettingsAnchor("reminder_overviews", focus) { OverviewRemindersCard(viewModel) }
+                    SettingsAnchor("reliability", focus) { BackgroundReliabilitySection(viewModel) }
+                }
+                "activity" -> {
+                    SettingsAnchor("steps", focus) { StepCaloriesSection(viewModel) }
+                    SettingsAnchor("health", focus) { SamsungHealthSection(viewModel) }
+                    SettingsAnchor("watch", focus) { WatchSection(viewModel) }
+                    SettingsAnchor("calistapp", focus) { CalistappSyncSection(viewModel) }
                 }
                 "ai" -> {
-                    OnlineAiSection(viewModel)
-                    PersonalContextSection(viewModel)
-                    AiModelSection(onManageModels)
+                    SettingsAnchor("online_ai", focus) { OnlineAiSection(viewModel) }
+                    SettingsAnchor("ondevice", focus) { AiModelSection(onManageModels) }
                 }
                 "personalize" -> {
-                    PersonalizeSection(onCustomizeScreen)
-                    RemindersSection(viewModel)
-                    HomeDisplaySection(viewModel)
+                    SettingsAnchor("customize", focus) { PersonalizeSection(onCustomizeScreen) }
+                    SettingsAnchor("home_display", focus) { HomeDisplaySection(viewModel) }
                 }
                 "data" -> {
-                    UpdatesSection(viewModel)
-                    DataSection(viewModel)
-                    AboutSection(viewModel, onReplayIntro)
+                    SettingsAnchor("backup", focus) { DataSection(viewModel) }
+                }
+                "about" -> {
+                    SettingsAnchor("updates", focus) { UpdatesSection(viewModel) }
+                    SettingsAnchor("about", focus) { AboutSection(viewModel, onReplayIntro) }
                 }
             }
         }
     }
+}
+
+/**
+ * Wraps one section so a settings search can land on it: when [id] is the [focus] the screen was
+ * opened with, it's scrolled into view and outlined in gold for a moment, then the outline fades.
+ * A plain column otherwise (same 16dp rhythm as the screen), so sections that emit several cards
+ * keep their spacing.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun SettingsAnchor(id: String, focus: String?, content: @Composable () -> Unit) {
+    val targeted = id == focus
+    val requester = remember { BringIntoViewRequester() }
+    var lit by remember { mutableStateOf(targeted) }
+    val glow by animateFloatAsState(if (lit) 1f else 0f, animationSpec = tween(700), label = "settingsAnchor")
+    if (targeted) {
+        LaunchedEffect(Unit) {
+            delay(250)  // let the screen lay out before scrolling
+            requester.bringIntoView()
+            delay(1600)
+            lit = false
+        }
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .bringIntoViewRequester(requester)
+            .then(
+                if (glow > 0f) Modifier.border(1.5.dp, com.fitpal.app.ui.theme.GoldLight.copy(alpha = 0.85f * glow), RoundedCornerShape(26.dp))
+                else Modifier
+            ),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) { content() }
 }
 
 // ======================== SECTIONS ========================
@@ -774,8 +813,12 @@ private fun AiModelSection(onManageModels: () -> Unit) {
     Box(modifier = Modifier.fillMaxWidth().glass().clickable(onClick = onManageModels)) {
         Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
-                Text("On-device AI model", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text("Download or update the offline AI", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("On-device AI & food database", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Download or update the offline AI, and European foods for offline search",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
             Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -806,63 +849,64 @@ private fun PersonalizeSection(onCustomizeScreen: (String) -> Unit) {
     }
 }
 
+/** The legacy once-a-day "log your day" reminder. */
 @Composable
-private fun RemindersSection(viewModel: SettingsViewModel) {
+private fun DailyReminderCard(viewModel: SettingsViewModel) {
     val enabled by viewModel.reminderEnabled.collectAsStateWithLifecycle()
     val minutes by viewModel.reminderMinutes.collectAsStateWithLifecycle()
+    Box(modifier = Modifier.fillMaxWidth().glass()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Daily reminder", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text("A gentle once-a-day nudge to log your meals.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Spacer(Modifier.width(12.dp))
+                Switch(checked = enabled, onCheckedChange = { viewModel.setReminderEnabled(it) })
+            }
+            if (enabled) {
+                Spacer(Modifier.height(4.dp))
+                TimePickRow("Reminder time", minutes) { viewModel.setReminderTime(it) }
+            }
+        }
+    }
+}
+
+/** Breakfast / lunch / dinner nudges, and the weigh-in (which can be limited to some weekdays). */
+@Composable
+private fun MealRemindersCard(viewModel: SettingsViewModel) {
     val reminders by viewModel.reminders.collectAsStateWithLifecycle()
-    val context = androidx.compose.ui.platform.LocalContext.current
-
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        // Legacy "log your day" reminder.
-        Box(modifier = Modifier.fillMaxWidth().glass()) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Daily reminder", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                        Text("A gentle once-a-day nudge to log your meals.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Switch(checked = enabled, onCheckedChange = { viewModel.setReminderEnabled(it) })
-                }
-                if (enabled) {
-                    Spacer(Modifier.height(4.dp))
-                    TimePickRow("Reminder time", minutes) { viewModel.setReminderTime(it) }
-                }
+    Box(modifier = Modifier.fillMaxWidth().glass()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("Meal & weigh-in reminders", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text("Nudges to log each meal and your weight. Turn on the ones you want.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            listOf(
+                com.fitpal.app.domain.model.ReminderKind.BREAKFAST,
+                com.fitpal.app.domain.model.ReminderKind.LUNCH,
+                com.fitpal.app.domain.model.ReminderKind.DINNER,
+                com.fitpal.app.domain.model.ReminderKind.WEIGHT
+            ).forEach { kind ->
+                ReminderRow(kind, reminders[kind.key], viewModel)
             }
         }
+    }
+}
 
-        // Meal & weigh-in reminders.
-        Box(modifier = Modifier.fillMaxWidth().glass()) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text("Meal & weigh-in reminders", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text("Nudges to log each meal and your weight. Turn on the ones you want.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                listOf(
-                    com.fitpal.app.domain.model.ReminderKind.BREAKFAST,
-                    com.fitpal.app.domain.model.ReminderKind.LUNCH,
-                    com.fitpal.app.domain.model.ReminderKind.DINNER,
-                    com.fitpal.app.domain.model.ReminderKind.WEIGHT
-                ).forEach { kind ->
-                    ReminderRow(kind, reminders[kind.key], viewModel)
-                }
+/** The daily / weekly AI overviews: written automatically at the set time, then a notification. */
+@Composable
+private fun OverviewRemindersCard(viewModel: SettingsViewModel) {
+    val reminders by viewModel.reminders.collectAsStateWithLifecycle()
+    Box(modifier = Modifier.fillMaxWidth().glass()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("AI overviews", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text("Automatically write an AI overview and notify you — daily, and a weekly one on Sundays. Tapping the notification opens it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            listOf(
+                com.fitpal.app.domain.model.ReminderKind.DAILY_OVERVIEW,
+                com.fitpal.app.domain.model.ReminderKind.WEEKLY_OVERVIEW
+            ).forEach { kind ->
+                ReminderRow(kind, reminders[kind.key], viewModel)
             }
         }
-
-        // AI overviews (auto-generate + notify).
-        Box(modifier = Modifier.fillMaxWidth().glass()) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text("AI overviews", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text("Automatically write an AI overview and notify you — daily, and a weekly one on Sundays. Tapping the notification opens it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                listOf(
-                    com.fitpal.app.domain.model.ReminderKind.DAILY_OVERVIEW,
-                    com.fitpal.app.domain.model.ReminderKind.WEEKLY_OVERVIEW
-                ).forEach { kind ->
-                    ReminderRow(kind, reminders[kind.key], viewModel)
-                }
-            }
-        }
-
-        BackgroundReliabilitySection(viewModel)
     }
 }
 
@@ -964,6 +1008,76 @@ private fun ReminderRow(
     }
     if (enabled) {
         TimePickRow(if (kind.weekly) "Sunday time" else "Time", minutes) { viewModel.setReminder(kind, true, it) }
+        if (kind.supportsDays) {
+            val days = state?.days ?: com.fitpal.app.domain.model.ReminderState.ALL_DAYS
+            WeekdayPicker(days) { viewModel.setReminderDays(kind, it) }
+        }
+    }
+}
+
+/**
+ * Seven round day toggles (Mon–Sun, in the phone's language) plus a plain summary underneath —
+ * "Every day", "Weekdays", "Mondays and Thursdays". The last picked day can't be switched off; turn
+ * the reminder itself off for that.
+ */
+@Composable
+private fun WeekdayPicker(days: Set<java.time.DayOfWeek>, onChange: (Set<java.time.DayOfWeek>) -> Unit) {
+    val locale = java.util.Locale.getDefault()
+    Column(modifier = Modifier.padding(top = 2.dp, bottom = 4.dp)) {
+        Text("On these days", style = MaterialTheme.typography.bodyLarge)
+        Spacer(Modifier.height(8.dp))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            java.time.DayOfWeek.entries.forEach { day ->
+                val on = day in days
+                val fullName = day.getDisplayName(java.time.format.TextStyle.FULL, locale)
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .then(
+                            if (on) Modifier.accentGlass(com.fitpal.app.ui.theme.GoldLight, CircleShape)
+                            else Modifier.glassSoft(CircleShape)
+                        )
+                        .clickable {
+                            val next = if (on) days - day else days + day
+                            if (next.isNotEmpty()) onChange(next)
+                        }
+                        .semantics {
+                            contentDescription = fullName
+                            selected = on
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        day.getDisplayName(java.time.format.TextStyle.NARROW, locale),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (on) com.fitpal.app.ui.theme.GoldLight else com.fitpal.app.ui.theme.CreamMuted
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            weekdaySummary(days, locale),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+/** "Every day" / "Weekdays" / "Weekends" / "Mondays and Thursdays" / "Mon, Wed and Fri". */
+private fun weekdaySummary(days: Set<java.time.DayOfWeek>, locale: java.util.Locale): String {
+    val weekend = setOf(java.time.DayOfWeek.SATURDAY, java.time.DayOfWeek.SUNDAY)
+    val sorted = days.sorted()
+    return when {
+        days.size == 7 -> "Every day"
+        days == java.time.DayOfWeek.entries.toSet() - weekend -> "Weekdays"
+        days == weekend -> "Weekends"
+        sorted.size <= 2 -> sorted.joinToString(" and ") {
+            it.getDisplayName(java.time.format.TextStyle.FULL, locale) + "s"
+        }
+        else -> sorted.dropLast(1).joinToString(", ") { it.getDisplayName(java.time.format.TextStyle.SHORT, locale) } +
+            " and " + sorted.last().getDisplayName(java.time.format.TextStyle.SHORT, locale)
     }
 }
 

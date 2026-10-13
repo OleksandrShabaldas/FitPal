@@ -368,6 +368,7 @@ class DescribeFoodViewModel @Inject constructor(
             proteinPer100g = food.proteinPer100g,
             fatPer100g = food.fatPer100g,
             carbsPer100g = food.carbsPer100g,
+            fiberPer100g = food.fiberPer100g,
             // Linked to its database row so the background check can fill its fibre/vitamins once.
             sourceFoodId = food.fdcId
         )

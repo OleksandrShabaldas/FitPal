@@ -64,8 +64,11 @@ class DietaryGate @Inject constructor(
         }
         if (inPlay.isEmpty()) return null
 
-        val tags = runCatching { classifier.tagFoods(items.map { it.first }, inPlay.map { it.kind }.toSet()) }
-            .getOrElse { return null }
+        // Someone is waiting on this answer: a short AI attempt, then the keyword match. Whatever the
+        // AI says is remembered, so the log that follows doesn't ask again.
+        val tags = runCatching {
+            classifier.tagFoods(items.map { it.first }, inPlay.map { it.kind }.toSet(), DietaryClassifier.GATE_TIMEOUT_MS)
+        }.getOrElse { return null }
 
         // Candidates that should warn, each as (rule, alreadyConsumed, resultingTotal). Pick the one
         // that ends up furthest over its cap.

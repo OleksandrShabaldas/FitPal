@@ -26,8 +26,12 @@ import com.fitpal.app.ml.DietaryClassifier
 import com.fitpal.app.ml.NutrientCheckWorker
 import com.fitpal.app.ml.NutrientFiller
 import com.fitpal.app.reminder.DietaryNotifier
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -85,6 +89,12 @@ class MealRepository @Inject constructor(
     @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context
 ) {
     private val dateFormat = DateTimeFormatter.ISO_LOCAL_DATE
+
+    /**
+     * Follow-up work a log kicks off but must not wait for (the AI refining its food-rule tags). The
+     * repository's own scope, so leaving the logging screen doesn't cancel it.
+     */
+    private val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     fun todayString(): String = LocalDate.now().format(dateFormat)
 
@@ -275,8 +285,9 @@ class MealRepository @Inject constructor(
         // saved review instead of regenerating.
         val insightsJson = insights?.let { MealJson.encodeInsights(it) }
         val insightsAt = if (insights != null) System.currentTimeMillis() else 0L
-        // Tag each item with the dietary-rule categories it counts toward (dessert / fried / drink).
-        val ruleTags = tagsFor(filledFoods.map { it.label })
+        // Tag each item with the dietary-rule categories it counts toward (dessert / fried / drink) —
+        // instantly, from what's already known; the AI refines them right after the save.
+        val ruleTags = quickTagsFor(filledFoods.map { it.label })
         val items = filledFoods.mapIndexed { index, food ->
             val micros = food.totalMicros
             MealLogItemEntity(
@@ -319,6 +330,7 @@ class MealRepository @Inject constructor(
         enqueueInsights(mealLogId)
         maybeEnqueueNutrientCheck(mealLogId, filledFoods.flatMap { it.ingredients })
         maybeNotifyDietary(logDate)
+        refineRuleTagsLater(mealLogId, logDate)
         return mealLogId
     }
 
@@ -335,7 +347,7 @@ class MealRepository @Inject constructor(
         val logDate = date ?: todayString()
         val mealLog = newMealLog(logDate, mealType, meta)
         val filled = nutrientFiller.applyCached(items)
-        val ruleTags = tagsFor(filled.map { it.name })
+        val ruleTags = quickTagsFor(filled.map { it.name })
         val logItems = filled.mapIndexed { index, ingredient ->
             val m = ingredient.micros
             MealLogItemEntity(
@@ -372,6 +384,7 @@ class MealRepository @Inject constructor(
         enqueueInsights(mealLogId)
         maybeEnqueueNutrientCheck(mealLogId, filled)
         maybeNotifyDietary(logDate)
+        refineRuleTagsLater(mealLogId, logDate)
         return mealLogId
     }
 
@@ -453,6 +466,29 @@ class MealRepository @Inject constructor(
         }
     }
 
+    /**
+     * One-time repair: foods logged from the built-in database before it carried fibre were saved with
+     * 0 g (an apple's 2.4 g/100 g simply missing), and stayed that way whenever the online check
+     * couldn't run. Give each such ingredient its shipped fibre and recompute the item. Only a 0 is
+     * ever filled, so anything the user or the check already set is left alone. Returns items fixed.
+     */
+    suspend fun backfillSeedFiber(): Int {
+        var fixed = 0
+        mealLogDao.getItemsWithSeedIngredients().forEach { item ->
+            val ingredients = ingredientsForItem(item)
+            val filled = ingredients.map { ing ->
+                val shipped = ing.sourceFoodId?.let { com.fitpal.app.data.local.FoodSeedData.fiberFor(it) }
+                if (shipped == null || ing.fiberPer100g != 0f) ing
+                else ing.copy(fiberPer100g = if (ing.carbsPer100g > 0f) shipped.coerceAtMost(ing.carbsPer100g) else shipped)
+            }
+            if (filled != ingredients) {
+                updateItemIngredients(item.id, filled)
+                fixed++
+            }
+        }
+        return fixed
+    }
+
     /** Logged items with their caffeine + eaten time over [from]..[to] — the caffeine tracker's data. */
     fun caffeineRowsInRange(from: String, to: String): Flow<List<com.fitpal.app.data.local.dao.CaffeineRow>> =
         mealLogDao.getCaffeineRowsInRange(from, to)
@@ -471,12 +507,46 @@ class MealRepository @Inject constructor(
 
     // ---- Dietary rules: tagging, live totals, and the over-limit notification ----
 
-    /** Classify [names] into their enabled dietary-rule categories (empty when no rules are on). */
-    private suspend fun tagsFor(names: List<String>): List<Set<DietaryRuleKind>> {
-        val enabled = settingsRepository.dietaryRules.value.filter { it.enabled }.map { it.kind }.toSet()
+    private fun enabledRuleKinds(): Set<DietaryRuleKind> =
+        settingsRepository.dietaryRules.value.filter { it.enabled }.map { it.kind }.toSet()
+
+    /**
+     * Classify [names] into their enabled dietary-rule categories (empty when no rules are on) with no
+     * network: the AI's remembered answer for a food, else the keyword match. Saving a meal used to
+     * wait on an online classify here — on a slow connection that held "Saving…" for up to a minute.
+     */
+    private fun quickTagsFor(names: List<String>): List<Set<DietaryRuleKind>> {
+        val enabled = enabledRuleKinds()
         if (enabled.isEmpty() || names.isEmpty()) return names.map { emptySet() }
-        return runCatching { dietaryClassifier.tagFoods(names, enabled) }
+        return runCatching { dietaryClassifier.quickTags(names, enabled) }
             .getOrElse { names.map { emptySet() } }
+    }
+
+    /**
+     * After a log is saved: ask the AI about its foods in the background and rewrite any tag it
+     * disagrees with. The tally is summed from the tags, so the Home rings correct themselves a moment
+     * later; then the over-limit notification gets another look, since the refined tags may cross a
+     * limit the instant ones didn't. Fails quiet — the instant tags simply stay.
+     */
+    private fun refineRuleTagsLater(mealLogId: Long, logDate: String) {
+        val enabled = enabledRuleKinds()
+        if (enabled.isEmpty()) return
+        backgroundScope.launch {
+            runCatching {
+                val items = mealLogDao.getItemsForMeal(mealLogId)
+                if (items.isEmpty()) return@runCatching
+                val tags = dietaryClassifier.tagFoods(items.map { it.name }, enabled)
+                var changed = false
+                items.forEachIndexed { i, item ->
+                    val refined = tags.getOrElse(i) { emptySet() }
+                    if (refined != DietaryRuleKind.tagsFromDb(item.ruleTags)) {
+                        mealLogDao.updateItemRuleTags(item.id, DietaryRuleKind.tagsToDb(refined))
+                        changed = true
+                    }
+                }
+                if (changed) maybeNotifyDietary(logDate)
+            }
+        }
     }
 
     /** After a log lands on today, notify (once/day) for any enabled rule whose cap was just passed. */

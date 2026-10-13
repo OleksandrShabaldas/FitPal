@@ -134,6 +134,7 @@ class BarcodeRepository @Inject constructor(
         val protein = nutriments.optDouble("proteins_100g", 0.0).toFloat()
         val fat = nutriments.optDouble("fat_100g", 0.0).toFloat()
         val carbs = nutriments.optDouble("carbohydrates_100g", 0.0).toFloat()
+        val fiber = nutriments.optDouble("fiber_100g", 0.0).toFloat()
 
         if (kcal <= 0f && protein <= 0f && fat <= 0f && carbs <= 0f) return null
 
@@ -147,7 +148,8 @@ class BarcodeRepository @Inject constructor(
             fatPer100g = fat,
             carbsPer100g = carbs,
             commonServingGrams = serving,
-            foodCategory = "Open Food Facts"
+            foodCategory = "Open Food Facts",
+            fiberPer100g = com.fitpal.app.data.NutritionImporter.fiberWithinCarbs(fiber, carbs)
         )
     }
 }

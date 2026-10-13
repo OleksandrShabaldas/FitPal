@@ -302,7 +302,8 @@ class NutritionRepository @Inject constructor(
             caloriesPer100g = food.caloriesPer100g,
             proteinPer100g = food.proteinPer100g,
             fatPer100g = food.fatPer100g,
-            carbsPer100g = food.carbsPer100g
+            carbsPer100g = food.carbsPer100g,
+            fiberPer100g = food.fiberPer100g
         )
     }
 

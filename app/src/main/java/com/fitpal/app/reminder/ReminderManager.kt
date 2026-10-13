@@ -50,6 +50,12 @@ class ReminderManager @Inject constructor(
         reschedule()
     }
 
+    /** Which weekdays a reminder fires on (the weigh-in's day picker). */
+    fun setReminderDays(kind: ReminderKind, days: Set<java.time.DayOfWeek>) {
+        settings.setReminderDays(kind, days)
+        reschedule()
+    }
+
     /** Apply all current settings: arm the enabled alarms (one-shot, re-armed on fire), cancel the rest. */
     fun reschedule() {
         val am = context.getSystemService(AlarmManager::class.java) ?: return
@@ -66,8 +72,8 @@ class ReminderManager @Inject constructor(
             val pi = kindPendingIntent(context, kind)
             am.cancel(pi)
             val state = settings.reminderStateFor(kind)
-            if (state.enabled) {
-                val at = if (kind.weekly) nextWeekly(state.minutes, Calendar.SUNDAY) else nextDaily(state.minutes)
+            if (state.enabled && state.days.isNotEmpty()) {
+                val at = if (kind.weekly) nextWeekly(state.minutes, Calendar.SUNDAY) else nextOnDays(state.minutes, state.days)
                 scheduleOneShot(am, at, pi)
             }
         }
@@ -105,6 +111,21 @@ class ReminderManager @Inject constructor(
         if (!target.after(now)) target.add(Calendar.DAY_OF_YEAR, 1)
         return target.timeInMillis
     }
+
+    /** The next [minutes] time of day that falls on one of [days] (all seven = plain [nextDaily]). */
+    private fun nextOnDays(minutes: Int, days: Set<java.time.DayOfWeek>): Long {
+        val now = Calendar.getInstance()
+        val target = atTime(minutes)
+        repeat(8) {
+            if (target.after(now) && target.toDayOfWeek() in days) return target.timeInMillis
+            target.add(Calendar.DAY_OF_YEAR, 1)
+        }
+        return nextDaily(minutes)
+    }
+
+    /** Calendar's Sunday-first day numbering -> [java.time.DayOfWeek]. */
+    private fun Calendar.toDayOfWeek(): java.time.DayOfWeek =
+        java.time.DayOfWeek.of(((get(Calendar.DAY_OF_WEEK) + 5) % 7) + 1)
 
     private fun nextWeekly(minutes: Int, dayOfWeek: Int): Long {
         val now = Calendar.getInstance()
