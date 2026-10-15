@@ -166,7 +166,7 @@ fun FastingStrip(schedule: FastingSchedule, modifier: Modifier = Modifier) {
         Spacer(Modifier.height(6.dp))
         Box(
             Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(50))
-                .background(Color.White.copy(alpha = 0.10f))
+                .background(com.fitpal.app.ui.theme.filmColor(0.10f))
         ) {
             Box(
                 Modifier.fillMaxWidth(state.progressFraction.coerceIn(0f, 1f)).height(4.dp)
@@ -244,7 +244,7 @@ private fun DrawScope.drawFastingArc(
 ) {
     val tl = Offset(c.x - r, c.y - r)
     val arcSize = Size(r * 2, r * 2)
-    drawArc(Color.White.copy(alpha = 0.08f), ARC_START_DEG, ARC_SWEEP_DEG, false, tl, arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
+    drawArc(com.fitpal.app.ui.theme.filmColor(0.08f), ARC_START_DEG, ARC_SWEEP_DEG, false, tl, arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
     val sweep = ARC_SWEEP_DEG * p.coerceIn(0f, 1f)
     if (sweep > 0.5f) {
         drawArc(accent.copy(alpha = 0.18f), ARC_START_DEG, sweep, false, tl, arcSize, style = Stroke(stroke * 3f, cap = StrokeCap.Round))
@@ -302,7 +302,7 @@ fun FastingBanner(schedule: FastingSchedule, onDismiss: () -> Unit, modifier: Mo
                 val sw = 3.dp.toPx()
                 val tl = Offset(sw / 2, sw / 2)
                 val arc = Size(size.width - sw, size.height - sw)
-                drawArc(Color.White.copy(alpha = 0.10f), -90f, 360f, false, tl, arc, style = Stroke(sw))
+                drawArc(com.fitpal.app.ui.theme.filmColor(0.10f), -90f, 360f, false, tl, arc, style = Stroke(sw))
                 drawArc(AccentTrends, -90f, 360f * state.progressFraction.coerceIn(0f, 1f), false, tl, arc, style = Stroke(sw, cap = StrokeCap.Round))
             }
             Icon(Icons.Default.HourglassEmpty, contentDescription = null, tint = AccentTrends, modifier = Modifier.size(16.dp))
@@ -331,7 +331,7 @@ fun FastingBanner(schedule: FastingSchedule, onDismiss: () -> Unit, modifier: Mo
 @Composable
 fun FastingStyleThumbnail(style: FastingStyle, modifier: Modifier = Modifier) {
     Canvas(modifier.size(width = 76.dp, height = 64.dp)) {
-        val track = Color.White.copy(alpha = 0.12f)
+        val track = com.fitpal.app.ui.theme.filmColor(0.12f)
         val ringStroke = 5.dp.toPx()
         when (style) {
             FastingStyle.BAR -> {

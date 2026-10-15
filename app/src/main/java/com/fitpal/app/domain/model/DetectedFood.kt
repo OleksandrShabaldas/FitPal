@@ -52,6 +52,25 @@ data class DetectedFood(
     /** Caffeine across all ingredients (mg), or null while any of them is unknown. */
     val totalCaffeineMg: Float?
         get() = totalCaffeineOf(ingredients)
+
+    /**
+     * The Food / Drink switch: a drink is measured in ml and counts toward the day's water, so a
+     * drink gets a water estimate for any part that had none. Turning it back into a food keeps the
+     * water it had (food water still counts, as "from food").
+     */
+    fun asDrink(drink: Boolean): DetectedFood =
+        if (drink == isDrink) this
+        else copy(
+            isDrink = drink,
+            ingredients = if (!drink) ingredients else ingredients.map { ing ->
+                if (ing.waterMlPer100g > 0f) ing
+                else ing.copy(
+                    waterMlPer100g = com.fitpal.app.domain.Drinks.estimateWaterPer100(
+                        ing.carbsPer100g, ing.proteinPer100g, ing.fatPer100g
+                    )
+                )
+            }
+        )
 }
 
 /**

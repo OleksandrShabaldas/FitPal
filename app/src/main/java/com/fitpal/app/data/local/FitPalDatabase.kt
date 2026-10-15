@@ -56,7 +56,7 @@ import com.fitpal.app.data.local.entity.WeightEntryEntity
         UsdaFoodEntity::class,
         WeightEntryEntity::class
     ],
-    version = 31,
+    version = 32,
     exportSchema = true
 )
 abstract class FitPalDatabase : RoomDatabase() {
@@ -526,6 +526,18 @@ abstract class FitPalDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE usda_foods ADD COLUMN fiberPer100g REAL NOT NULL DEFAULT 0")
                 db.execSQL("ALTER TABLE context_notes ADD COLUMN kind TEXT NOT NULL DEFAULT 'checkin'")
                 db.execSQL("ALTER TABLE ai_reviews ADD COLUMN dataSignature TEXT")
+            }
+        }
+
+        /**
+         * v32: `usda_foods.isDrink` — a database/barcode food known to be a drink from its source
+         * (Open Food Facts beverage categories or an ml quantity; the built-in "Drinks" rows), so a
+         * cached scan of water or a diet soda stays a drink even though its name says nothing.
+         */
+        val MIGRATION_31_32 = object : Migration(31, 32) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE usda_foods ADD COLUMN isDrink INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("UPDATE usda_foods SET isDrink = 1 WHERE foodCategory = 'Drinks'")
             }
         }
     }

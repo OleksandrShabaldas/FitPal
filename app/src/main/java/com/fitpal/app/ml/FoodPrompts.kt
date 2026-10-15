@@ -29,8 +29,8 @@ object FoodPrompts {
         recipe — the items should have DIFFERENT weights (not all the same) and add up to the
         dish's total. Include the ingredients that genuinely define the dish (e.g. okroshka =
         potatoes, cucumber, radish, boiled egg, ham or sausage, fresh dill and spring onion, and a
-        kvass or kefir base). NEVER include alcohol, plain water as a
-        separate item, or anything not actually eaten. If the user states a total weight (e.g.
+        kvass or kefir base). Inside a dish's items, NEVER list cooking water, cooking alcohol, or
+        anything not actually eaten. Anything that is drunk — water, coffee, tea, juice, soda, energy drinks, milk, kefir, smoothies, shakes (protein shakes too), beer, wine, cocktails — is a DRINK: "isDrink":true, amount in ml. If the user states a total weight (e.g.
         "650g"), make the item weights sum to it.
         Then add a "variations" array with 4-6 of the MOST COMMON ways people actually make this
         dish differently — alternative bases, proteins, dressings or add-ons they swap in or add
@@ -63,7 +63,9 @@ object FoodPrompts {
           single item — don't split it into chemicals.
         - A home-cooked / composite dish ("chilli con carne", "okroshka") = ONE food, "isDrink":false,
           whose "items" are its REAL defining ingredients with DIFFERENT realistic weights that sum
-          to the dish total. Match a stated total weight. Never add alcohol or plain water.
+          to the dish total. Match a stated total weight. Never add cooking water or cooking alcohol
+          as a dish's item.
+        - Anything that is drunk — water, coffee, tea, juice, soda, energy drinks, milk, kefir, smoothies, shakes (protein shakes too), beer, wine, cocktails — is a DRINK: "isDrink":true, amount in ml.
         - "variations": 4-6 common ways people vary the dish (alt bases/proteins/dressings/add-ons),
           each a SINGLE item object PLUS a "description" that is a SHORT 2-4 word label (e.g.
           "Sour cream", "Kefir base") — never a sentence or a tip. Simple items use [].
@@ -110,7 +112,7 @@ object FoodPrompts {
             fruit/veg 80-96, cooked grains 65-70, bread 35, cheese 37, oil 0), micros
             (vitA/vitD/b12/folate in mcg; vitC/calcium/iron/potassium/sodium/b6/magnesium/zinc/vitE in mg),
             and caffeine in mg (coffee 40, espresso 210, energy drink 32, cola 10, tea 20; 0 if none).
-            Estimate every field honestly. Never include alcohol or plain water as an item.
+            Estimate every field honestly. Never add cooking water or cooking alcohol as an item.
         """.trimIndent()
     }
 
@@ -127,6 +129,8 @@ object FoodPrompts {
         portion sizes (a bank card is 8.6 cm wide, a typical fork ≈19 cm long, a 1-euro/quarter coin
         ≈2.4 cm across).
         Mark drinks with "isDrink":true (measured in ml); solid foods use "isDrink":false.
+        Anything that is drunk — water, coffee, tea, juice, soda, energy drinks, milk, kefir, smoothies, shakes (protein shakes too), beer, wine, cocktails — is a DRINK: "isDrink":true, amount in ml. A glass, cup, bottle or can of ANY drink you can
+        see — plain water, beer and wine included — is its OWN entry in "foods", never folded into a dish.
         ALWAYS set "waterMlPer100" to the item's real water content per 100 g/ml: drinks water=100,
         cola=89, juice=85, milk=88; foods — most fruit/veg 80-96 (watermelon 92, cucumber 96,
         orange 86, apple 85), soups 88-92, cooked rice/pasta 65-70, bread 35, cheese 37, nuts 4,
@@ -137,16 +141,18 @@ object FoodPrompts {
         If a food is a blended or mixed dish whose parts you can't see one-by-one (a soup, stew,
         smoothie or sauce) and you can tell what it is (use the user's note if given), list its
         TYPICAL ingredients as separate items with realistic individual weights instead of one
-        opaque entry — e.g. okroshka = potato, cucumber, boiled egg, ham, dill, kvass or kefir.
-        Never include alcohol or plain water as an item.
+        opaque entry — e.g. okroshka = potato, cucumber, boiled egg, ham, dill, kvass or kefir. A
+        smoothie or shake stays ONE food with "isDrink":true, its ingredients as its items.
+        Inside a dish's items never list cooking water or cooking alcohol.
         Reply with ONLY a compact JSON object and no other text. Follow this example EXACTLY in
         shape, but replace the foods and numbers with the real ones you see (these numbers are a
-        realistic crepes-with-toppings example):
+        realistic crepes-with-toppings-and-a-latte example):
         {"foods":[
         {"name":"Crepe","isDrink":false,"grams":120,"items":[{"name":"Crepe","grams":120,"kcalPer100g":220,"proteinPer100g":6,"fatPer100g":8,"carbsPer100g":31,"fiberPer100g":1,"waterMlPer100":0,"vitA":30,"vitC":0,"vitD":1,"calcium":80,"iron":1,"potassium":120,"sodium":150,"b12":0.3,"folate":10,"b6":0.05,"magnesium":12,"zinc":0.5,"vitE":0.4,"caffeine":0}]},
         {"name":"Whipped cream","isDrink":false,"grams":40,"items":[{"name":"Whipped cream","grams":40,"kcalPer100g":340,"proteinPer100g":2,"fatPer100g":36,"carbsPer100g":3,"fiberPer100g":0,"waterMlPer100":0,"vitA":110,"vitC":0,"vitD":0,"calcium":65,"iron":0,"potassium":75,"sodium":30,"b12":0.2,"folate":3,"b6":0.02,"magnesium":7,"zinc":0.2,"vitE":0.5,"caffeine":0}]},
         {"name":"Caramel sauce","isDrink":false,"grams":25,"items":[{"name":"Caramel sauce","grams":25,"kcalPer100g":310,"proteinPer100g":1,"fatPer100g":9,"carbsPer100g":57,"fiberPer100g":0,"waterMlPer100":0,"vitA":0,"vitC":0,"vitD":0,"calcium":40,"iron":0,"potassium":80,"sodium":200,"b12":0,"folate":0,"b6":0,"magnesium":5,"zinc":0.1,"vitE":0,"caffeine":0}]},
-        {"name":"Strawberries","isDrink":false,"grams":50,"items":[{"name":"Strawberries","grams":50,"kcalPer100g":33,"proteinPer100g":1,"fatPer100g":0,"carbsPer100g":8,"fiberPer100g":2,"waterMlPer100":91,"vitA":1,"vitC":59,"vitD":0,"calcium":16,"iron":0,"potassium":150,"sodium":1,"b12":0,"folate":24,"b6":0.05,"magnesium":13,"zinc":0.1,"vitE":0.3,"caffeine":0}]}
+        {"name":"Strawberries","isDrink":false,"grams":50,"items":[{"name":"Strawberries","grams":50,"kcalPer100g":33,"proteinPer100g":1,"fatPer100g":0,"carbsPer100g":8,"fiberPer100g":2,"waterMlPer100":91,"vitA":1,"vitC":59,"vitD":0,"calcium":16,"iron":0,"potassium":150,"sodium":1,"b12":0,"folate":24,"b6":0.05,"magnesium":13,"zinc":0.1,"vitE":0.3,"caffeine":0}]},
+        {"name":"Latte","isDrink":true,"grams":250,"items":[{"name":"Latte","grams":250,"kcalPer100g":54,"proteinPer100g":3,"fatPer100g":2.5,"carbsPer100g":4.5,"fiberPer100g":0,"waterMlPer100":88,"vitA":30,"vitC":0,"vitD":0.5,"calcium":110,"iron":0,"potassium":150,"sodium":40,"b12":0.4,"folate":5,"b6":0.04,"magnesium":12,"zinc":0.4,"vitE":0,"caffeine":30}]}
         ]}
         Units per 100 g: vitA/vitD/b12/folate = mcg; vitC/calcium/iron/potassium/sodium/b6/magnesium/zinc/vitE = mg.
         caffeine = mg per 100 g/ml: coffee 40, espresso 210, latte 30, energy drink 32, cola 10,
@@ -176,8 +182,9 @@ object FoodPrompts {
           add-ons), each a SINGLE item object PLUS a "description" that is a SHORT 2-4 word label
           (e.g. "Ranch dressing", "Extra chicken") — never a sentence or a tip. Simple items
           (apple, soda) use [].
-        - Mark drinks "isDrink":true (ml); solids false (g). Use any fork/coin/bank card in shot for
-          SCALE (a bank card is 8.6 cm wide) to judge real portions.
+        - Mark drinks "isDrink":true (ml); solids false (g). Anything that is drunk — water, coffee, tea, juice, soda, energy drinks, milk, kefir, smoothies, shakes (protein shakes too), beer, wine, cocktails — is a DRINK: "isDrink":true, amount in ml. Every drink
+          you can see (plain water, beer and wine too) is its OWN food — never part of a dish.
+        - Use any fork/coin/bank card in shot for SCALE (a bank card is 8.6 cm wide) to judge real portions.
 
         Each item object, all per 100 g/ml: name, grams (this item's own weight), kcalPer100g,
         proteinPer100g, fatPer100g, carbsPer100g, fiberPer100g, waterMlPer100 (water 100, cola 89,
@@ -187,11 +194,12 @@ object FoodPrompts {
         (coffee 40, espresso 210, latte 30, energy drink 32, cola 10, tea 20; 0 if none).
         Realistic calorie densities: light soup 25-60, broth 10-30, salad/veg 15-120, fruit 30-90,
         cooked grains/pasta 110-160, lean meat 120-200, cheese/fried 250-450, oil ~880. Never 0 kcal
-        for a real food; never include alcohol or plain water as an item. Estimate every field honestly.
+        for a real food; never list cooking water or cooking alcohol as a dish's item. Estimate every field honestly.
         Example item: {"name":"Crepe","grams":120,"kcalPer100g":220,"proteinPer100g":6,"fatPer100g":8,"carbsPer100g":31,"fiberPer100g":1,"waterMlPer100":0,"vitA":30,"vitC":0,"vitD":1,"calcium":80,"iron":1,"potassium":120,"sodium":150,"b12":0.3,"folate":10,"b6":0.05,"magnesium":12,"zinc":0.5,"vitE":0.4,"caffeine":0}
 
-        "dishCandidates": include ONLY when the whole plate is a single dish you're genuinely unsure
+        "dishCandidates": include ONLY when the food on the plate is a single dish you're genuinely unsure
         about — 2-3 most likely dish names, each {"name","variations":[ item objects with description ]}.
+        Drinks are never part of a candidate dish (they stay their own foods).
         Use [] when it's clearly one dish, or several separate foods.
     """.trimIndent()
     }

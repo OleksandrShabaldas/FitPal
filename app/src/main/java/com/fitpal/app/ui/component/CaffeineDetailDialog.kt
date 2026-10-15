@@ -2,6 +2,29 @@ package com.fitpal.app.ui.component
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
+import com.fitpal.app.domain.CaffeineDose
+import com.fitpal.app.domain.SleepVerdict
+import com.fitpal.app.ui.theme.GoldLight
+import com.fitpal.app.ui.theme.accentGlass
+import com.fitpal.app.ui.theme.glassSoft
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -65,6 +88,8 @@ import kotlin.math.roundToInt
 @Composable
 fun CaffeineDetailDialog(view: CaffeineView, nowMillis: Long, onDismiss: () -> Unit) {
     val s = view.settings
+    // The sleep calculator's "what if" drink, drawn onto the curve while it's being tried out.
+    var whatIf by remember { mutableStateOf<CaffeineDose?>(null) }
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Column(
             modifier = Modifier
@@ -111,7 +136,9 @@ fun CaffeineDetailDialog(view: CaffeineView, nowMillis: Long, onDismiss: () -> U
                     )
                 }
                 Spacer(Modifier.height(18.dp))
-                CaffeineCurve(view, nowMillis)
+                CaffeineCurve(view, nowMillis, whatIf)
+                Spacer(Modifier.height(18.dp))
+                SleepCalculator(view, nowMillis, onChange = { whatIf = it })
                 Spacer(Modifier.height(18.dp))
             }
 
@@ -126,7 +153,7 @@ fun CaffeineDetailDialog(view: CaffeineView, nowMillis: Long, onDismiss: () -> U
                 )
             }
             Spacer(Modifier.height(6.dp))
-            Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.10f))) {
+            Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)).background(com.fitpal.app.ui.theme.filmColor(0.10f))) {
                 Box(
                     Modifier.fillMaxWidth((view.dayTotalMg / limit).coerceIn(0f, 1f)).height(6.dp)
                         .clip(RoundedCornerShape(50)).background(if (view.overLimit) MacroOver else CaffeineColor)
@@ -175,17 +202,23 @@ fun CaffeineDetailDialog(view: CaffeineView, nowMillis: Long, onDismiss: () -> U
  * sleep-friendly line dashed across and "now" marked. Hand-drawn on a Canvas like the app's other charts.
  */
 @Composable
-private fun CaffeineCurve(view: CaffeineView, nowMillis: Long) {
+private fun CaffeineCurve(view: CaffeineView, nowMillis: Long, whatIf: CaffeineDose? = null) {
     val hour = 3_600_000L
     val zone = ZoneId.systemDefault()
     val morning = LocalDate.now().atTime(6, 0).atZone(zone).toInstant().toEpochMilli()
     val firstToday = view.dayDoses.minOfOrNull { it.atMillis }
     val start = minOf(firstToday?.minus(hour) ?: morning, nowMillis - 6 * hour).coerceAtLeast(nowMillis - 20 * hour)
     val clear = Caffeine.clearTime(view.doses, nowMillis, view.settings.halfLifeHours, CaffeineSettings.SLEEP_FRIENDLY_MG)
-    val end = maxOf(nowMillis + 6 * hour, (clear ?: 0L) + hour).coerceAtMost(nowMillis + 24 * hour)
+    val whatIfClear = whatIf?.let {
+        Caffeine.clearTime(view.doses + it, maxOf(nowMillis, it.atMillis), view.settings.halfLifeHours, CaffeineSettings.SLEEP_FRIENDLY_MG)
+    }
+    val end = maxOf(nowMillis + 6 * hour, (clear ?: 0L) + hour, (whatIfClear ?: 0L) + hour).coerceAtMost(nowMillis + 24 * hour)
     val points = Caffeine.curve(view.doses, start, end, 96, view.settings.halfLifeHours)
     if (points.isEmpty()) return
-    val peak = (points.maxOrNull() ?: 0f).coerceAtLeast(CaffeineSettings.SLEEP_FRIENDLY_MG * 2f)
+    // The calculator's drink on top of what's really there — a second, dashed line.
+    val whatIfPoints = whatIf?.let { Caffeine.curve(view.doses + it, start, end, 96, view.settings.halfLifeHours) }
+    val peak = (maxOf(points.maxOrNull() ?: 0f, whatIfPoints?.maxOrNull() ?: 0f))
+        .coerceAtLeast(CaffeineSettings.SLEEP_FRIENDLY_MG * 2f)
     val nowFrac = ((nowMillis - start).toFloat() / (end - start)).coerceIn(0f, 1f)
     val sleepFrac = CaffeineSettings.SLEEP_FRIENDLY_MG / peak
 
@@ -228,6 +261,17 @@ private fun CaffeineCurve(view: CaffeineView, nowMillis: Long) {
                 moveTo(x(nowIdx), y(points[nowIdx]))
                 for (i in nowIdx + 1 until points.size) lineTo(x(i), y(points[i]))
             }
+            if (whatIfPoints != null) {
+                val firstDiff = whatIfPoints.indices.firstOrNull { whatIfPoints[it] - points[it] > 0.5f } ?: 0
+                val wi = Path().apply {
+                    moveTo(x(firstDiff), y(whatIfPoints[firstDiff]))
+                    for (i in firstDiff + 1 until whatIfPoints.size) lineTo(x(i), y(whatIfPoints[i]))
+                }
+                drawPath(
+                    wi, GoldLight.copy(alpha = 0.8f),
+                    style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f)))
+                )
+            }
             drawPath(past, CaffeineColor, style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round))
             drawPath(
                 future, CaffeineColor.copy(alpha = 0.55f),
@@ -244,10 +288,174 @@ private fun CaffeineCurve(view: CaffeineView, nowMillis: Long) {
             Text(timeLabel(end), style = MaterialTheme.typography.labelSmall, color = CreamFaint)
         }
         Text(
-            "Dashed line: ${CaffeineSettings.SLEEP_FRIENDLY_MG} mg, where it stops getting in the way of sleep for most people.",
+            "Dashed line: ${CaffeineSettings.SLEEP_FRIENDLY_MG} mg, where it stops getting in the way of sleep for most people." +
+                (if (whatIf != null) " The second dashed line: with the drink below." else ""),
             style = MaterialTheme.typography.labelSmall, color = CreamFaint
         )
     }
+}
+
+/**
+ * "Will it keep me up?" — pick a typical drink (or type the mg) and when you'd have it (now by
+ * default), and see when you're back under the sleep-friendly line: with what's already in your
+ * body, and for that drink on its own. Nothing is logged; it only reports [onChange] so the curve
+ * above can show the drink.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SleepCalculator(view: CaffeineView, nowMillis: Long, onChange: (CaffeineDose?) -> Unit) {
+    val context = LocalContext.current
+    var presetIndex by remember { mutableIntStateOf(-1) }
+    var mgText by remember { mutableStateOf("") }
+    // Minute of day the drink is had; null = now.
+    var atMinute by remember { mutableStateOf<Int?>(null) }
+
+    val mg = mgText.toFloatOrNull()?.coerceIn(0f, 2000f) ?: 0f
+    val atMillis = atMinute?.let {
+        LocalDate.now().atTime(it / 60, it % 60).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+    } ?: nowMillis
+    val label = Caffeine.PRESETS.getOrNull(presetIndex)?.label ?: "This drink"
+    val dose = if (mg >= 1f) CaffeineDose(atMillis, mg, label, estimated = false) else null
+    androidx.compose.runtime.LaunchedEffect(dose) { onChange(dose) }
+
+    Column(Modifier.fillMaxWidth().glassSoft().padding(14.dp)) {
+        Text("Will it keep me up?", style = MaterialTheme.typography.titleMedium, color = Cream)
+        Text(
+            "Pick a drink or type the caffeine, and when you'd have it.",
+            style = MaterialTheme.typography.bodySmall, color = CreamMuted
+        )
+        Spacer(Modifier.height(10.dp))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Caffeine.PRESETS.forEachIndexed { i, p ->
+                val selected = i == presetIndex
+                Text(
+                    "${p.label} · ${p.mg}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (selected) Cream else CreamMuted,
+                    modifier = Modifier
+                        .then(if (selected) Modifier.accentGlass(CaffeineColor, CircleShape) else Modifier.glassSoft(CircleShape))
+                        .clickable { presetIndex = i; mgText = p.mg.toString() }
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                )
+            }
+        }
+        Caffeine.PRESETS.getOrNull(presetIndex)?.let {
+            Spacer(Modifier.height(4.dp))
+            Text("Typical ${it.serving}", style = MaterialTheme.typography.labelSmall, color = CreamFaint)
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            RoundStep(Icons.Default.Remove, "Less") {
+                mgText = (mg - 10f).coerceAtLeast(0f).roundToInt().toString(); presetIndex = -1
+            }
+            BasicTextField(
+                value = mgText,
+                onValueChange = { v -> mgText = v.filter { it.isDigit() }.take(4); presetIndex = -1 },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                textStyle = TextStyle(
+                    fontFamily = InterFamily, fontWeight = FontWeight.Bold, fontSize = 22.sp,
+                    fontFeatureSettings = "tnum", color = Cream, textAlign = TextAlign.Center
+                ),
+                cursorBrush = SolidColor(GoldLight),
+                modifier = Modifier.width(72.dp),
+                decorationBox = { inner ->
+                    Box(contentAlignment = Alignment.Center) {
+                        if (mgText.isEmpty()) Text("0", style = MaterialTheme.typography.titleLarge, color = CreamFaint)
+                        inner()
+                    }
+                }
+            )
+            RoundStep(Icons.Default.Add, "More") {
+                mgText = (mg + 10f).coerceAtMost(2000f).roundToInt().toString(); presetIndex = -1
+            }
+            Text("mg", style = MaterialTheme.typography.bodyMedium, color = CreamMuted, modifier = Modifier.padding(start = 6.dp))
+            Spacer(Modifier.weight(1f))
+            Row(
+                modifier = Modifier
+                    .glassSoft(CircleShape)
+                    .clickable {
+                        val m = atMinute ?: LocalDateTime.now().let { it.hour * 60 + it.minute }
+                        android.app.TimePickerDialog(context, { _, h, min -> atMinute = h * 60 + min }, m / 60, m % 60, false).show()
+                    }
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.Schedule, contentDescription = null, tint = CreamMuted, modifier = Modifier.size(14.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    if (atMinute == null) "Now" else "At ${fastingClockLabel(atMinute!!)}",
+                    style = MaterialTheme.typography.labelMedium, color = Cream
+                )
+            }
+        }
+        if (atMinute != null) {
+            Text(
+                "Back to now",
+                style = MaterialTheme.typography.labelSmall, color = GoldLight,
+                modifier = Modifier.align(Alignment.End).clickable { atMinute = null }.padding(top = 4.dp)
+            )
+        }
+
+        if (dose != null) {
+            val s = view.settings
+            val threshold = CaffeineSettings.SLEEP_FRIENDLY_MG
+            val withYours = Caffeine.sleepVerdict(view.doses, dose, nowMillis, s.halfLifeHours, threshold)
+            val alone = Caffeine.sleepVerdict(emptyList(), dose, nowMillis, s.halfLifeHours, threshold)
+            Spacer(Modifier.height(12.dp))
+            VerdictLine("With what's already in you", withYours, emphasis = true)
+            if (view.doses.isNotEmpty()) {
+                Spacer(Modifier.height(6.dp))
+                VerdictLine("That drink on its own", alone, emphasis = false)
+            }
+        }
+    }
+}
+
+@Composable
+private fun VerdictLine(title: String, verdict: SleepVerdict, emphasis: Boolean) {
+    Row(verticalAlignment = Alignment.Top) {
+        Icon(
+            Icons.Default.Bedtime, contentDescription = null,
+            tint = if (verdict is SleepVerdict.NotWithin36h) MacroOver else ScoreFair,
+            modifier = Modifier.padding(top = 2.dp).size(16.dp)
+        )
+        Spacer(Modifier.width(8.dp))
+        Column {
+            Text(title, style = MaterialTheme.typography.labelMedium, color = CreamMuted)
+            Text(
+                when (verdict) {
+                    is SleepVerdict.ClearAt -> "Sleep-friendly from ${dayAwareTimeLabel(verdict.atMillis)}"
+                    SleepVerdict.NeverAffects -> "Stays under ${CaffeineSettings.SLEEP_FRIENDLY_MG} mg — no problem for sleep"
+                    SleepVerdict.NotWithin36h -> "Still over ${CaffeineSettings.SLEEP_FRIENDLY_MG} mg a day and a half later"
+                },
+                style = if (emphasis) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.bodyMedium,
+                color = Cream
+            )
+        }
+    }
+}
+
+@Composable
+private fun RoundStep(icon: androidx.compose.ui.graphics.vector.ImageVector, description: String, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier.size(34.dp).glassSoft(CircleShape).clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(icon, contentDescription = description, tint = Cream, modifier = Modifier.size(18.dp))
+    }
+}
+
+/** "11:20 PM", or "tomorrow 1:10 AM" when it's past midnight. */
+private fun dayAwareTimeLabel(epochMillis: Long): String {
+    val t = LocalDateTime.ofInstant(Instant.ofEpochMilli(epochMillis), ZoneId.systemDefault())
+    val days = java.time.temporal.ChronoUnit.DAYS.between(LocalDate.now(), t.toLocalDate())
+    val prefix = when {
+        days == 1L -> "tomorrow "
+        days > 1L -> "${t.dayOfWeek.getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.getDefault())} "
+        else -> ""
+    }
+    return prefix + timeLabel(epochMillis)
 }
 
 private fun timeLabel(epochMillis: Long): String {

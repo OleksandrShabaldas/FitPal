@@ -76,8 +76,21 @@ import com.fitpal.app.ui.screen.settings.SettingsScreen
 import com.fitpal.app.ui.screen.settings.SettingsCategoryScreen
 import com.fitpal.app.ui.screen.water.WaterDetailScreen
 
+/** Bottom space the floating/docked bar takes on the current screen (0 when there's no bar). */
+val LocalBottomBarInset = androidx.compose.runtime.compositionLocalOf { 0.dp }
+
+/** The screen behind a bottom-bar tab. */
+private fun com.fitpal.app.domain.model.NavTab.route(): String = when (this) {
+    com.fitpal.app.domain.model.NavTab.HOME -> Screen.Home.route
+    com.fitpal.app.domain.model.NavTab.ANALYTICS -> Screen.Analytics.route
+    com.fitpal.app.domain.model.NavTab.COLLECTION -> Screen.Collection.route
+    com.fitpal.app.domain.model.NavTab.TRAIL -> Screen.Trail.route
+    com.fitpal.app.domain.model.NavTab.SETTINGS -> Screen.Settings.route
+}
+
 @Composable
 fun FitPalNavHost(
+    navConfig: com.fitpal.app.domain.model.NavConfig = com.fitpal.app.domain.model.NavConfig(),
     pendingRoute: String? = null,
     onPendingRouteHandled: () -> Unit = {},
     startOnboarding: Boolean = false
@@ -118,11 +131,11 @@ fun FitPalNavHost(
     }
 
     val currentRoute = currentDestination?.route
-    val isHome = currentRoute == Screen.Home.route
-    val isAnalytics = currentRoute == Screen.Analytics.route
-    val isCollection = currentRoute == Screen.Collection.route
-    val isSettings = currentRoute == Screen.Settings.route
-    val showBottomBar = isHome || isAnalytics || isCollection || isSettings
+    // The bottom bar's tabs, in the user's order (Settings → Home & screens → Bottom bar).
+    val tabs = navConfig.shownTabs
+    val tabRoutes = tabs.map { it.route() }
+    val currentTab = tabs.firstOrNull { it.route() == currentRoute }
+    val showBottomBar = currentTab != null
 
     val navTo: (String) -> Unit = { route ->
         navController.navigate(route) {
@@ -132,14 +145,28 @@ fun FitPalNavHost(
         }
     }
 
+    // Swiping sideways on a tab moves to its neighbour in the bar's order (nothing past the ends).
+    fun neighbour(tab: com.fitpal.app.domain.model.NavTab, step: Int): () -> Unit = {
+        val i = tabs.indexOf(tab)
+        tabs.getOrNull(i + step)?.let { navTo(it.route()) }
+    }
+    val openAddMenu: () -> Unit = { navController.navigate(Screen.AddFood.route) }
+    val onPlus: () -> Unit = {
+        when (navConfig.plus) {
+            com.fitpal.app.domain.model.PlusAction.MENU -> openAddMenu()
+            com.fitpal.app.domain.model.PlusAction.CAMERA -> navController.navigate(Screen.Camera.route)
+            com.fitpal.app.domain.model.PlusAction.DESCRIBE -> navController.navigate(Screen.DescribeFood.route)
+        }
+    }
+
     // A notification ("meal analysed — tap to review") or a home-screen widget asked for a screen.
     // A main tab lands on the tab itself, clearing whatever was open over it — not a tab-bar switch,
     // which would restore that tab's saved sub-screens (a widget tap would reopen the last screen
     // instead of Home). Anything else opens over whatever's showing.
     LaunchedEffect(pendingRoute) {
         if (pendingRoute != null) {
-            val tabs = setOf(Screen.Home.route, Screen.Analytics.route, Screen.Collection.route, Screen.Settings.route)
-            if (pendingRoute in tabs) {
+            val mainRoutes = setOf(Screen.Home.route, Screen.Analytics.route, Screen.Collection.route, Screen.Settings.route) + tabRoutes
+            if (pendingRoute in mainRoutes) {
                 navController.navigate(pendingRoute) {
                     popUpTo(navController.graph.findStartDestination().id)
                     launchSingleTop = true
@@ -154,6 +181,8 @@ fun FitPalNavHost(
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background
     ) { innerPadding ->
+        // How much of the bottom the bar covers on this screen, for screens that weren't built as tabs.
+        androidx.compose.runtime.CompositionLocalProvider(LocalBottomBarInset provides (if (showBottomBar) 110.dp else 0.dp)) {
         Box(modifier = Modifier.fillMaxSize()) {
         NavHost(
             navController = navController,
@@ -219,7 +248,7 @@ fun FitPalNavHost(
                     onLogExercise = { navController.navigate(Screen.LogExercise.route) },
                     onExerciseClick = { id -> navController.navigate(Screen.ExerciseDetail.buildRoute(id)) },
                     onOpenWater = { date -> navController.navigate(Screen.WaterDetail.buildRoute(date)) },
-                    onSwipeToNextScreen = { navTo(Screen.Analytics.route) }
+                    onSwipeToNextScreen = neighbour(com.fitpal.app.domain.model.NavTab.HOME, +1)
                 )
             }
 
@@ -232,8 +261,8 @@ fun FitPalNavHost(
                     onOpenReview = { period, key ->
                         navController.navigate(Screen.AiReview.buildRoute(period, key))
                     },
-                    onSwipeToHome = { navTo(Screen.Home.route) },
-                    onSwipeToCollection = { navTo(Screen.Collection.route) },
+                    onSwipeToHome = neighbour(com.fitpal.app.domain.model.NavTab.ANALYTICS, -1),
+                    onSwipeToCollection = neighbour(com.fitpal.app.domain.model.NavTab.ANALYTICS, +1),
                     onOpenDay = { navTo(Screen.Home.route) },
                     onOpenCalorieDetail = { range, anchor ->
                         navController.navigate(Screen.CalorieDetail.buildRoute(range, anchor))
@@ -258,8 +287,8 @@ fun FitPalNavHost(
             composable(Screen.Collection.route) {
                 CollectionScreen(
                     onOpenFood = { foodId -> navController.navigate(Screen.GalleryFoodDetail.buildRoute(foodId)) },
-                    onSwipeToAnalytics = { navTo(Screen.Analytics.route) },
-                    onSwipeToSettings = { navTo(Screen.Settings.route) }
+                    onSwipeToAnalytics = neighbour(com.fitpal.app.domain.model.NavTab.COLLECTION, -1),
+                    onSwipeToSettings = neighbour(com.fitpal.app.domain.model.NavTab.COLLECTION, +1)
                 )
             }
 
@@ -369,7 +398,7 @@ fun FitPalNavHost(
                     onOpenCategory = { id, focus -> navController.navigate(Screen.SettingsCategory.buildRoute(id, focus)) },
                     onOpenFeedback = { navController.navigate(Screen.Feedback.route) },
                     onOpenWidgets = { navController.navigate(Screen.WidgetGallery.route) },
-                    onSwipeToCollection = { navTo(Screen.Collection.route) },
+                    onSwipeToCollection = neighbour(com.fitpal.app.domain.model.NavTab.SETTINGS, -1),
                     onBack = safeBack
                 )
             }
@@ -476,19 +505,18 @@ fun FitPalNavHost(
 
             if (showBottomBar) {
                 FloatingGlassNav(
-                    modifier = Modifier.align(Alignment.BottomCenter),
+                    tabs = tabs,
+                    current = currentTab,
+                    onTab = { navTo(it.route()) },
+                    onAdd = onPlus,
+                    onAddLong = openAddMenu,
                     hazeState = hazeState,
-                    isHome = isHome,
-                    isAnalytics = isAnalytics,
-                    isCollection = isCollection,
-                    isSettings = isSettings,
-                    onHome = { navTo(Screen.Home.route) },
-                    onAnalytics = { navTo(Screen.Analytics.route) },
-                    onCollection = { navTo(Screen.Collection.route) },
-                    onSettings = { navTo(Screen.Settings.route) },
-                    onAdd = { navController.navigate(Screen.AddFood.route) }
+                    showLabels = navConfig.labels,
+                    style = navConfig.style,
+                    modifier = Modifier.align(Alignment.BottomCenter)
                 )
             }
         }
+    }
     }
 }

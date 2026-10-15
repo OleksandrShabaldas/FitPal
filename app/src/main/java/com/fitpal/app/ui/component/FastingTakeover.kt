@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.LocalDrink
 import androidx.compose.material.icons.filled.MonitorWeight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -60,6 +61,7 @@ fun FastingTakeover(
     onLogWeight: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val drinksAllowed = schedule.drinkRule != com.fitpal.app.domain.model.FastingDrinkRule.OFF
     val state = rememberFastingState(schedule)
     val elapsed = fastingElapsedMin(schedule, state)
     GradientBackdrop(
@@ -121,7 +123,7 @@ fun FastingTakeover(
                 )
                 Spacer(Modifier.weight(1f))
                 Text(
-                    "Water, black coffee and plain tea won't break it — nor will logging a workout or your weight.",
+                    schedule.drinkRule.takeoverLine,
                     style = MaterialTheme.typography.labelMedium,
                     color = CreamFaint,
                     textAlign = TextAlign.Center
@@ -130,6 +132,12 @@ fun FastingTakeover(
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     TakeoverPill(Icons.Default.FitnessCenter, "Log exercise", onLogExercise, Modifier.weight(1f))
                     TakeoverPill(Icons.Default.MonitorWeight, "Log weight", onLogWeight, Modifier.weight(1f))
+                }
+                if (drinksAllowed) {
+                    // A drink the rule allows doesn't need the slide — the log-time check still looks
+                    // at what's actually logged, so food logged from here still asks first.
+                    Spacer(Modifier.height(10.dp))
+                    TakeoverPill(Icons.Default.LocalDrink, "Log a drink", onContinue, Modifier.fillMaxWidth())
                 }
                 Spacer(Modifier.height(18.dp))
                 SlideToConfirm(text = "Slide to log food anyway", onConfirm = onContinue)

@@ -151,7 +151,7 @@ fun PhotoCaptureOverlay(
                 },
                 modifier = Modifier.align(Alignment.BottomCenter).padding(32.dp).size(72.dp),
                 containerColor = GoldLight,
-                contentColor = Color(0xFF3A2406)
+                contentColor = com.fitpal.app.ui.theme.OnGold
             ) {
                 Icon(Icons.Default.Camera, contentDescription = "Capture", modifier = Modifier.size(36.dp))
             }

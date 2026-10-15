@@ -293,7 +293,7 @@ fun AnalyticsScreen(
                 onSwipeRight = onSwipeToHome
             ),
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 110.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(com.fitpal.app.ui.theme.CardGap + 2.dp)
         ) {
             item {
                 Row(
@@ -448,7 +448,7 @@ fun AnalyticsScreen(
                                     LegendRow(LoggedMid, "Fair (50–64)")
                                     LegendRow(LoggedLow, "Low (35–49)")
                                     LegendRow(LoggedWorst, "Poor (under 35)")
-                                    LegendRow(Color.White.copy(alpha = 0.08f), "Not logged")
+                                    LegendRow(com.fitpal.app.ui.theme.filmColor(0.08f), "Not logged")
                                 }
                             }
                         }
@@ -505,6 +505,7 @@ fun AnalyticsScreen(
 
                     // ---- Balance score ----
                     "score" -> item {
+                        androidx.compose.runtime.CompositionLocalProvider(com.fitpal.app.ui.component.LocalChartScale provides widget.chartScale) {
                         SwitchableChartCard("Balance score", listOf("Trend", "Breakdown"), viewState = analyticsViews, onSetView = viewModel::setView, highlight = highlight == "score", spotlight = spotlight, onToggleSpotlight = viewModel::toggleSpotlight) { v ->
                             val present = scoreSeries.filterNotNull().map { it.toInt() }
                             when {
@@ -525,11 +526,13 @@ fun AnalyticsScreen(
                             }
                         }
                     }
+                    }
 
                     // ---- Calories (net of what you burned from steps + workouts) ----
                     // Unlike the other trend widgets, Calories tracks the *current calendar week*
                     // (Mon–Sun), so it uses weekDates/netCalWeekSeries instead of the rolling window.
                     "calories" -> item {
+                        androidx.compose.runtime.CompositionLocalProvider(com.fitpal.app.ui.component.LocalChartScale provides widget.chartScale) {
                         SwitchableChartCard("Calories", listOf("Trend", "Vs goal"), viewState = analyticsViews, onSetView = viewModel::setView, highlight = highlight == "calories", spotlight = spotlight, onToggleSpotlight = viewModel::toggleSpotlight) { v ->
                             when {
                                 !enough(netCalWeekSeries) -> NotEnough()
@@ -552,6 +555,7 @@ fun AnalyticsScreen(
                             Spacer(Modifier.height(6.dp))
                             Text("Net of calories burned (steps + workouts) · ${if (range == AnalyticsRange.WEEK) "this week" else "this period"} · tap a bar to open that day", style = MaterialTheme.typography.labelSmall, color = CreamFaint)
                         }
+                    }
                     }
 
                     // ---- Macro balance ----
@@ -618,6 +622,7 @@ fun AnalyticsScreen(
 
                     // ---- Activity (steps + total burned) ----
                     "activity" -> item {
+                        androidx.compose.runtime.CompositionLocalProvider(com.fitpal.app.ui.component.LocalChartScale provides widget.chartScale) {
                         ChartCard("Activity", "Steps and total calories burned", highlight = highlight == "activity", spotlight = spotlight, onToggleSpotlight = viewModel::toggleSpotlight) {
                             Text("Steps", style = MaterialTheme.typography.labelMedium, color = CreamMuted)
                             Spacer(Modifier.height(4.dp))
@@ -632,9 +637,11 @@ fun AnalyticsScreen(
                             } else NotEnough()
                         }
                     }
+                    }
 
                     // ---- Water ----
                     "water" -> item {
+                        androidx.compose.runtime.CompositionLocalProvider(com.fitpal.app.ui.component.LocalChartScale provides widget.chartScale) {
                         SwitchableChartCard("Water", listOf("Total", "By source"), viewState = analyticsViews, onSetView = viewModel::setView, spotlight = spotlight, onToggleSpotlight = viewModel::toggleSpotlight) { v ->
                             if (v == 0) {
                                 if (enough(waterSeries)) {
@@ -662,9 +669,11 @@ fun AnalyticsScreen(
                             }
                         }
                     }
+                    }
 
                     // ---- Weight (current + trend grouped) ----
                     "weight" -> item {
+                        androidx.compose.runtime.CompositionLocalProvider(com.fitpal.app.ui.component.LocalChartScale provides widget.chartScale) {
                         Column(
                             modifier = Modifier.fillMaxWidth()
                                 .cardSurface("Weight" in spotlight)
@@ -755,6 +764,7 @@ fun AnalyticsScreen(
                                 NotEnough()
                             }
                         }
+                    }
                     }
 
                     // ---- Implied maintenance (insight only — does not change the budget) ----
@@ -965,7 +975,7 @@ private fun LifetimePill(active: Boolean, onToggle: () -> Unit) {
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(50))
-            .background(if (active) AccentTrends.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.07f))
+            .background(if (active) AccentTrends.copy(alpha = 0.22f) else com.fitpal.app.ui.theme.filmColor(0.07f))
             .clickable(onClick = onToggle)
             .padding(horizontal = 10.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -1036,7 +1046,7 @@ private fun MacroCompositionChart(
 ) {
     val fmt = DateTimeFormatter.ISO_LOCAL_DATE
     val byDate = rows.associateBy { it.date }
-    val emptyC = Color.White.copy(alpha = 0.06f)
+    val emptyC = com.fitpal.app.ui.theme.filmColor(0.06f)
     val labelArgb = CreamFaint.toArgb()
     val highlightArgb = Cream.toArgb()
     val tapModifier = if (onBarClick != null && dates.isNotEmpty()) {
@@ -1166,7 +1176,7 @@ private fun MicroRow(stat: MicroStat) {
                 .weight(1f)
                 .height(6.dp)
                 .clip(RoundedCornerShape(6.dp))
-                .background(Color.White.copy(alpha = 0.08f))
+                .background(com.fitpal.app.ui.theme.filmColor(0.08f))
         ) {
             Box(
                 Modifier
@@ -1302,7 +1312,7 @@ private fun MiniHeatmap(
     selected: LocalDate? = null,
     onDayClick: (LocalDate) -> Unit
 ) {
-    val empty = Color.White.copy(alpha = 0.06f)
+    val empty = com.fitpal.app.ui.theme.filmColor(0.06f)
     val gap = 4f
     // The tapped square gets a ring that springs open, matching the big heatmap's pop.
     val selectedIndex = dates.indexOfFirst { it == selected }.takeIf { it >= 0 }
@@ -1432,7 +1442,7 @@ private fun HeatCell(
             .size(size)
             .scale(1f + 0.18f * lift)
             .clip(shape)
-            .background(color ?: Color.White.copy(alpha = 0.05f))
+            .background(color ?: com.fitpal.app.ui.theme.filmColor(0.05f))
             .then(if (lift > 0.01f) Modifier.border(2.dp, Cream.copy(alpha = lift.coerceIn(0f, 1f)), shape) else Modifier)
             .clickable(onClick = onClick)
     )
@@ -1710,7 +1720,7 @@ private fun MaintenanceDialog(
 
                 // ---- Reconciliation: why the scale can disagree with the Calorie-balance deficit ----
                 if (formulaBurn > 0) {
-                    Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.08f)))
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(com.fitpal.app.ui.theme.filmColor(0.08f)))
                     Text("Why a deficit can lag the scale", style = MaterialTheme.typography.titleSmall, color = Cream)
                     Text(
                         buildString {
@@ -1826,7 +1836,7 @@ private fun IntakeDetailDialog(
                     minDay?.let { StatLine("Lowest", "${"%,d".format(it.calories.toInt())} kcal · ${label(it.date)}", ScoreFair) }
                     maxDay?.let { StatLine("Highest", "${"%,d".format(it.calories.toInt())} kcal · ${label(it.date)}", ScorePoor) }
                 }
-                Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.08f)))
+                Box(Modifier.fillMaxWidth().height(1.dp).background(com.fitpal.app.ui.theme.filmColor(0.08f)))
                 Text("Every eaten day", style = MaterialTheme.typography.labelMedium, color = CreamMuted)
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     days.sortedByDescending { it.date }.forEach { row ->
@@ -1902,7 +1912,7 @@ private fun WeightTrendDetailDialog(
                         "the estimate leans on the long trend.",
                     style = MaterialTheme.typography.bodySmall, color = CreamMuted
                 )
-                Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.08f)))
+                Box(Modifier.fillMaxWidth().height(1.dp).background(com.fitpal.app.ui.theme.filmColor(0.08f)))
                 Text("Every weigh-in", style = MaterialTheme.typography.labelMedium, color = CreamMuted)
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     sorted.reversed().forEach { w ->

@@ -248,6 +248,16 @@ class EntryDetailViewModel @Inject constructor(
         persistIngredients(current)
     }
 
+    /** Food / Drink switch on this logged entry. */
+    fun setDrink(drink: Boolean) {
+        val id = _uiState.value.item?.id ?: return
+        viewModelScope.launch {
+            mealRepository.setItemDrink(id, drink)
+            val updated = mealRepository.getItemById(id) ?: return@launch
+            _uiState.update { it.copy(item = updated) }
+        }
+    }
+
     /**
      * The +/− "Amount" stepper: log this meal N times over. Scales every ingredient's weight by the
      * change (so calories/macros track it, exactly like the pre-log photo review — grams stay the
@@ -340,7 +350,7 @@ class EntryDetailViewModel @Inject constructor(
                 _uiState.update { it.copy(addMessage = "That barcode isn't in any database — add it on the Custom tab.") }
                 return@launch
             }
-            val drink = Drinks.isDrink(product.description, product.foodCategory)
+            val drink = product.isDrink || Drinks.isDrink(product.description, product.foodCategory)
             addCustomIngredient(
                 Ingredient(
                     name = product.description,

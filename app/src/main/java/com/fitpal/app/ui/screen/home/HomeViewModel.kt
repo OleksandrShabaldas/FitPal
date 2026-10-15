@@ -66,8 +66,16 @@ class HomeViewModel @Inject constructor(
     private val trailRepository: TrailRepository,
     private val challengeRepository: ChallengeRepository,
     private val focusedDate: FocusedDate,
+    private val appForeground: com.fitpal.app.ml.AppForegroundState,
     @ApplicationContext private val appContext: Context
 ) : ViewModel() {
+
+    private companion object {
+        const val HOME_SCREEN = com.fitpal.app.domain.model.ScreenWidgets.HOME
+    }
+
+    /** The intense-fasting reminder shows once per visit to the app — true only the first time asked. */
+    fun claimFastingBanner(): Boolean = appForeground.claimOncePerVisit("fasting_banner")
 
     private val dateFormat = DateTimeFormatter.ISO_LOCAL_DATE
 
@@ -242,14 +250,35 @@ class HomeViewModel @Inject constructor(
     val compactEmptyMeals: StateFlow<Boolean> = settingsRepository.compactEmptyMeals
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
-    /** The user's chosen order / visibility for the Home cards. */
-    val widgetLayout: StateFlow<List<com.fitpal.app.domain.model.WidgetSetting>> =
+    /** The user's Home layout: order, shown/hidden, and each card's size and style. */
+    val widgetLayout: StateFlow<List<com.fitpal.app.domain.model.ResolvedCard>> =
         settingsRepository.widgetLayouts
-            .map { com.fitpal.app.domain.model.ScreenWidgets.resolve(it[com.fitpal.app.domain.model.ScreenWidgets.HOME].orEmpty(), com.fitpal.app.domain.model.ScreenWidgets.defaultsFor(com.fitpal.app.domain.model.ScreenWidgets.HOME)) }
+            .map { com.fitpal.app.domain.model.ScreenWidgets.resolveCards(HOME_SCREEN, it[HOME_SCREEN].orEmpty()) }
             .stateIn(
                 viewModelScope, SharingStarted.WhileSubscribed(5000),
-                com.fitpal.app.domain.model.ScreenWidgets.resolve(emptyList(), com.fitpal.app.domain.model.ScreenWidgets.defaultsFor(com.fitpal.app.domain.model.ScreenWidgets.HOME))
+                com.fitpal.app.domain.model.ScreenWidgets.resolveCards(
+                    HOME_SCREEN, settingsRepository.widgetLayouts.value[HOME_SCREEN].orEmpty()
+                )
             )
+
+    // ---- Layout editing (Home's edit mode) ----
+
+    private fun editLayout(change: (List<com.fitpal.app.domain.model.WidgetSetting>) -> List<com.fitpal.app.domain.model.WidgetSetting>) {
+        val current = com.fitpal.app.domain.model.ScreenWidgets.resolve(
+            settingsRepository.widgetLayouts.value[HOME_SCREEN].orEmpty(),
+            com.fitpal.app.domain.model.ScreenWidgets.defaultsFor(HOME_SCREEN)
+        )
+        settingsRepository.setWidgetLayout(HOME_SCREEN, change(current))
+    }
+
+    fun moveCard(fromKey: String, toKey: String) = editLayout { com.fitpal.app.domain.model.LayoutEdits.move(it, fromKey, toKey) }
+    fun setCardSize(key: String, size: com.fitpal.app.domain.model.CardSize) =
+        editLayout { l -> com.fitpal.app.domain.model.LayoutEdits.update(l, key) { it.copy(size = size) } }
+    fun setCardVariant(key: String, variant: String) =
+        editLayout { l -> com.fitpal.app.domain.model.LayoutEdits.update(l, key) { it.copy(variant = variant) } }
+    fun hideCard(key: String) = editLayout { l -> com.fitpal.app.domain.model.LayoutEdits.update(l, key) { it.copy(enabled = false) } }
+    fun showCard(key: String) = editLayout { com.fitpal.app.domain.model.LayoutEdits.show(it, key) }
+    fun resetLayout() = settingsRepository.setWidgetLayout(HOME_SCREEN, com.fitpal.app.domain.model.ScreenWidgets.defaultLayout(HOME_SCREEN))
 
     /**
      * Daily targets from BMR + goal. Uses the manual calorie goal if set (>0),

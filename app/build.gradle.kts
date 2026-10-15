@@ -16,8 +16,8 @@ android {
         targetSdk = 35
         // versionCode MUST increase every release — Android refuses to install an APK whose
         // versionCode isn't higher than the installed one, which would silently break updating.
-        versionCode = 28
-        versionName = "2.4.0"
+        versionCode = 29
+        versionName = "2.5.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -121,6 +121,9 @@ dependencies {
 
     // Haze — real frosted-glass blur behind the floating nav (offline rendering)
     implementation(libs.haze)
+
+    // Drag-to-reorder cards in the layout editor (on-device only)
+    implementation(libs.reorderable)
 
     // Android core
     implementation(libs.activity.compose)

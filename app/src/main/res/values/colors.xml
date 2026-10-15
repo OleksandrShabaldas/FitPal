@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The Glow look's deepest base (InkBlack) — the window and splash before the look is applied. -->
+    <color name="launch_background">#FF0E0B0A</color>
+</resources>

@@ -32,6 +32,15 @@ class FitPalApplication : Application() {
         super.onCreate()
         val entryPoint = EntryPointAccessors.fromApplication(this, AppEntryPoint::class.java)
         val foreground = entryPoint.foregroundState()
+        // The look (Settings → Appearance) for every activity, the widget picker included. FitPalActivity
+        // re-applies it with its own configuration (light/dark) and follows changes.
+        runCatching {
+            val night = resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK
+            com.fitpal.app.ui.theme.LookState.apply(
+                entryPoint.settingsRepository().appearance.value, this,
+                systemDark = night == android.content.res.Configuration.UI_MODE_NIGHT_YES
+            )
+        }
         // Re-arm the daily reminder (alarms are cleared on reboot / app update).
         runCatching { entryPoint.reminderManager().reschedule() }
 
@@ -87,7 +96,7 @@ class FitPalApplication : Application() {
 
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
             override fun onActivityStarted(activity: Activity) = foreground.onActivityStarted()
-            override fun onActivityStopped(activity: Activity) = foreground.onActivityStopped()
+            override fun onActivityStopped(activity: Activity) = foreground.onActivityStopped(activity.isChangingConfigurations)
             override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
             override fun onActivityResumed(activity: Activity) {}
             override fun onActivityPaused(activity: Activity) {}

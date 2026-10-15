@@ -246,7 +246,7 @@ fun GalleryFoodDetailScreen(
                     ) {
                         Text("Logging to: ${logDateLabel(logDate)}")
                     }
-                    Button(onClick = { fastingGuard.attempt(isForToday = logDate == java.time.LocalDate.now()) { d -> viewModel.logIt(d) } }, modifier = Modifier.fillMaxWidth()) {
+                    Button(onClick = { fastingGuard.attempt(isForToday = logDate == java.time.LocalDate.now(), intake = com.fitpal.app.domain.model.FastingIntake.ofFoods(listOfNotNull(state.food))) { d -> viewModel.logIt(d) } }, modifier = Modifier.fillMaxWidth()) {
                         Icon(Icons.Default.Check, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
                         Text("Log this food")

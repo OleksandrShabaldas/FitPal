@@ -20,6 +20,19 @@ data class CaffeineSettings(
     }
 }
 
+/** A typical drink for the sleep calculator: its name, the serving it's for, and its caffeine. */
+data class CaffeinePreset(val label: String, val serving: String, val mg: Int)
+
+/** What a (hypothetical) dose would mean for sleep — see [Caffeine.sleepVerdict]. */
+sealed interface SleepVerdict {
+    /** It never takes the level above the sleep-friendly line. */
+    data object NeverAffects : SleepVerdict
+    /** Sleep-friendly again from [atMillis]. */
+    data class ClearAt(val atMillis: Long) : SleepVerdict
+    /** Still above the line a day and a half later. */
+    data object NotWithin36h : SleepVerdict
+}
+
 /** One caffeinated thing eaten or drunk: when, how much, and whether the amount is a rough guess. */
 data class CaffeineDose(
     val atMillis: Long,
@@ -88,6 +101,45 @@ object Caffeine {
         return CaffeineDose(atMillis, mg, name, estimated = checkedMg == null)
     }
 
+    /**
+     * The sleep calculator: if [extra] is added to [existing], when is the level back at or below
+     * [thresholdMg] for good? The search starts at the later of [nowMillis] and the dose's own time —
+     * starting earlier would report when the *earlier* caffeine clears, before this drink is even had.
+     * A dose that never lifts the level over the line says so instead of a time.
+     */
+    fun sleepVerdict(
+        existing: List<CaffeineDose>,
+        extra: CaffeineDose,
+        nowMillis: Long,
+        halfLifeHours: Float,
+        thresholdMg: Int
+    ): SleepVerdict {
+        val doses = existing + extra
+        val from = maxOf(nowMillis, extra.atMillis)
+        // The peak comes ~1 h after a dose; look a few hours ahead from the later of now / the dose.
+        val peak = curve(doses, from, from + 4 * HOUR_MS.toLong(), 49, halfLifeHours).maxOrNull() ?: 0f
+        if (peak <= thresholdMg) return SleepVerdict.NeverAffects
+        return clearTime(doses, from, halfLifeHours, thresholdMg)?.let { SleepVerdict.ClearAt(it) }
+            ?: SleepVerdict.NotWithin36h
+    }
+
+    /** Typical caffeine per serving — what the sleep calculator's chips fill in. Rough, well-known figures. */
+    val PRESETS: List<CaffeinePreset> = listOf(
+        CaffeinePreset("Espresso", "single shot", 63),
+        CaffeinePreset("Double espresso", "2 shots", 126),
+        CaffeinePreset("Coffee", "mug, 250 ml", 95),
+        CaffeinePreset("Latte / cappuccino", "2 shots", 126),
+        CaffeinePreset("Cold brew", "350 ml", 155),
+        CaffeinePreset("Black tea", "250 ml", 47),
+        CaffeinePreset("Green tea", "250 ml", 28),
+        CaffeinePreset("Matcha", "1 tsp", 70),
+        CaffeinePreset("Cola", "330 ml can", 32),
+        CaffeinePreset("Red Bull", "250 ml can", 80),
+        CaffeinePreset("Monster", "500 ml can", 160),
+        CaffeinePreset("Celsius", "355 ml can", 200),
+        CaffeinePreset("Caffeine pill", "1 tablet", 200)
+    )
+
     /** The level sampled evenly from [fromMillis] to [toMillis] — the detail chart's line. */
     fun curve(doses: List<CaffeineDose>, fromMillis: Long, toMillis: Long, points: Int, halfLifeHours: Float): List<Float> {
         if (points < 2 || toMillis <= fromMillis) return emptyList()
@@ -105,36 +157,36 @@ object Caffeine {
      */
     fun estimateMg(name: String, grams: Float): Float? {
         if (grams <= 0f) return null
-        // Padded so whole-word entries like " tea" also match at the very start or end of a name.
-        val n = " " + name.lowercase() + " "
-        val per100 = ESTIMATES.firstOrNull { (words, _) -> words.any { n.contains(it) } }?.second ?: return null
+        // Whole words only (TextMatch) — "cola" mustn't match "chocolate", nor "tea" "steak".
+        val per100 = ESTIMATES.firstOrNull { (words, _) -> TextMatch.containsAny(name, words) }?.second ?: return null
         return per100 * grams / 100f
     }
 
     /** Keyword → mg per 100 ml/g. First match wins, so caffeine-free and specific entries come first. */
     private val ESTIMATES: List<Pair<List<String>, Float>> = listOf(
-        listOf("decaf", "caffeine free", "caffeine-free", "koffeinfrei", "bez kofeinu") to 1f,
+        listOf("decaf*", "caffeine free", "koffeinfrei", "bez kofeinu", "bezkofeinov*") to 1f,
         listOf("herbal", "rooibos", "chamomile", "camomile", "peppermint tea", "mint tea", "fruit tea",
-            "hibiscus", "turmeric latte", "golden milk", "coffee cake", "creamer", "coffee mate") to 0f,
+            "hibiscus", "turmeric latte", "golden milk", "coffee cake", "creamer", "coffee mate", "hot chocolate") to 0f,
+        listOf("dark chocolate", "hořká čokoláda", "horká čokoláda") to 60f,
+        listOf("milk chocolate", "mléčná čokoláda", "mliečna čokoláda") to 20f,
+        listOf("tiramisu") to 8f,
         listOf("espresso", "ristretto", "doppio") to 210f,
         listOf("cold brew") to 45f,
         listOf("celsius", "bang energy", "reign") to 60f,
-        listOf("red bull", "monster", "rockstar", "energy drink", "hell energy", "burn energy", "tiger energy", "big shock") to 32f,
+        listOf("red bull", "monster", "rockstar", "energy drink", "hell energy", "burn energy", "tiger energy",
+            "big shock", "semtex", "енергетик", "енергетичний напій") to 32f,
         listOf("matcha") to 25f,
         listOf("yerba", "mate tea", "club-mate", "club mate") to 30f,
+        listOf("chai") to 15f,
         listOf("flat white") to 45f,
         listOf("americano", "long black", "cappuccino", "latte", "macchiato", "cortado", "mocha", "frappuccino", "iced coffee") to 30f,
         listOf("instant coffee") to 25f,
-        listOf("coffee", "káva", "kava ") to 40f,
-        listOf("chai") to 15f,
+        listOf("coffee", "káv*", "kava", "кава", "кофе") to 40f,
         listOf("green tea", "white tea", "oolong") to 12f,
         listOf("iced tea", "ice tea") to 8f,
-        listOf("black tea", "earl grey", "english breakfast", "assam", "darjeeling", " tea") to 20f,
+        listOf("black tea", "earl grey", "english breakfast", "assam", "darjeeling", "tea", "čaj", "чай") to 20f,
         listOf("mountain dew") to 15f,
-        listOf("diet coke", "coca-cola light", "coke light", "pepsi max") to 13f,
-        listOf("kofola", "dr pepper", "cola", "coke", "pepsi") to 10f,
-        listOf("dark chocolate") to 60f,
-        listOf("milk chocolate") to 20f,
-        listOf("tiramisu") to 8f
+        listOf("diet coke", "coca-cola light", "coke light", "pepsi max", "coke zero", "coca-cola zero") to 13f,
+        listOf("kofola", "dr pepper", "cola", "coca-cola", "coke", "pepsi") to 10f
     )
 }

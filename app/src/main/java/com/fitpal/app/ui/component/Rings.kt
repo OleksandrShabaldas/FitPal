@@ -76,7 +76,7 @@ fun CalorieRing(
     val ringColor = if (over) ScorePoor else CalorieColor
     val frac = if (goal > 0) consumed.toFloat() / goal else 0f
     val left = goal - consumed
-    val trackColor = Color.White.copy(alpha = 0.08f)
+    val trackColor = com.fitpal.app.ui.theme.filmColor(0.08f)
     val animFrac by animateFloatAsState(targetValue = frac, animationSpec = tween(700), label = "calFrac")
     val animNum by animateIntAsState(targetValue = if (goal > 0) abs(left) else consumed, animationSpec = tween(700), label = "calNum")
 
@@ -223,7 +223,7 @@ fun MiniRing(
                 val inset = sw / 2f
                 val arcSize = Size(size.width - sw, size.height - sw)
                 val tl = Offset(inset, inset)
-                drawArc(Color.White.copy(alpha = 0.09f), -90f, 360f, false, tl, arcSize, style = Stroke(sw, cap = StrokeCap.Round))
+                drawArc(com.fitpal.app.ui.theme.filmColor(0.09f), -90f, 360f, false, tl, arcSize, style = Stroke(sw, cap = StrokeCap.Round))
                 val sweep = animFrac.coerceIn(0f, 1f) * 360f
                 drawArc(color, -90f, sweep, false, tl, arcSize, style = Stroke(sw, cap = StrokeCap.Round))
             }

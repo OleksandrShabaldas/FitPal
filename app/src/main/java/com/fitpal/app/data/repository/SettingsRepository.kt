@@ -342,7 +342,10 @@ class SettingsRepository @Inject constructor(
             ?: com.fitpal.app.domain.model.FastingIntensity.NORMAL,
         style = com.fitpal.app.domain.model.FastingStyle.entries
             .firstOrNull { it.name == prefs.getString(KEY_FASTING_STYLE, null) }
-            ?: com.fitpal.app.domain.model.FastingStyle.BAR
+            ?: com.fitpal.app.domain.model.FastingStyle.BAR,
+        drinkRule = com.fitpal.app.domain.model.FastingDrinkRule.entries
+            .firstOrNull { it.name == prefs.getString(KEY_FASTING_DRINK_RULE, null) }
+            ?: com.fitpal.app.domain.model.FastingDrinkRule.CALORIE_FREE
     )
 
     private val _fastingSchedule = MutableStateFlow(loadFastingSchedule())
@@ -381,6 +384,12 @@ class SettingsRepository @Inject constructor(
     fun setFastingStyle(style: com.fitpal.app.domain.model.FastingStyle) {
         prefs.edit().putString(KEY_FASTING_STYLE, style.name).apply()
         _fastingSchedule.value = _fastingSchedule.value.copy(style = style)
+    }
+
+    /** Which drinks don't break the fast (off / calorie-free / light / any). */
+    fun setFastingDrinkRule(rule: com.fitpal.app.domain.model.FastingDrinkRule) {
+        prefs.edit().putString(KEY_FASTING_DRINK_RULE, rule.name).apply()
+        _fastingSchedule.value = _fastingSchedule.value.copy(drinkRule = rule)
     }
 
     // --- Dietary rules (per-category daily kcal caps: dessert / fried / sugary drinks) ---
@@ -486,6 +495,29 @@ class SettingsRepository @Inject constructor(
 
     // --- Home hero: the little drawer of food-limit + caffeine rings, open or closed ---
     // Persisted (not a remember) so it stays the way you left it across screens and restarts.
+
+    // --- Appearance (Settings → Appearance): the look — style × palette × mode — and its knobs ---
+
+    private val _appearance = MutableStateFlow(com.fitpal.app.ui.theme.Appearance.fromJson(prefs.getString(KEY_APPEARANCE, null)))
+    val appearance: StateFlow<com.fitpal.app.ui.theme.Appearance> = _appearance
+
+    fun setAppearance(appearance: com.fitpal.app.ui.theme.Appearance) {
+        prefs.edit().putString(KEY_APPEARANCE, appearance.toJson()).apply()
+        _appearance.value = appearance
+    }
+
+    fun updateAppearance(change: (com.fitpal.app.ui.theme.Appearance) -> com.fitpal.app.ui.theme.Appearance) =
+        setAppearance(change(_appearance.value))
+
+    // --- The bottom bar: tabs, labels, what "+" does, floating or docked ---
+
+    private val _navConfig = MutableStateFlow(com.fitpal.app.domain.model.NavConfig.fromJson(prefs.getString(KEY_NAV_CONFIG, null)))
+    val navConfig: StateFlow<com.fitpal.app.domain.model.NavConfig> = _navConfig
+
+    fun setNavConfig(config: com.fitpal.app.domain.model.NavConfig) {
+        prefs.edit().putString(KEY_NAV_CONFIG, config.toJson()).apply()
+        _navConfig.value = config
+    }
 
     private val _heroDrawerOpen = MutableStateFlow(prefs.getBoolean(KEY_HERO_DRAWER_OPEN, false))
     val heroDrawerOpen: StateFlow<Boolean> = _heroDrawerOpen
@@ -800,6 +832,15 @@ class SettingsRepository @Inject constructor(
         _widgetLayouts.value = updated
     }
 
+    /** All screens' layouts as JSON (for the backup file). */
+    fun exportWidgetLayoutsJson(): String = serializeWidgetLayouts(_widgetLayouts.value)
+
+    /** Restore layouts from a backup's JSON; unknown cards are dropped when each screen resolves. */
+    fun importWidgetLayoutsJson(json: String) {
+        prefs.edit().putString(KEY_WIDGET_LAYOUTS, json).apply()
+        _widgetLayouts.value = loadWidgetLayouts()
+    }
+
     private fun loadWidgetLayouts(): Map<String, List<com.fitpal.app.domain.model.WidgetSetting>> {
         val raw = prefs.getString(KEY_WIDGET_LAYOUTS, null) ?: return emptyMap()
         return try {
@@ -811,7 +852,14 @@ class SettingsRepository @Inject constructor(
                     for (i in 0 until arr.length()) {
                         val o = arr.optJSONObject(i) ?: continue
                         val key = o.optString("key").takeIf { it.isNotBlank() } ?: continue
-                        list.add(com.fitpal.app.domain.model.WidgetSetting(key, o.optBoolean("on", true)))
+                        list.add(
+                            com.fitpal.app.domain.model.WidgetSetting(
+                                key = key,
+                                enabled = o.optBoolean("on", true),
+                                size = com.fitpal.app.domain.model.CardSize.entries.firstOrNull { it.name == o.optString("size") },
+                                variant = o.optString("variant").takeIf { it.isNotBlank() }
+                            )
+                        )
                     }
                     put(screenId, list)
                 }
@@ -825,7 +873,12 @@ class SettingsRepository @Inject constructor(
         val obj = JSONObject()
         map.forEach { (screenId, list) ->
             val arr = JSONArray()
-            list.forEach { arr.put(JSONObject().put("key", it.key).put("on", it.enabled)) }
+            list.forEach { s ->
+                val o = JSONObject().put("key", s.key).put("on", s.enabled)
+                s.size?.let { o.put("size", it.name) }
+                s.variant?.let { o.put("variant", it) }
+                arr.put(o)
+            }
             obj.put(screenId, arr)
         }
         return obj.toString()
@@ -930,12 +983,15 @@ class SettingsRepository @Inject constructor(
         private const val KEY_FASTING_NOTIFY = "fasting_notify"
         private const val KEY_FASTING_INTENSITY = "fasting_intensity"
         private const val KEY_FASTING_STYLE = "fasting_style"
+        private const val KEY_FASTING_DRINK_RULE = "fasting_drink_rule"
         private const val KEY_HIDDEN_FOODS = "hidden_food_ids"
         private const val KEY_FASTING_GRACE = "fasting_grace"
         private const val KEY_CAFFEINE_ENABLED = "caffeine_enabled"
         private const val KEY_CAFFEINE_LIMIT = "caffeine_daily_limit_mg"
         private const val KEY_CAFFEINE_HALF_LIFE = "caffeine_half_life_h"
         private const val KEY_HERO_DRAWER_OPEN = "hero_drawer_open"
+        private const val KEY_APPEARANCE = "appearance"
+        private const val KEY_NAV_CONFIG = "nav_config"
 
         /** How many "I ate earlier" fasting corrections are allowed per calendar month. */
         const val FASTING_BACKDATE_LIMIT = 3

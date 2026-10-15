@@ -35,7 +35,7 @@ import com.fitpal.app.ui.theme.CreamMuted
 
 /**
  * The user's three online model slots, in Settings order (blanks included so slot numbers line up
- * with the Settings labels). Provided once at the Compose root by `MainActivity`, so any badge can
+ * with the Settings labels). Provided once at the Compose root by `FitPalActivity`, so any badge can
  * name the slot that answered — "Fallback 2" — instead of spelling out a long model id.
  *
  * Empty by default: with no slots to match against, a badge just shows the model's own name, which

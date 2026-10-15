@@ -7,7 +7,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
-import com.fitpal.app.MainActivity
+import com.fitpal.app.FitPalActivity
 import com.fitpal.app.data.repository.WeightRepository
 import com.fitpal.app.domain.model.ReminderKind
 import com.fitpal.app.ml.ReviewGenerator
@@ -175,9 +175,9 @@ class ReminderReceiver : BroadcastReceiver() {
     }
 
     private fun openIntent(context: Context, route: String, requestCode: Int): PendingIntent {
-        val open = Intent(context, MainActivity::class.java).apply {
+        val open = Intent(context, FitPalActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
-            putExtra(MainActivity.EXTRA_NAV_ROUTE, route)
+            putExtra(FitPalActivity.EXTRA_NAV_ROUTE, route)
         }
         return PendingIntent.getActivity(
             context, requestCode, open,

@@ -134,6 +134,14 @@ fun BarcodeScreen(
                     state.product != null -> Column(modifier = Modifier.padding(20.dp)) {
                         Text("Found it — adjust the amount and log:", style = MaterialTheme.typography.titleMedium, color = Cream)
                         Spacer(Modifier.height(8.dp))
+                        // Food or drink — a drink is measured in ml and counts toward the day's water.
+                        com.fitpal.app.ui.component.SegmentedPills(
+                            labels = listOf("Food", "Drink"),
+                            selectedIndex = if (state.product!!.isDrink) 1 else 0,
+                            accent = com.fitpal.app.ui.theme.GoldLight,
+                            onSelect = { viewModel.setDrink(it == 1) }
+                        )
+                        Spacer(Modifier.height(8.dp))
                         EditableFoodItemRow(
                             ingredient = state.product!!,
                             onGramsChanged = { viewModel.updateGrams(it) },
@@ -205,7 +213,8 @@ fun BarcodeScreen(
                         onClick = {
                             fastingGuard.attempt(
                                 isForToday = logDate == java.time.LocalDate.now(),
-                                eatenAt = eatenAt.time
+                                eatenAt = eatenAt.time,
+                                intake = com.fitpal.app.domain.model.FastingIntake.of(listOfNotNull(state.product).map { it.isDrink to it.calories })
                             ) { decision -> viewModel.logMeal(decision) }
                         },
                         modifier = Modifier.fillMaxWidth(),

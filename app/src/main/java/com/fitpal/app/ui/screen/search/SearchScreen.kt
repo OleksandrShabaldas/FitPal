@@ -149,8 +149,10 @@ fun SearchScreen(
             result = result,
             onLogAgain = {
                 when (result) {
-                    is SearchResult.Food -> fastingGuard.attempt {
-                        viewModel.logFoodAgain(result.item) {
+                    is SearchResult.Food -> fastingGuard.attempt(
+                        intake = com.fitpal.app.domain.model.FastingIntake.of(listOf(result.item.isDrink to result.item.calories))
+                    ) { decision ->
+                        viewModel.logFoodAgain(result.item, decision) {
                             android.widget.Toast.makeText(context, "Added to today", android.widget.Toast.LENGTH_SHORT).show()
                             selected = null
                         }

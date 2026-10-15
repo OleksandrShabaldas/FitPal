@@ -39,6 +39,10 @@ import com.fitpal.app.domain.BmrCalculator
 import com.fitpal.app.domain.Macro
 import com.fitpal.app.domain.MacroPlan
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.LocalDrink
+import androidx.compose.material.icons.filled.Coffee
+import androidx.compose.material.icons.filled.WaterDrop
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bolt
@@ -154,8 +158,15 @@ fun SettingsCategoryScreen(
                     SettingsAnchor("online_ai", focus) { OnlineAiSection(viewModel) }
                     SettingsAnchor("ondevice", focus) { AiModelSection(onManageModels) }
                 }
+                "appearance" -> {
+                    SettingsAnchor("look", focus) { AppearanceLookSection(viewModel) }
+                    SettingsAnchor("app_icon", focus) { AppIconSection() }
+                    SettingsAnchor("look_tuning", focus) { AppearanceTuningSection(viewModel) }
+                }
                 "personalize" -> {
                     SettingsAnchor("customize", focus) { PersonalizeSection(onCustomizeScreen) }
+                    SettingsAnchor("nav_bar", focus) { NavBarSection(viewModel) }
+                    SettingsAnchor("layout_presets", focus) { LayoutPresetsSection(viewModel) }
                     SettingsAnchor("home_display", focus) { HomeDisplaySection(viewModel) }
                 }
                 "data" -> {
@@ -830,7 +841,7 @@ private fun PersonalizeSection(onCustomizeScreen: (String) -> Unit) {
     Box(modifier = Modifier.fillMaxWidth().glass()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text("Customize screens", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            Text("Reorder and show or hide the cards on each screen.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Order, show or hide, and size each screen's cards. Home can also be arranged in place from the slider icon in its header.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(8.dp))
             com.fitpal.app.domain.model.ScreenWidgets.screens.forEach { screenId ->
                 Row(
@@ -1277,7 +1288,42 @@ private fun FastingSection(viewModel: SettingsViewModel) {
                     }
                 }
 
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(14.dp))
+                Text("Drinks during a fast", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                Text(
+                    "Which drinks you can log without breaking the fast. Counted per log, so a black coffee is a few kcal and a latte is well over a hundred.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(8.dp))
+                com.fitpal.app.domain.model.FastingDrinkRule.entries.chunked(2).forEach { pair ->
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        pair.forEach { rule ->
+                            val selected = schedule.drinkRule == rule
+                            FastingChoiceTile(
+                                selected = selected,
+                                title = rule.label,
+                                blurb = rule.blurb,
+                                onClick = { viewModel.setFastingDrinkRule(rule) },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    imageVector = when (rule) {
+                                        com.fitpal.app.domain.model.FastingDrinkRule.OFF -> Icons.Default.Block
+                                        com.fitpal.app.domain.model.FastingDrinkRule.CALORIE_FREE -> Icons.Default.WaterDrop
+                                        com.fitpal.app.domain.model.FastingDrinkRule.LIGHT -> Icons.Default.Coffee
+                                        com.fitpal.app.domain.model.FastingDrinkRule.ANY -> Icons.Default.LocalDrink
+                                    },
+                                    contentDescription = null,
+                                    tint = if (selected) com.fitpal.app.ui.theme.GoldLight else com.fitpal.app.ui.theme.CreamMuted,
+                                    modifier = Modifier.padding(vertical = 10.dp).size(26.dp)
+                                )
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                }
+
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Column(modifier = Modifier.weight(1f)) {
@@ -1640,7 +1686,7 @@ private fun DataSection(viewModel: SettingsViewModel) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text("Your data", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Text(
-                "Back up your meals, weights, steps, exercises and trail progress, or restore from a backup. The downloaded food database isn't included.",
+                "Back up your meals, weights, steps, exercises and trail progress — plus your look, screen layouts and bottom bar — or restore from a backup. The downloaded food database and the app icon aren't included.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

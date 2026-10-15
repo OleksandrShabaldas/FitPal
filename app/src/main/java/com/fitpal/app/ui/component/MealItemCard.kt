@@ -114,6 +114,8 @@ fun MealItemCard(
     onToggleSave: (() -> Unit)? = null,
     saved: Boolean = false,
     onOpenDetails: (() -> Unit)? = null,
+    /** The Food / Drink switch — when the AI (or a database name) got it wrong. */
+    onSetDrink: ((Boolean) -> Unit)? = null,
     mealPresets: List<ServingPreset> = emptyList(),
     drinkPresets: List<ServingPreset> = emptyList()
 ) {
@@ -185,6 +187,20 @@ fun MealItemCard(
         Spacer(Modifier.height(12.dp))
         MacroBar(protein = content.protein, fat = content.fat, carbs = content.carbs, fiber = content.fiber)
         Spacer(Modifier.height(16.dp))
+
+        // Food or drink — a drink is measured in ml, counts toward water and the fasting drink rule.
+        if (onSetDrink != null) {
+            Row(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("It's a", style = MaterialTheme.typography.titleSmall, color = Cream, modifier = Modifier.weight(1f))
+                SegmentedPills(
+                    labels = listOf("Food", "Drink"),
+                    selectedIndex = if (content.isDrink) 1 else 0,
+                    accent = GoldLight,
+                    onSelect = { onSetDrink(it == 1) },
+                    modifier = Modifier.width(170.dp)
+                )
+            }
+        }
 
         // Amount (servings) — pre-log photo only.
         if (onServingsChanged != null) {

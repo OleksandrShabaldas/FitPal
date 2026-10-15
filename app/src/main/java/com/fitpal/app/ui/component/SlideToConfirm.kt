@@ -100,7 +100,7 @@ fun SlideToConfirm(
             .height(thumb + pad * 2)
             .onSizeChanged { trackPx = it.width }
             .clip(shape)
-            .background(Color.White.copy(alpha = 0.07f))
+            .background(com.fitpal.app.ui.theme.filmColor(0.07f))
             .border(1.dp, GlassBorder, shape)
             .semantics(mergeDescendants = true) {
                 contentDescription = text

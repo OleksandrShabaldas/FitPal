@@ -160,8 +160,15 @@ fun CustomFoodScreen(
                         placeholder = { Text("e.g. Horalka") },
                         singleLine = true
                     )
+                    // A drink is measured in ml and counts toward the day's water.
+                    com.fitpal.app.ui.component.SegmentedPills(
+                        labels = listOf("Food", "Drink"),
+                        selectedIndex = if (state.isDrink) 1 else 0,
+                        accent = GoldLight,
+                        onSelect = { viewModel.setDrink(it == 1) }
+                    )
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        NumberField("Amount (g/ml)", state.amount, viewModel::onAmount, Modifier.weight(1f))
+                        NumberField(if (state.isDrink) "Amount (ml)" else "Amount (g)", state.amount, viewModel::onAmount, Modifier.weight(1f))
                         NumberField("Calories (kcal)", state.calories, viewModel::onCalories, Modifier.weight(1f))
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -200,7 +207,8 @@ fun CustomFoodScreen(
                     onClick = {
                         fastingGuard.attempt(
                             isForToday = logDate == java.time.LocalDate.now(),
-                            eatenAt = eatenAt.time
+                            eatenAt = eatenAt.time,
+                            intake = viewModel.fastingIntake()
                         ) { decision -> viewModel.log(decision) }
                     },
                     modifier = Modifier.fillMaxWidth(),

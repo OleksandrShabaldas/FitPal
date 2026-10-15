@@ -26,6 +26,8 @@ data class CustomFoodUiState(
     val fat: String = "",
     val carbs: String = "",
     val fiber: String = "",
+    /** A drink is measured in ml and counts toward the day's water (and the fasting drink rule). */
+    val isDrink: Boolean = false,
     val isSaving: Boolean = false,
     val saved: Boolean = false,
     /** True once this food has been saved to the collection (drives the button's saved state). */
@@ -207,8 +209,22 @@ class CustomFoodViewModel @Inject constructor(
             fatPer100g = per100(s.fat),
             carbsPer100g = per100(s.carbs),
             fiberPer100g = per100(s.fiber),
+            waterMlPer100g = if (s.isDrink)
+                com.fitpal.app.domain.Drinks.estimateWaterPer100(per100(s.carbs), per100(s.protein), per100(s.fat))
+            else 0f,
+            isDrink = s.isDrink,
             caffeineMgPer100g = labelCaffeinePer100
         )
+    }
+
+    fun setDrink(drink: Boolean) {
+        _uiState.value = _uiState.value.copy(isDrink = drink)
+    }
+
+    /** What this log is, for the fasting drink rule. */
+    fun fastingIntake(): com.fitpal.app.domain.model.FastingIntake {
+        val s = _uiState.value
+        return com.fitpal.app.domain.model.FastingIntake(s.isDrink, s.calories.toFloatOrNull() ?: 0f)
     }
 
     /** Log the food. [decision] = what the fasting check decided. */

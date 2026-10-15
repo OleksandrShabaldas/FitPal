@@ -81,8 +81,15 @@ data class MealTimeRow(
     val date: String,
     val timestamp: Long,
     /** Logged with "log anyway" during a fast — breaks the day whatever its time says. */
-    val loggedDuringFast: Boolean = false
-)
+    val loggedDuringFast: Boolean = false,
+    /** Every item in the meal is a drink (and it has at least one) — for the fasting drink rule. */
+    val drinkOnly: Boolean = false,
+    /** The meal's total kcal — the drink rule caps a fast-friendly drink log by it. */
+    val kcal: Float = 0f
+) {
+    val fastingIntake: com.fitpal.app.domain.model.FastingIntake
+        get() = com.fitpal.app.domain.model.FastingIntake(drinkOnly, kcal)
+}
 
 /** One logged item's caffeine + when it was eaten — the caffeine tracker's raw data. */
 data class CaffeineRow(
@@ -165,8 +172,17 @@ interface MealLogDao {
     @Query("SELECT * FROM meal_log_items WHERE id = :itemId")
     fun observeItemById(itemId: Long): Flow<MealLogItemEntity?>
 
-    /** Every non-water meal's day + eaten time in a range — for fasting adherence (excludes plain water quick-adds). */
-    @Query("SELECT date, timestamp, loggedDuringFast FROM meal_logs WHERE date BETWEEN :from AND :to AND mealType != 'water'")
+    /**
+     * Every non-water meal's day + eaten time in a range — for fasting adherence (excludes plain water
+     * quick-adds) — plus whether it was only drinks and its kcal, so the drink rule can let it through.
+     */
+    @Query(
+        """SELECT m.date AS date, m.timestamp AS timestamp, m.loggedDuringFast AS loggedDuringFast,
+           (EXISTS (SELECT 1 FROM meal_log_items i WHERE i.mealLogId = m.id)
+             AND NOT EXISTS (SELECT 1 FROM meal_log_items i2 WHERE i2.mealLogId = m.id AND i2.isDrink = 0)) AS drinkOnly,
+           COALESCE((SELECT SUM(i3.calories) FROM meal_log_items i3 WHERE i3.mealLogId = m.id), 0) AS kcal
+           FROM meal_logs m WHERE m.date BETWEEN :from AND :to AND m.mealType != 'water'"""
+    )
     fun getMealTimesInRange(from: String, to: String): Flow<List<MealTimeRow>>
 
     /** Move a whole meal to a new eaten time (same day) — the post-log time editor. */
@@ -300,6 +316,10 @@ interface MealLogDao {
     /** Save (or clear) cached AI insights for an item. */
     @Query("UPDATE meal_log_items SET insightsJson = :insightsJson, insightsGeneratedAt = :generatedAt WHERE id = :id")
     suspend fun updateInsights(id: Long, insightsJson: String?, generatedAt: Long)
+
+    /** Food / Drink switch on a logged item: the flag plus the water it now counts toward the day. */
+    @Query("UPDATE meal_log_items SET isDrink = :isDrink, waterMl = :waterMl WHERE id = :id")
+    suspend fun updateItemDrink(id: Long, isDrink: Boolean, waterMl: Float)
 
     /** Rename a logged item — the user can, and "Edit with AI" can re-identify the dish. */
     @Query("UPDATE meal_log_items SET name = :name WHERE id = :id")

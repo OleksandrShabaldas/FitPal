@@ -341,7 +341,7 @@ private fun EnergyBar(
         Box(
             modifier = Modifier.fillMaxWidth().height(12.dp)
                 .clip(RoundedCornerShape(6.dp))
-                .background(Color.White.copy(alpha = 0.07f))
+                .background(com.fitpal.app.ui.theme.filmColor(0.07f))
         ) {
             Row(Modifier.fillMaxWidth()) {
                 segments.forEach { (amount, color) ->

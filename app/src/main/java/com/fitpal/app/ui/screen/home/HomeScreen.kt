@@ -1,5 +1,21 @@
 package com.fitpal.app.ui.screen.home
 
+import com.fitpal.app.ui.theme.FiberColor
+import com.fitpal.app.ui.theme.CarbColor
+import com.fitpal.app.ui.theme.FatColor
+import com.fitpal.app.ui.theme.CaffeineColor
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.WaterDrop
+import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.MonitorWeight
+import androidx.compose.material.icons.filled.LocalCafe
+import androidx.compose.material.icons.filled.HourglassEmpty
+import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
+import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyListState
+import kotlin.math.roundToInt
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
@@ -204,13 +220,16 @@ fun HomeScreen(
         viewModel.syncHealthConnect()
     }
 
-    // INTENSE fasting: a reminder drops in each time Home is opened during a fast — opening the app,
-    // switching to the Home tab, coming back from another screen. ON_START rather than ON_RESUME, so
-    // closing a dialog over Home (which only pauses it) doesn't count as opening it again.
+    // INTENSE fasting: a reminder drops in when you come to the app during a fast — once per visit
+    // (opening it, or coming back from another app), never again for moving between FitPal's own
+    // screens or the jump back to Home after a log. The visit is app-wide (AppForegroundState),
+    // because Home's own state is rebuilt on every return.
     val fastingSchedule = LocalFastingSchedule.current
     var fastingBannerVisible by remember { mutableStateOf(false) }
     LifecycleEventEffect(Lifecycle.Event.ON_START) {
-        if (fastingSchedule.isIntense && fastingSchedule.stateAt(minuteOfDayNow()).isFasting) {
+        if (fastingSchedule.isIntense && fastingSchedule.stateAt(minuteOfDayNow()).isFasting &&
+            viewModel.claimFastingBanner()
+        ) {
             fastingBannerVisible = true
         }
     }
@@ -253,6 +272,126 @@ fun HomeScreen(
         }
     }
 
+    // Arranging Home: the pencil in the header (or Settings) turns it on; Back or Done turns it off.
+    var editing by rememberSaveable { mutableStateOf(false) }
+    androidx.activity.compose.BackHandler(enabled = editing) { editing = false }
+    // While arranging, a local copy follows each drag instantly (the saved layout catches up).
+    var editList by remember { mutableStateOf(widgetLayout) }
+    LaunchedEffect(widgetLayout) { editList = widgetLayout }
+
+    // One card, drawn at its chosen size and style.
+    val homeCard: @Composable (com.fitpal.app.domain.model.ResolvedCard, Modifier) -> Unit = { card, m ->
+        val small = card.size == com.fitpal.app.domain.model.CardSize.S
+        when (card.key) {
+            "hero" -> Box(m) {
+                HeroCard(
+                    isToday = selectedDate == LocalDate.now(),
+                    consumed = nutrition.calories.toInt(),
+                    goal = effectiveGoal,
+                    tier = score.tier,
+                    balanceScore = score.score,
+                    balanceHint = balanceHint(
+                        over = nutrition.calories.toInt() > effectiveGoal,
+                        protein = nutrition.protein, proteinTarget = targets?.proteinG?.toFloat() ?: 0f,
+                        fat = nutrition.fat, fatTarget = targets?.fatG?.toFloat() ?: 0f,
+                        carbs = nutrition.carbs, carbTarget = targets?.carbsG?.toFloat() ?: 0f,
+                        fiber = nutrition.fiber, fiberTarget = targets?.fiberG?.toFloat() ?: 0f,
+                        microCoverage = microCoverage(micros)
+                    ),
+                    baseGoal = baseGoal,
+                    activityKcal = exerciseCalories.toInt() + stepCalories.toInt(),
+                    micros = Micronutrients(
+                        vitaminAMcg = micros.vitaminA, vitaminCMg = micros.vitaminC, vitaminDMcg = micros.vitaminD,
+                        calciumMg = micros.calcium, ironMg = micros.iron, potassiumMg = micros.potassium, sodiumMg = micros.sodium,
+                        vitaminB12Mcg = micros.vitaminB12, folateMcg = micros.folate, vitaminB6Mg = micros.vitaminB6,
+                        magnesiumMg = micros.magnesium, zincMg = micros.zinc, vitaminEMg = micros.vitaminE
+                    ),
+                    protein = nutrition.protein, proteinTarget = targets?.proteinG?.toFloat() ?: 0f,
+                    fat = nutrition.fat, fatTarget = targets?.fatG?.toFloat() ?: 0f,
+                    carbs = nutrition.carbs, carbTarget = targets?.carbsG?.toFloat() ?: 0f,
+                    fiber = nutrition.fiber, fiberTarget = targets?.fiberG?.toFloat() ?: 0f,
+                    drawer = com.fitpal.app.ui.component.HeroDrawerState(dietaryStatuses, caffeineView),
+                    drawerOpen = heroDrawerOpen,
+                    onToggleDrawer = viewModel::toggleHeroDrawer,
+                    nowMillis = nowMillis,
+                    onOpenCaffeine = { showCaffeine = true },
+                    size = card.size,
+                    variant = card.variant ?: "ring"
+                )
+            }
+            "ai_review" -> {
+                val open = { onOpenReview("daily", selectedDate.format(DateTimeFormatter.ISO_LOCAL_DATE)) }
+                if (small) SmallTile(
+                    Icons.Default.AutoAwesome, "AI overview",
+                    if (selectedDate == LocalDate.now()) "Today" else selectedDate.format(DateTimeFormatter.ofPattern("d MMM")),
+                    "Your personal review of the day", GoldLight, open, m
+                ) else Box(m) { AiDailyReviewCard(selectedDate = selectedDate, onOpen = open) }
+            }
+            "water" -> if (small) SmallTile(
+                Icons.Default.WaterDrop, "Water", "${water.toInt()} ml",
+                if (waterGoal > 0) "of $waterGoal ml" else "drinks + food", AccentTrends,
+                { onOpenWater(selectedDate.toString()) }, m,
+                action = waterPresets.firstOrNull()?.let { ml ->
+                    {
+                        GlassCapsule(onClick = { viewModel.addWater(ml.toFloat()) }) {
+                            Text("+$ml", style = MaterialTheme.typography.labelLarge, color = Cream)
+                        }
+                    }
+                }
+            ) else Box(m) {
+                WaterCard(
+                    totalMl = water, goalMl = waterGoal, presets = waterPresets,
+                    onAddWater = viewModel::addWater, onOpen = { onOpenWater(selectedDate.toString()) }
+                )
+            }
+            "steps" -> {
+                val log = { showStepDialog = true; viewModel.loadStepSources() }
+                if (small) SmallTile(
+                    Icons.AutoMirrored.Filled.DirectionsWalk, "Steps", "%,d".format(dailySteps.coerceAtLeast(0)),
+                    if (stepCalories > 0) "${stepCalories.toInt()} kcal burned" else "Tap to log steps", AccentGarden, log, m
+                ) else Box(m) { StepsCard(totalSteps = dailySteps, caloriesBurned = stepCalories, onLogSteps = log) }
+            }
+            "exercise" -> {
+                val add = { viewModel.prepareLogToViewedDate(); onLogExercise() }
+                if (small) SmallTile(
+                    Icons.Default.FitnessCenter, "Exercise",
+                    if (exerciseCalories > 0) "${exerciseCalories.toInt()} kcal" else "—",
+                    if (exerciseEntries.isEmpty()) "Tap to log a workout" else "${exerciseEntries.size} logged · tap to add",
+                    AccentGarden, add, m
+                ) else Box(m) {
+                    ExerciseCard(
+                        totalBurned = exerciseCalories, entries = exerciseEntries, onAdd = add,
+                        onDelete = viewModel::deleteExercise, onEntryClick = onExerciseClick
+                    )
+                }
+            }
+            "weight" -> if (small) SmallTile(
+                Icons.Default.MonitorWeight, "Weight",
+                latestWeight?.weightKg?.let { "${"%.1f".format(it)} kg" } ?: "— kg",
+                "Tap to log", GoldLight, onOpenWeighIn, m
+            ) else Box(m) { WeightCard(latestWeight = latestWeight?.weightKg, onLog = onOpenWeighIn) }
+            "macros" -> Box(m) {
+                MacrosCard(
+                    bars = card.variant == "bars",
+                    protein = nutrition.protein, proteinTarget = targets?.proteinG?.toFloat() ?: 0f,
+                    fat = nutrition.fat, fatTarget = targets?.fatG?.toFloat() ?: 0f,
+                    carbs = nutrition.carbs, carbTarget = targets?.carbsG?.toFloat() ?: 0f,
+                    fiber = nutrition.fiber, fiberTarget = targets?.fiberG?.toFloat() ?: 0f
+                )
+            }
+            "fasting" -> FastingCard(schedule = fastingSchedule, small = small, modifier = m)
+            "caffeine" -> {
+                val now = caffeineView?.amountAt(nowMillis)
+                SmallTile(
+                    Icons.Default.LocalCafe, "Caffeine",
+                    now?.let { "${it.roundToInt()} mg" } ?: "Off",
+                    if (now != null) "in your body now · tap for sleep" else "Turn on in Settings → Caffeine",
+                    CaffeineColor, { if (caffeineView != null) showCaffeine = true }, m
+                )
+            }
+        }
+    }
+
     GradientBackdrop(theme = BackdropTheme.TODAY) {
         Box(Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize().nestedScroll(searchBarScroll)) {
@@ -275,7 +414,22 @@ fun HomeScreen(
             },
             label = "daySwipe"
         ) { _ ->
+            val listState = rememberLazyListState()
+            val reorderState = rememberReorderableLazyListState(listState) { from, to ->
+                val f = (from.key as? String)?.removePrefix("card_")
+                val t = (to.key as? String)?.removePrefix("card_")
+                if ((from.key as? String)?.startsWith("card_") == true && (to.key as? String)?.startsWith("card_") == true &&
+                    f != null && t != null
+                ) {
+                    editList = com.fitpal.app.domain.model.ScreenWidgets.resolveCards(
+                        com.fitpal.app.domain.model.ScreenWidgets.HOME,
+                        com.fitpal.app.domain.model.LayoutEdits.move(editList.map { it.setting }, f, t)
+                    )
+                    viewModel.moveCard(f, t)
+                }
+            }
             LazyColumn(
+                state = listState,
                 modifier = Modifier
                     .fillMaxSize()
                     .pointerInput(Unit) {
@@ -295,7 +449,7 @@ fun HomeScreen(
                         )
                     },
                 contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 110.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(com.fitpal.app.ui.theme.CardGap)
             ) {
                 item {
                     val nowHour = java.time.LocalTime.now().hour
@@ -327,103 +481,77 @@ fun HomeScreen(
                         onPrevDay = viewModel::goPrevDay,
                         onNextDay = viewModel::goNextDay,
                         onOpenTrail = onOpenTrail,
-                        trailPending = trailPending
+                        trailPending = trailPending,
+                        onCustomize = { editing = !editing }
                     )
                 }
 
-                // Cards below the header render in the user's chosen order, skipping hidden ones
-                // (Settings → Customize screens → Home). The default order matches the original.
-                widgetLayout.forEach forEachWidget@{ widget ->
-                    if (!widget.enabled) return@forEachWidget
-                    when (widget.key) {
-                        "hero" -> item(key = "hero") {
-                            HeroCard(
-                                isToday = selectedDate == LocalDate.now(),
-                                consumed = nutrition.calories.toInt(),
-                                goal = effectiveGoal,
-                                tier = score.tier,
-                                balanceScore = score.score,
-                                balanceHint = balanceHint(
-                                    over = nutrition.calories.toInt() > effectiveGoal,
-                                    protein = nutrition.protein, proteinTarget = targets?.proteinG?.toFloat() ?: 0f,
-                                    fat = nutrition.fat, fatTarget = targets?.fatG?.toFloat() ?: 0f,
-                                    carbs = nutrition.carbs, carbTarget = targets?.carbsG?.toFloat() ?: 0f,
-                                    fiber = nutrition.fiber, fiberTarget = targets?.fiberG?.toFloat() ?: 0f,
-                                    microCoverage = microCoverage(micros)
-                                ),
-                                baseGoal = baseGoal,
-                                activityKcal = exerciseCalories.toInt() + stepCalories.toInt(),
-                                micros = Micronutrients(
-                                    vitaminAMcg = micros.vitaminA, vitaminCMg = micros.vitaminC, vitaminDMcg = micros.vitaminD,
-                                    calciumMg = micros.calcium, ironMg = micros.iron, potassiumMg = micros.potassium, sodiumMg = micros.sodium,
-                                    vitaminB12Mcg = micros.vitaminB12, folateMcg = micros.folate, vitaminB6Mg = micros.vitaminB6,
-                                    magnesiumMg = micros.magnesium, zincMg = micros.zinc, vitaminEMg = micros.vitaminE
-                                ),
-                                protein = nutrition.protein, proteinTarget = targets?.proteinG?.toFloat() ?: 0f,
-                                fat = nutrition.fat, fatTarget = targets?.fatG?.toFloat() ?: 0f,
-                                carbs = nutrition.carbs, carbTarget = targets?.carbsG?.toFloat() ?: 0f,
-                                fiber = nutrition.fiber, fiberTarget = targets?.fiberG?.toFloat() ?: 0f,
-                                drawer = com.fitpal.app.ui.component.HeroDrawerState(dietaryStatuses, caffeineView),
-                                drawerOpen = heroDrawerOpen,
-                                onToggleDrawer = viewModel::toggleHeroDrawer,
-                                nowMillis = nowMillis,
-                                onOpenCaffeine = { showCaffeine = true }
-                            )
-                        }
-
-                        "ai_review" -> item(key = "ai_review") {
-                            AiDailyReviewCard(
-                                selectedDate = selectedDate,
-                                onOpen = {
-                                    onOpenReview("daily", selectedDate.format(DateTimeFormatter.ISO_LOCAL_DATE))
+                // Cards below the header, in the user's layout (Settings → Home & screens, or the
+                // pencil in the header): order, shown/hidden, size and style. Two Small cards share a row.
+                if (!editing) {
+                    com.fitpal.app.domain.model.ScreenWidgets.rows(widgetLayout.filter { it.enabled }).forEach { row ->
+                        val first = row.first()
+                        if (row.size == 1 && first.key == "meals") {
+                            sections.forEach { section ->
+                                item(key = "section_${section.type}") {
+                                    MealCategorySection(
+                                        section = section,
+                                        compact = compactEmptyMeals,
+                                        onAdd = { viewModel.startAddTo(section.type); onAddFood() },
+                                        onItemClick = { onEntryClick(it) },
+                                        onItemLongClick = { logged -> editingItem = logged; editingType = section.type },
+                                        onGroupClick = { onGroupClick(it) }
+                                    )
                                 }
-                            )
-                        }
-
-                        "meals" -> sections.forEach { section ->
-                            item(key = "section_${section.type}") {
-                                MealCategorySection(
-                                    section = section,
-                                    compact = compactEmptyMeals,
-                                    onAdd = { viewModel.startAddTo(section.type); onAddFood() },
-                                    onItemClick = { onEntryClick(it) },
-                                    onItemLongClick = { logged -> editingItem = logged; editingType = section.type },
-                                    onGroupClick = { onGroupClick(it) }
-                                )
+                            }
+                        } else {
+                            item(key = row.joinToString("+") { it.key }) {
+                                when {
+                                    row.size == 2 -> Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        row.forEach { homeCard(it, Modifier.weight(1f)) }
+                                    }
+                                    first.size == com.fitpal.app.domain.model.CardSize.S -> Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        homeCard(first, Modifier.weight(1f))
+                                        Spacer(Modifier.weight(1f))
+                                    }
+                                    else -> homeCard(first, Modifier.fillMaxWidth())
+                                }
                             }
                         }
-
-                        "water" -> item(key = "water") {
-                            WaterCard(
-                                totalMl = water,
-                                goalMl = waterGoal,
-                                presets = waterPresets,
-                                onAddWater = viewModel::addWater,
-                                onOpen = { onOpenWater(selectedDate.toString()) }
-                            )
+                    }
+                } else {
+                    item(key = "edit_banner") { EditModeBanner(onDone = { editing = false }) }
+                    editList.filter { it.enabled }.forEachIndexed { index, card ->
+                        item(key = "card_${card.key}") {
+                            ReorderableItem(reorderState, key = "card_${card.key}") { dragging ->
+                                EditFrame(
+                                    card = card,
+                                    index = index,
+                                    dragging = dragging,
+                                    dragHandle = Modifier.draggableHandle(),
+                                    onSize = { viewModel.setCardSize(card.key, it) },
+                                    onVariant = { viewModel.setCardVariant(card.key, it) },
+                                    onHide = { viewModel.hideCard(card.key) }
+                                ) {
+                                    when {
+                                        card.key == "meals" -> MealsEditPlaceholder(sections.size)
+                                        card.size == com.fitpal.app.domain.model.CardSize.S -> Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                            homeCard(card, Modifier.weight(1f))
+                                            Spacer(Modifier.weight(1f))
+                                        }
+                                        else -> homeCard(card, Modifier.fillMaxWidth())
+                                    }
+                                }
+                            }
                         }
-
-                        "steps" -> item(key = "steps") {
-                            StepsCard(
-                                totalSteps = dailySteps,
-                                caloriesBurned = stepCalories,
-                                onLogSteps = { showStepDialog = true; viewModel.loadStepSources() }
-                            )
-                        }
-
-                        "exercise" -> item(key = "exercise") {
-                            ExerciseCard(
-                                totalBurned = exerciseCalories,
-                                entries = exerciseEntries,
-                                onAdd = { viewModel.prepareLogToViewedDate(); onLogExercise() },
-                                onDelete = viewModel::deleteExercise,
-                                onEntryClick = onExerciseClick
-                            )
-                        }
-
-                        "weight" -> item(key = "weight") {
-                            WeightCard(latestWeight = latestWeight?.weightKg, onLog = onOpenWeighIn)
-                        }
+                    }
+                    item(key = "edit_tray") {
+                        HiddenCardsTray(
+                            hidden = editList.filterNot { it.enabled },
+                            onShow = viewModel::showCard,
+                            onReset = viewModel::resetLayout,
+                            onDone = { editing = false }
+                        )
                     }
                 }
             }
@@ -453,7 +581,10 @@ fun HomeScreen(
             },
             onDelete = { viewModel.deleteItem(item.id); editingItem = null },
             onCopyToDate = { date, meal, copies ->
-                fastingGuard.attempt(isForToday = date == java.time.LocalDate.now()) { decision ->
+                fastingGuard.attempt(
+                    isForToday = date == java.time.LocalDate.now(),
+                    intake = com.fitpal.app.domain.model.FastingIntake.of(listOf(item.isDrink to item.calories))
+                ) { decision ->
                     viewModel.copyItemToDate(item, date, meal, copies, decision)
                 }
                 editingItem = null
@@ -515,7 +646,8 @@ private fun HomeHeader(
     onPrevDay: () -> Unit,
     onNextDay: () -> Unit,
     onOpenTrail: () -> Unit,
-    trailPending: Boolean = false
+    trailPending: Boolean = false,
+    onCustomize: () -> Unit = {}
 ) {
     val isToday = date == LocalDate.now()
     val dateLabel = if (isToday) "Today" else date.format(DateTimeFormatter.ofPattern("EEE, d MMM"))
@@ -546,6 +678,13 @@ private fun HomeHeader(
                     contentDescription = "Pick date",
                     tint = CreamFaint,
                     modifier = Modifier.size(15.dp).clickable(onClick = onPickDate)
+                )
+                Spacer(Modifier.width(10.dp))
+                Icon(
+                    Icons.Default.Tune,
+                    contentDescription = "Arrange Home",
+                    tint = CreamFaint,
+                    modifier = Modifier.size(15.dp).clickable(onClick = onCustomize)
                 )
                 if (!isToday) {
                     Spacer(Modifier.width(2.dp))
@@ -676,9 +815,15 @@ private fun HeroCard(
     drawerOpen: Boolean = false,
     onToggleDrawer: () -> Unit = {},
     nowMillis: Long = System.currentTimeMillis(),
-    onOpenCaffeine: () -> Unit = {}
+    onOpenCaffeine: () -> Unit = {},
+    /** L = ring + the vitamins page to swipe to; M = the ring page only, shorter. */
+    size: com.fitpal.app.domain.model.CardSize = com.fitpal.app.domain.model.CardSize.L,
+    /** "ring" (the calorie ring) or "numbers" (one big number over a bar). */
+    variant: String = "ring"
 ) {
     val pager = rememberPagerState(pageCount = { 2 })
+    val compact = size != com.fitpal.app.domain.model.CardSize.L
+    val numbers = variant == "numbers"
     Column(modifier = Modifier.fillMaxWidth().glass().padding(vertical = 14.dp, horizontal = 16.dp)) {
         // The food-limit + caffeine rings, folded away behind a small arrow so the hero stays calm.
         // A dot on the arrow speaks up when a limit is close (amber) or passed (red).
@@ -709,22 +854,22 @@ private fun HeroCard(
         // strip above the ring. Circle style: an arc wrapped around the ring itself (see below).
         val fastingSchedule = LocalFastingSchedule.current
         val showFasting = fastingSchedule.enabled && isToday
-        val fastingAroundRing = showFasting && fastingSchedule.style == FastingStyle.RING
+        // The arc wraps the ring — with the big-number style there's no ring, so the strip shows instead.
+        val fastingAroundRing = showFasting && fastingSchedule.style == FastingStyle.RING && !numbers
         if (showFasting && !fastingAroundRing) {
             FastingStrip(fastingSchedule)
         }
-        // The arc (and its line of text) needs more room than the bare ring; the strip's space goes to it.
-        HorizontalPager(state = pager, modifier = Modifier.fillMaxWidth().height(if (fastingAroundRing) 322.dp else 280.dp)) { page ->
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                if (page == 0) {
+        // The main page: the ring (or the big number) and the macros.
+        val mainPage: @Composable () -> Unit = {
                     val calorieRing: @Composable () -> Unit = {
-                        CalorieRing(
-                            consumed = consumed, goal = goal, tier = tier, diameter = 150.dp,
-                            balanceScore = balanceScore, balanceHint = balanceHint
-                        )
+                        if (numbers) {
+                            HeroNumbers(consumed = consumed, goal = goal, tier = tier)
+                        } else {
+                            CalorieRing(
+                                consumed = consumed, goal = goal, tier = tier, diameter = if (compact) 128.dp else 150.dp,
+                                balanceScore = balanceScore, balanceHint = balanceHint
+                            )
+                        }
                     }
                     val activityLine: @Composable () -> Unit = {
                         Text(
@@ -756,6 +901,21 @@ private fun HeroCard(
                         carbs = carbs, carbTarget = carbTarget,
                         fiber = fiber, fiberTarget = fiberTarget
                     )
+        }
+        if (compact) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                mainPage()
+            }
+            return@Column
+        }
+        // The arc (and its line of text) needs more room than the bare ring; the strip's space goes to it.
+        HorizontalPager(state = pager, modifier = Modifier.fillMaxWidth().height(if (fastingAroundRing) 322.dp else 280.dp)) { page ->
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                if (page == 0) {
+                    mainPage()
                 } else {
                     Text("Vitamins & minerals", style = MaterialTheme.typography.titleMedium, color = Cream)
                     Text("vs adult daily target", style = MaterialTheme.typography.bodySmall, color = CreamMuted)
@@ -787,10 +947,101 @@ private fun HeroCard(
     }
 }
 
+/** The hero's "big number" style: calories left, huge, over one bar coloured by the day's balance. */
+@Composable
+private fun HeroNumbers(consumed: Int, goal: Int, tier: DayScore.Tier) {
+    val left = goal - consumed
+    val over = left < 0
+    val frac = if (goal > 0) (consumed.toFloat() / goal).coerceIn(0f, 1f) else 0f
+    val color = if (over) MacroOver else com.fitpal.app.ui.theme.scoreColor(tier)
+    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            "%,d".format(kotlin.math.abs(left)),
+            style = androidx.compose.ui.text.TextStyle(fontFamily = com.fitpal.app.ui.theme.InterFamily, fontWeight = FontWeight.ExtraBold, fontSize = 56.sp, fontFeatureSettings = "tnum"),
+            color = if (over) MacroOver else Cream
+        )
+        Text(if (over) "kcal over" else "kcal left", style = MaterialTheme.typography.bodyMedium, color = CreamMuted)
+        Spacer(Modifier.height(12.dp))
+        Box(Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(50)).background(com.fitpal.app.ui.theme.filmColor(0.10f))) {
+            Box(Modifier.fillMaxWidth(frac).height(10.dp).clip(RoundedCornerShape(50)).background(color))
+        }
+        Spacer(Modifier.height(6.dp))
+        Text("${"%,d".format(consumed)} of ${"%,d".format(goal)} kcal", style = MaterialTheme.typography.labelMedium, color = CreamFaint)
+    }
+}
+
+/** The macros on their own card — rings (as in the hero) or four plain bars. */
+@Composable
+private fun MacrosCard(
+    bars: Boolean,
+    protein: Float, proteinTarget: Float,
+    fat: Float, fatTarget: Float,
+    carbs: Float, carbTarget: Float,
+    fiber: Float, fiberTarget: Float
+) {
+    Column(Modifier.fillMaxWidth().glass().padding(16.dp)) {
+        Text("Macros", style = MaterialTheme.typography.titleMedium, color = Cream)
+        Spacer(Modifier.height(10.dp))
+        if (!bars) {
+            MacroRingsRow(
+                protein = protein, proteinTarget = proteinTarget,
+                fat = fat, fatTarget = fatTarget,
+                carbs = carbs, carbTarget = carbTarget,
+                fiber = fiber, fiberTarget = fiberTarget
+            )
+        } else {
+            // Protein & fibre are goals to reach; fat & carbs are limits (red once passed).
+            listOf(
+                Triple("Protein", protein to proteinTarget, ProteinColor) to false,
+                Triple("Fat", fat to fatTarget, FatColor) to true,
+                Triple("Carbs", carbs to carbTarget, CarbColor) to true,
+                Triple("Fiber", fiber to fiberTarget, FiberColor) to false
+            ).forEach { (t, limit) ->
+                val (label, pair, color) = t
+                val (value, target) = pair
+                val frac = if (target > 0f) (value / target).coerceIn(0f, 1f) else 0f
+                val over = limit && target > 0f && value > target
+                Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(label, style = MaterialTheme.typography.labelLarge, color = Cream, modifier = Modifier.width(64.dp))
+                    Box(Modifier.weight(1f).height(8.dp).clip(RoundedCornerShape(50)).background(com.fitpal.app.ui.theme.filmColor(0.10f))) {
+                        Box(Modifier.fillMaxWidth(frac).height(8.dp).clip(RoundedCornerShape(50)).background(if (over) MacroOver else color))
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Text("${value.roundToInt()} / ${target.roundToInt()} g", style = MaterialTheme.typography.labelMedium, color = CreamMuted)
+                }
+            }
+        }
+    }
+}
+
+/** The fasting timer as its own card — the strip, or a half-width countdown. */
+@Composable
+private fun FastingCard(schedule: com.fitpal.app.domain.model.FastingSchedule, small: Boolean, modifier: Modifier) {
+    if (!schedule.enabled) {
+        SmallTile(
+            Icons.Default.HourglassEmpty, "Fasting", "Off", "Set your eating window in Settings → Fasting",
+            AccentTrends, onClick = {}, modifier = modifier
+        )
+        return
+    }
+    val state = com.fitpal.app.ui.component.rememberFastingState(schedule)
+    if (small) {
+        SmallTile(
+            Icons.Default.HourglassEmpty, if (state.isFasting) "Fasting" else "Eating window",
+            com.fitpal.app.ui.component.fastingCountdownLabel(state.minutesLeftInPhase),
+            if (state.isFasting) "until ${com.fitpal.app.ui.component.fastingClockLabel(state.nextChangeMin)}"
+            else "left · closes ${com.fitpal.app.ui.component.fastingClockLabel(state.nextChangeMin)}",
+            com.fitpal.app.ui.component.fastingAccent(state), onClick = {}, modifier = modifier
+        )
+    } else {
+        Box(modifier.glass().padding(horizontal = 16.dp, vertical = 12.dp)) { FastingStrip(schedule) }
+    }
+}
+
 // ======================== MEAL CATEGORY SECTION ========================
 
 /** All meal categories share one warm accent — the label tells them apart, the panel just groups. */
-private val MealAccent = GoldLight
+private val MealAccent get() = GoldLight
 
 /**
  * One meal category (Breakfast / Lunch / …) as a distinct panel: a colour-coded accent dot +
@@ -1083,7 +1334,7 @@ private fun WaterCard(totalMl: Float, goalMl: Int, presets: List<Int>, onAddWate
             Spacer(Modifier.height(10.dp))
             Box(
                 Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50))
-                    .background(Color.White.copy(alpha = 0.10f))
+                    .background(com.fitpal.app.ui.theme.filmColor(0.10f))
             ) {
                 Box(
                     Modifier.fillMaxWidth(frac).height(6.dp).clip(RoundedCornerShape(50))

@@ -246,6 +246,7 @@ fun DescribeFoodScreen(
                                 onIngredientRemoved = { ii -> viewModel.removeIngredient(index, ii) },
                                 onToggleVariation = { vi -> viewModel.toggleVariation(index, vi) },
                                 onRemove = { viewModel.removeFood(index) },
+                                onSetDrink = { viewModel.setFoodDrink(index, it) },
                                 onTotalGramsChanged = { g -> viewModel.scaleFoodToGrams(index, g) },
                                 onAddIngredient = { addIngredientFor = index },
                                 mealPresets = mealPresets,
@@ -290,7 +291,8 @@ fun DescribeFoodScreen(
                         onClick = {
                             fastingGuard.attempt(
                                 isForToday = logDate == java.time.LocalDate.now(),
-                                eatenAt = eatenAt.time
+                                eatenAt = eatenAt.time,
+                                intake = com.fitpal.app.domain.model.FastingIntake.ofFoods(state.foods)
                             ) { decision -> viewModel.logMeal(decision) }
                         },
                         modifier = Modifier.fillMaxWidth(),

@@ -188,6 +188,11 @@ class MealGroupViewModel @Inject constructor(
     }
 
     /** Rename one dish of the meal — including one logged straight from the food database. */
+    /** Food / Drink switch on a logged dish (ml vs g, and whether it counts toward water). */
+    fun setDishDrink(itemId: Long, drink: Boolean) {
+        viewModelScope.launch { mealRepository.setItemDrink(itemId, drink) }
+    }
+
     fun renameDish(itemId: Long, name: String) {
         val clean = name.trim()
         if (clean.isEmpty()) return

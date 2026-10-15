@@ -59,7 +59,7 @@ fun MarkdownText(
                 trimmed == "---" || trimmed == "***" || trimmed == "___" -> {
                     Spacer(Modifier.height(6.dp))
                     androidx.compose.material3.HorizontalDivider(
-                        color = Color.White.copy(alpha = 0.10f)
+                        color = com.fitpal.app.ui.theme.filmColor(0.10f)
                     )
                     Spacer(Modifier.height(6.dp))
                 }

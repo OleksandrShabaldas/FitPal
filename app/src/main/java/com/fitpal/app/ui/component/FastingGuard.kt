@@ -18,6 +18,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.fitpal.app.domain.model.FastingIntake
 import com.fitpal.app.domain.model.FastingSchedule
 import com.fitpal.app.domain.model.FastingState
 import com.fitpal.app.domain.model.LogDecision
@@ -25,7 +26,7 @@ import java.time.LocalDate
 import java.time.LocalTime
 
 /**
- * The monthly "I ate earlier" allowance, published app-wide by `MainActivity` from settings so the
+ * The monthly "I ate earlier" allowance, published app-wide by `FitPalActivity` from settings so the
  * log-time warning can offer it. [onUse] records a grace day (dateIso -> the eating time the user
  * attested), which forces that day's fast to count as kept.
  */
@@ -118,15 +119,17 @@ class FastingGuard(private val schedule: FastingSchedule, private val backdate: 
     /**
      * Run [action] now, unless this log needs the fasting prompt — in which case stash it and raise
      * the prompt. [eatenAt] is the meal's chosen time (null = now); [photoTime] = it came from the
-     * photo's own metadata. Pass `isForToday = false` when logging to another day.
+     * photo's own metadata. Pass `isForToday = false` when logging to another day. [intake] is what's
+     * being logged — a log of only drinks the user's drink rule allows never needs the prompt.
      */
     fun attempt(
         isForToday: Boolean = true,
         eatenAt: LocalTime? = null,
         photoTime: Boolean = false,
+        intake: FastingIntake = FastingIntake.UNKNOWN,
         action: (LogDecision) -> Unit
     ) {
-        if (!schedule.enabled || !schedule.warnOnLog || !isForToday) {
+        if (!schedule.enabled || !schedule.warnOnLog || !isForToday || schedule.allowsDuringFast(intake)) {
             action(LogDecision.NONE)
             return
         }

@@ -88,7 +88,7 @@ fun HeroDrawerHandle(open: Boolean, alertColor: Color?, onToggle: () -> Unit, mo
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(50))
-                    .background(Color.White.copy(alpha = 0.06f))
+                    .background(com.fitpal.app.ui.theme.filmColor(0.06f))
                     .clickable(onClick = onToggle)
                     .padding(horizontal = 14.dp, vertical = 1.dp),
                 verticalAlignment = Alignment.CenterVertically

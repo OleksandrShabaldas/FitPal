@@ -211,7 +211,10 @@ fun EntryDetailScreen(
             copiesChooser = true,
             onConfirmMeal = { date, meal, copies ->
                 showCopyPicker = false
-                fastingGuard.attempt(isForToday = date == java.time.LocalDate.now()) { decision ->
+                fastingGuard.attempt(
+                    isForToday = date == java.time.LocalDate.now(),
+                    intake = com.fitpal.app.domain.model.FastingIntake.of(listOfNotNull(state.item).map { it.isDrink to it.calories })
+                ) { decision ->
                     viewModel.copyToDate(date, meal, copies, decision)
                 }
             },
@@ -302,6 +305,7 @@ fun EntryDetailScreen(
                                     item = item,
                                     mealType = state.mealType,
                                     onMealTypeSelected = viewModel::setMealType,
+                                    onSetDrink = viewModel::setDrink,
                                     onRename = { showRename = true },
                                     eatenAt = state.eatenAt,
                                     onPickTime = viewModel::setMealTime
@@ -481,7 +485,8 @@ private fun HeaderCard(
     onMealTypeSelected: (String) -> Unit,
     onRename: () -> Unit,
     eatenAt: com.fitpal.app.domain.model.EatenAt,
-    onPickTime: (java.time.LocalTime) -> Unit
+    onPickTime: (java.time.LocalTime) -> Unit,
+    onSetDrink: (Boolean) -> Unit = {}
 ) {
     Column(modifier = Modifier.fillMaxWidth().glass().padding(18.dp)) {
         // The name is the one thing here you edit by tapping it — everything the app can name
@@ -534,6 +539,14 @@ private fun HeaderCard(
             selectedIndex = mealIndex,
             accent = GoldLight,
             onSelect = { i -> onMealTypeSelected(MealTypes.ALL[i]) }
+        )
+        // Food or drink — for when it was recognised wrong (ml vs g, and whether it counts as water).
+        Spacer(Modifier.height(10.dp))
+        SegmentedPills(
+            labels = listOf("Food", "Drink"),
+            selectedIndex = if (item.isDrink) 1 else 0,
+            accent = GoldLight,
+            onSelect = { i -> onSetDrink(i == 1) }
         )
         // Which AI logged this meal (only on entries saved after the online/offline split).
         AiSource.fromName(item.aiSource, item.aiModel)?.let {

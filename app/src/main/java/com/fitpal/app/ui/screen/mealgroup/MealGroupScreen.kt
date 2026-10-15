@@ -112,7 +112,10 @@ fun MealGroupScreen(
             copiesChooser = true,
             onConfirmMeal = { date, meal, copies ->
                 showCopyPicker = false
-                fastingGuard.attempt(isForToday = date == java.time.LocalDate.now()) { decision ->
+                fastingGuard.attempt(
+                    isForToday = date == java.time.LocalDate.now(),
+                    intake = com.fitpal.app.domain.model.FastingIntake.of(state.dishes.map { it.item.isDrink to it.item.calories })
+                ) { decision ->
                     viewModel.copyToDate(date, meal, copies, decision)
                 }
             },
@@ -264,6 +267,7 @@ fun MealGroupScreen(
                                 onTotalGramsChanged = { g -> viewModel.scaleDishToGrams(dish.item.id, g) },
                                 onRemove = { viewModel.removeDish(dish.item.id) },
                                 onRename = { viewModel.renameDish(dish.item.id, it) },
+                                onSetDrink = { viewModel.setDishDrink(dish.item.id, it) },
                                 onOpenDetails = { onDishClick(dish.item.id) }
                             )
                         }

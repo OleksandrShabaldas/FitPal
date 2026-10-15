@@ -92,6 +92,22 @@ class SettingsViewModel @Inject constructor(
     fun setFastingNotify(notify: Boolean) { settingsRepository.setFastingNotify(notify); reminderManager.reschedule() }
     fun setFastingIntensity(intensity: com.fitpal.app.domain.model.FastingIntensity) = settingsRepository.setFastingIntensity(intensity)
     fun setFastingStyle(style: com.fitpal.app.domain.model.FastingStyle) = settingsRepository.setFastingStyle(style)
+    fun setFastingDrinkRule(rule: com.fitpal.app.domain.model.FastingDrinkRule) = settingsRepository.setFastingDrinkRule(rule)
+
+    // ---- Layout: the bottom bar and presets ----
+    val navConfig: StateFlow<com.fitpal.app.domain.model.NavConfig> = settingsRepository.navConfig
+    fun setNavConfig(config: com.fitpal.app.domain.model.NavConfig) = settingsRepository.setNavConfig(config)
+
+    fun applyLayoutPreset(preset: com.fitpal.app.domain.model.LayoutPreset) {
+        settingsRepository.setWidgetLayout(com.fitpal.app.domain.model.ScreenWidgets.HOME, preset.home())
+        settingsRepository.setWidgetLayout(com.fitpal.app.domain.model.ScreenWidgets.ADD_FOOD, preset.addFood())
+        settingsRepository.setNavConfig(preset.nav())
+    }
+
+    // ---- Appearance ----
+    val appearance: StateFlow<com.fitpal.app.ui.theme.Appearance> = settingsRepository.appearance
+    fun updateAppearance(change: (com.fitpal.app.ui.theme.Appearance) -> com.fitpal.app.ui.theme.Appearance) =
+        settingsRepository.updateAppearance(change)
 
     // ---- Foods hidden from database search ----
     val hiddenFoodIds: StateFlow<Set<String>> = settingsRepository.hiddenFoodIds

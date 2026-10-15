@@ -13,7 +13,7 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
-import com.fitpal.app.MainActivity
+import com.fitpal.app.FitPalActivity
 import com.fitpal.app.domain.HealthScorer
 import com.fitpal.app.domain.model.DetectedFood
 import com.fitpal.app.domain.model.MealInsights
@@ -108,19 +108,22 @@ class AnalysisService : Service() {
 
         // Online already named the dish AND produced any candidates in its single pass. On-device
         // keeps the two-pass workaround: its weaker model names the dish better when shown the
-        // photo again alongside the loose ingredients.
+        // photo again alongside the loose ingredients. Drinks never go into the dish — a coffee next
+        // to the plate stays a coffee (it used to be merged in and lost).
+        val drinks = outcome.foods.filter { it.isDrink }
+        val dishFoods = outcome.foods.filterNot { it.isDrink }
         val candidates: List<DetectedFood> = if (outcome.source.isOnline) {
             outcome.dishCandidates
         } else {
-            val loose = outcome.foods.flatMap { it.ingredients }
-            if (outcome.foods.isNotEmpty() && outcome.foods.none { it.isDrink }) {
+            val loose = dishFoods.flatMap { it.ingredients }
+            if (dishFoods.isNotEmpty()) {
                 updateProgress(job, "Naming the dish…", outcome.source)
                 runCatching { pipeline.identifyDish(loose, bitmap, job.note) }.getOrDefault(emptyList())
             } else emptyList()
         }
         // When there are candidate dishes, show the first as the current pick (the chips let the
-        // user switch); otherwise the plate's foods are the result as-is.
-        val finalFoods = if (candidates.isNotEmpty()) listOf(candidates.first()) else outcome.foods
+        // user switch), with the plate's drinks beside it; otherwise the plate's foods as-is.
+        val finalFoods = if (candidates.isNotEmpty()) listOf(candidates.first()) + drinks else outcome.foods
 
         // Foods are ready — surface them and flip the notification to "tap to review".
         jobManager.setResult(
@@ -363,9 +366,9 @@ class AnalysisService : Service() {
     }
 
     private fun openIntent(route: String): PendingIntent {
-        val intent = Intent(this, MainActivity::class.java).apply {
+        val intent = Intent(this, FitPalActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
-            putExtra(MainActivity.EXTRA_NAV_ROUTE, route)
+            putExtra(FitPalActivity.EXTRA_NAV_ROUTE, route)
         }
         return PendingIntent.getActivity(
             this, route.hashCode(), intent,

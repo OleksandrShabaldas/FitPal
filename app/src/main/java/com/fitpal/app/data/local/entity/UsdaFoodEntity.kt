@@ -24,5 +24,11 @@ data class UsdaFoodEntity(
      * 1079 and Open Food Facts its `fiber_100g`, so a database apple comes with its fibre straight
      * away, offline. Whatever is still 0 is filled later by the background check (NutrientFiller).
      */
-    val fiberPer100g: Float = 0f
+    val fiberPer100g: Float = 0f,
+    /**
+     * Known to be a drink from its source — Open Food Facts' own beverage categories / an ml quantity,
+     * or the built-in "Drinks" rows. False just means "not known": [com.fitpal.app.domain.Drinks]
+     * still judges the name. Kept on the row so a cached scan of a bottle of water stays a drink.
+     */
+    val isDrink: Boolean = false
 )

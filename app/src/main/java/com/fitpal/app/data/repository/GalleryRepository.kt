@@ -135,7 +135,9 @@ class GalleryRepository @Inject constructor(
             boundingBox = android.graphics.RectF(),
             estimatedGrams = ingredient.grams,
             ingredients = listOf(ingredient),
-            variations = emptyList()
+            variations = emptyList(),
+            // Keep the drink flag — a saved Coca-Cola must come back as a drink (ml, counts as water).
+            isDrink = ingredient.isDrink
         )
         return saveDetectedFood(food)
     }

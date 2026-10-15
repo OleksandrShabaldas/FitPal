@@ -3,77 +3,88 @@ package com.fitpal.app.ui.theme
 import androidx.compose.ui.graphics.Color
 
 /*
- * FitPal palette — dark-only "premium" redesign.
+ * FitPal's colour tokens — read from the current look (see Look.kt / LookState).
  *
- * A warm sunset base with a gold "Today" accent, a four-tier daily-score scale,
- * and dark-tuned macro colours. Per-domain accents give each section its own
- * colour world (see the table in REDESIGN_PLAN.md).
+ * The names come from the original dark design ("Cream" is the primary text colour, "Gold" the
+ * accent, "InkBlack" the deepest base) and keep their *role* in every look: on Paper light, `Cream`
+ * is dark ink and `GlassFill` an opaque sheet. They're getters over Compose snapshot state, so they
+ * work anywhere (composables, Canvas draw lambdas, plain modifiers) and update when the look changes.
+ * Don't copy one into a top-level `val` — it would freeze the look it was first read in.
  */
 
-// ---- Text on dark ----
-val Cream = Color(0xFFF5ECE0)        // primary text
-val CreamDim = Color(0xCCF5ECE0)     // ~80%
-val CreamMuted = Color(0x8CF5ECE0)   // ~55% — secondary text
-val CreamFaint = Color(0x80F5ECE0)   // ~50% — hints / captions
+private val c get() = LookState.colors
+
+// ---- Text ----
+val Cream: Color get() = c.cream             // primary text
+val CreamDim: Color get() = c.creamDim       // ~80%
+val CreamMuted: Color get() = c.creamMuted   // ~55% — secondary text
+val CreamFaint: Color get() = c.creamFaint   // ~50% — hints / captions
 
 // ---- Base surfaces ----
-val InkBlack = Color(0xFF0E0B0A)     // deepest base
-val Ink = Color(0xFF120D0B)
+val InkBlack: Color get() = c.inkBlack       // deepest base (the backdrop's floor)
+val Ink: Color get() = c.ink
 
-// ---- Glass (translucent surfaces over the backdrop) ----
-val GlassFill = Color(0x1AFFFFFF)        // ~10% white — stronger so cards read on the glow
-val GlassFillSoft = Color(0x14FFFFFF)    // ~8% white
-val GlassBorder = Color(0x33FFFFFF)      // ~20% white hairline — more defined edge
-val GlassBorderSoft = Color(0x24FFFFFF)  // ~14% white hairline
-// Opaque base under floating panels (dialogs, coach-marks). Glass alone is see-through,
-// and over arbitrary content that makes text unreadable — see Modifier.glassOverlay().
-val OverlaySurface = Color(0xF01A1310)   // ~94% warm near-black
+// ---- Glass (translucent surfaces over the backdrop; opaque sheets on Paper/Material) ----
+val GlassFill: Color get() = c.glassFill
+val GlassFillSoft: Color get() = c.glassFillSoft
+val GlassBorder: Color get() = c.glassBorder
+val GlassBorderSoft: Color get() = c.glassBorderSoft
+// Opaque base under floating panels (dialogs, coach-marks) — see Modifier.glassOverlay().
+val OverlaySurface: Color get() = c.overlaySurface
 
-// ---- Gold "Today" accent ----
-val Gold = Color(0xFFE8A93C)
-val GoldLight = Color(0xFFF3CE7C)
+// ---- Accent ("Gold" in the original Today look; the look's own accent elsewhere) ----
+val Gold: Color get() = c.gold
+val GoldLight: Color get() = c.goldLight
+/** Icons/text drawn on a gold fill (the nav's "+", gold buttons). */
+val OnGold: Color get() = c.onGold
+/** Faint fill for empty bar tracks, dividers and chips. */
+val TrackColor: Color get() = c.track
+
+/**
+ * A see-through film at [alpha] that shows on the current base: white on dark looks, ink on light
+ * ones (where a white film would vanish). Use for tracks, dividers and empty cells instead of
+ * `Color.White.copy(alpha = …)`.
+ */
+fun filmColor(alpha: Float): Color =
+    if (c.isLight) c.cream.copy(alpha = (alpha * 1.15f).coerceAtMost(1f)) else Color.White.copy(alpha = alpha)
 
 // ---- Daily-score tiers (drive the Home ring colour) ----
-val ScoreGood = Color(0xFFF3CE7C)   // gold
-val ScoreFair = Color(0xFF8CC152)   // green
-val ScoreLow = Color(0xFF5BA8E0)    // blue
-val ScorePoor = Color(0xFFE0584A)   // red
+val ScoreGood: Color get() = c.scoreGood
+val ScoreFair: Color get() = c.scoreFair
+val ScoreLow: Color get() = c.scoreLow
+val ScorePoor: Color get() = c.scorePoor
 
 // ---- Logged-days 5-band scale (Analytics "Logged days" widgets only) ----
-// A conventional best→worst gradient, kept separate from the gold-based ScoreTier
-// colours so it only affects the logged-days heatmap + mini-heatmap tile.
-val LoggedBest = Color(0xFF5BA8E0)    // blue   — best  (≥80)
-val LoggedGood = Color(0xFF8CC152)    // green  (65–79)
-val LoggedMid = Color(0xFFEAC63F)     // yellow (50–64)
-val LoggedLow = Color(0xFFE58A3C)     // orange (35–49)
-val LoggedWorst = Color(0xFFE0584A)   // red    — worst (<35)
+val LoggedBest: Color get() = c.loggedBest
+val LoggedGood: Color get() = c.loggedGood
+val LoggedMid: Color get() = c.loggedMid
+val LoggedLow: Color get() = c.loggedLow
+val LoggedWorst: Color get() = c.loggedWorst
 
-// ---- Macro breakdown (dark-tuned) ----
-val ProteinColor = Color(0xFFF0997B)  // warm coral
-val FatColor = Color(0xFFF2C14E)      // honey
-val CarbColor = Color(0xFFA6CF6E)     // fresh green
-val FiberColor = Color(0xFFB89E8A)    // tan
-val MacroOver = Color(0xFFE0584A)     // exceeded a "stay-under" limit
+// ---- Macro breakdown ----
+val ProteinColor: Color get() = c.protein
+val FatColor: Color get() = c.fat
+val CarbColor: Color get() = c.carb
+val FiberColor: Color get() = c.fiber
+val MacroOver: Color get() = c.macroOver
 
 // ---- Calorie figure ----
-val CalorieColor = Color(0xFFF3CE7C)  // warm gold
+val CalorieColor: Color get() = c.calorie
 
 // ---- Food-limit + caffeine rings (the Home hero drawer) ----
-// Each limit has its own identity colour (like the macros); any of them turns MacroOver red once
-// its cap is passed. Caffeine is a warm coffee brown.
-val DessertColor = Color(0xFFE9A6C3)      // rose
-val FriedColor = Color(0xFFE59A5B)        // fried-golden orange
-val SugaryDrinkColor = Color(0xFF7FC4E8)  // soda blue
-val CaffeineColor = Color(0xFFC9A27E)     // latte
+val DessertColor: Color get() = c.dessert
+val FriedColor: Color get() = c.fried
+val SugaryDrinkColor: Color get() = c.sugaryDrink
+val CaffeineColor: Color get() = c.caffeine
 
 // ---- Per-domain accents ----
-val AccentToday = Color(0xFFF3CE7C)
-val AccentActivity = Color(0xFF5FD0C4)
-val AccentTrends = Color(0xFF6FA8FF)
-val AccentGarden = Color(0xFF8CC152)
-val AccentRecords = Color(0xFFF3CE7C)
+val AccentToday: Color get() = c.goldLight
+val AccentActivity: Color get() = c.accentActivity
+val AccentTrends: Color get() = c.accentTrends
+val AccentGarden: Color get() = c.accentGarden
+val AccentRecords: Color get() = c.goldLight
 
 // ---- Legacy meal-insight score colours (used by MealInsightsSection / Analysis) ----
-val ScoreGreen = Color(0xFF8CC152)
-val ScoreYellow = Color(0xFFE8A93C)
-val ScoreRed = Color(0xFFE0584A)
+val ScoreGreen: Color get() = c.scoreFair
+val ScoreYellow: Color get() = c.gold
+val ScoreRed: Color get() = c.scorePoor

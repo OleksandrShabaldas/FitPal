@@ -93,7 +93,8 @@ object FoodJsonParser {
                 .mapNotNull { bareItems.optJSONObject(it) }
                 .mapNotNull { obj ->
                     parseIngredientObject(obj)?.let {
-                        buildFood(it.name, it.grams, listOf(it), emptyList(), obj.optBoolean("isDrink", false))
+                        val drink = drinkFlag(obj, it.name)
+                        buildFood(it.name, it.grams, withDrinkWater(listOf(it), drink), emptyList(), drink)
                     }
                 }
         }
@@ -115,8 +116,10 @@ object FoodJsonParser {
         val json = extractJsonObject(raw)
         val arr = json?.optJSONArray("dishCandidates")
         val candidates = mutableListOf<DetectedFood>()
-        if (arr != null && foods.isNotEmpty()) {
-            val baseIngredients = foods.flatMap { it.ingredients }
+        // Drinks are never merged into a candidate dish — they stay their own foods next to it.
+        val dishFoods = foods.filterNot { it.isDrink }
+        if (arr != null && dishFoods.isNotEmpty()) {
+            val baseIngredients = dishFoods.flatMap { it.ingredients }
             val totalGrams = baseIngredients.sumOf { it.grams.toDouble() }.toFloat()
             for (i in 0 until arr.length()) {
                 val obj = arr.optJSONObject(i) ?: continue
@@ -295,14 +298,48 @@ object FoodJsonParser {
         }
         if (ingredients.isEmpty()) return null
         val label = name.ifEmpty { ingredients.first().name }
+        val drink = drinkFlag(obj, label)
         return buildFood(
             label = label,
             grams = obj.optDouble("grams", 0.0).toFloat(),
-            ingredients = ingredients,
+            ingredients = withDrinkWater(ingredients, drink),
             variations = parseVariations(obj.optJSONArray("variations")),
-            isDrink = obj.optBoolean("isDrink", false)
+            isDrink = drink
         )
     }
+
+    /**
+     * Is this food a drink? The model's flag, read leniently (true / "true" / 1, a few alternate keys,
+     * or "type":"drink"). Left out → the name decides ([Drinks.isDrink]); an explicit "false" only loses
+     * to a name that's unmistakably a drink ("Red Bull", "Espresso") — small models get that wrong.
+     */
+    private fun drinkFlag(obj: JSONObject, name: String): Boolean {
+        val explicit: Boolean? = listOf("isDrink", "is_drink", "drink").firstNotNullOfOrNull { k ->
+            if (!obj.has(k) || obj.isNull(k)) null
+            else when (val v = obj.opt(k)) {
+                is Boolean -> v
+                is Number -> v.toInt() != 0
+                is String -> v.trim().lowercase().let { it == "true" || it == "yes" || it == "1" }
+                else -> null
+            }
+        } ?: obj.optString("type").takeIf { it.isNotBlank() }
+            ?.let { it.equals("drink", ignoreCase = true) || it.equals("beverage", ignoreCase = true) }
+        return when (explicit) {
+            true -> true
+            false -> com.fitpal.app.domain.Drinks.isDefinitelyDrink(name)
+            null -> com.fitpal.app.domain.Drinks.isDrink(name, null)
+        }
+    }
+
+    /** A drink the model gave no water for still counts toward hydration — estimated from its macros. */
+    private fun withDrinkWater(ingredients: List<Ingredient>, drink: Boolean): List<Ingredient> =
+        if (!drink) ingredients
+        else ingredients.map { ing ->
+            if (ing.waterMlPer100g > 0f) ing
+            else ing.copy(
+                waterMlPer100g = com.fitpal.app.domain.Drinks.estimateWaterPer100(ing.carbsPer100g, ing.proteinPer100g, ing.fatPer100g)
+            )
+        }
 
     private fun salvageArrayObjects(text: String): List<JSONObject> {
         val keyIdx = listOf("\"foods\"", "\"items\"", "\"ingredients\"")

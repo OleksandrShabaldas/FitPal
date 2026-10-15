@@ -18,7 +18,7 @@ import android.util.TypedValue
 import android.view.View
 import android.widget.RemoteViews
 import androidx.core.os.BundleCompat
-import com.fitpal.app.MainActivity
+import com.fitpal.app.FitPalActivity
 import com.fitpal.app.R
 import kotlin.math.max
 import kotlin.math.min
@@ -213,13 +213,13 @@ internal object WidgetIntents {
         return when (target) {
             is WidgetTarget.Open -> PendingIntent.getActivity(
                 context, code,
-                Intent(context, MainActivity::class.java).apply {
+                Intent(context, FitPalActivity::class.java).apply {
                     data = uri
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or
                         Intent.FLAG_ACTIVITY_SINGLE_TOP or
                         Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
-                    putExtra(MainActivity.EXTRA_NAV_ROUTE, target.route)
-                    if (target.focusToday) putExtra(MainActivity.EXTRA_FOCUS_TODAY, true)
+                    putExtra(FitPalActivity.EXTRA_NAV_ROUTE, target.route)
+                    if (target.focusToday) putExtra(FitPalActivity.EXTRA_FOCUS_TODAY, true)
                 },
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
             )

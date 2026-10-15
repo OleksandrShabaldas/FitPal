@@ -86,6 +86,7 @@ fun AddFoodScreen(
     viewModel: AddFoodViewModel = hiltViewModel()
 ) {
     val recentFoods by viewModel.recentFoods.collectAsStateWithLifecycle()
+    val layout by viewModel.layout.collectAsStateWithLifecycle()
     val fastingGuard = rememberFastingGuard()
     val logged by viewModel.logged.collectAsStateWithLifecycle()
 
@@ -117,56 +118,75 @@ fun AddFoodScreen(
                         .fillMaxSize()
                         .verticalScroll(rememberScrollState())
                         .padding(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 28.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalArrangement = Arrangement.spacedBy(com.fitpal.app.ui.theme.CardGap)
                 ) {
-                    // One-tap re-log of foods eaten before (auto, from history) — the fastest daily path.
-                    if (recentFoods.isNotEmpty()) {
-                        SectionLabel("Your usuals — tap to log again")
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            recentFoods.forEach { item ->
-                                RecentChip(item = item, onClick = { fastingGuard.attempt { viewModel.quickLog(item) } })
-                            }
+                    // The ways to log, in the user's order and sizes (Settings → Home & screens → Add food).
+                    // "Your usuals" is a row of its own; two Small tiles share a row.
+                    val tile: @Composable (com.fitpal.app.domain.model.ResolvedCard, Modifier) -> Unit = { card, m ->
+                        val small = card.size == com.fitpal.app.domain.model.CardSize.S
+                        val spec: Triple<ImageVector, String, String>? = when (card.key) {
+                            "photo" -> Triple(Icons.Default.CameraAlt, "Take photo", "Snap your plate")
+                            "gallery" -> Triple(Icons.Default.PhotoLibrary, "From gallery", "Pick a photo")
+                            "describe" -> Triple(Icons.Default.ChatBubble, "Describe to AI", "Just type what you ate")
+                            "barcode" -> Triple(Icons.Default.QrCodeScanner, "Scan barcode", "Packaged product")
+                            "saved" -> Triple(Icons.Default.Bookmark, "Saved foods", "Your bookmarked collection")
+                            "search" -> Triple(Icons.Default.Search, "Search foods", "Find any food — online & imported")
+                            "custom" -> Triple(Icons.Default.Edit, "Custom food", "Type in your own calories & macros")
+                            "exercise" -> Triple(Icons.Default.FitnessCenter, "Exercise", "Calories burned")
+                            "weight" -> Triple(Icons.Default.MonitorWeight, "Weight", "Log current weight")
+                            else -> null
+                        }
+                        val action: () -> Unit = when (card.key) {
+                            "photo" -> onTakePhoto
+                            "gallery" -> { { pickMedia.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) } }
+                            "describe" -> onDescribeToAI
+                            "barcode" -> onScanBarcode
+                            "saved" -> onSelectSaved
+                            "search" -> onManualEntry
+                            "custom" -> onCustomFood
+                            "exercise" -> onLogExercise
+                            "weight" -> onOpenWeighIn
+                            else -> { {} }
+                        }
+                        if (spec != null) {
+                            if (small) SquareTile(spec.first, spec.second, spec.third, action, m)
+                            else WideTile(spec.first, spec.second, spec.third, modifier = m, onClick = action)
                         }
                     }
-
-                    SectionLabel("Add something new")
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        SquareTile(Icons.Default.CameraAlt, "Take photo", "Snap your plate", onTakePhoto, Modifier.weight(1f))
-                        SquareTile(
-                            Icons.Default.PhotoLibrary, "From gallery", "Pick a photo",
-                            {
-                                pickMedia.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                            },
-                            Modifier.weight(1f)
-                        )
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        SquareTile(Icons.Default.ChatBubble, "Describe to AI", "Just type what you ate", onDescribeToAI, Modifier.weight(1f))
-                        SquareTile(Icons.Default.QrCodeScanner, "Scan barcode", "Packaged product", onScanBarcode, Modifier.weight(1f))
-                    }
-
-                    SectionLabel("More ways")
-                    WideTile(Icons.Default.Bookmark, "Saved foods", "Your bookmarked collection", onClick = onSelectSaved)
-                    WideTile(Icons.Default.Search, "Search foods", "Find any food — online & imported", onClick = onManualEntry)
-                    WideTile(Icons.Default.Edit, "Custom food", "Type in your own calories & macros", onClick = onCustomFood)
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        WideTile(Icons.Default.FitnessCenter, "Exercise", "Calories burned", modifier = Modifier.weight(1f), onClick = onLogExercise)
-                        WideTile(Icons.Default.MonitorWeight, "Weight", "Log current weight", modifier = Modifier.weight(1f), onClick = onOpenWeighIn)
+                    var labelShown = false
+                    com.fitpal.app.domain.model.ScreenWidgets.rows(layout.filter { it.enabled }).forEach { row ->
+                        val first = row.first()
+                        if (first.key == "usuals") {
+                            // One-tap re-log of foods eaten before (auto, from history) — the fastest daily path.
+                            if (recentFoods.isNotEmpty()) {
+                                SectionLabel("Your usuals — tap to log again")
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    recentFoods.forEach { item ->
+                                        RecentChip(item = item, onClick = {
+                                            fastingGuard.attempt(
+                                                isForToday = viewModel.loggingForToday,
+                                                intake = com.fitpal.app.domain.model.FastingIntake.of(listOf(item.isDrink to item.calories))
+                                            ) { decision -> viewModel.quickLog(item, decision) }
+                                        })
+                                    }
+                                }
+                            }
+                            return@forEach
+                        }
+                        if (!labelShown) { SectionLabel("Add something new"); labelShown = true }
+                        when {
+                            row.size == 2 -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                row.forEach { tile(it, Modifier.weight(1f)) }
+                            }
+                            first.size == com.fitpal.app.domain.model.CardSize.S -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                tile(first, Modifier.weight(1f))
+                                Spacer(Modifier.weight(1f))
+                            }
+                            else -> tile(first, Modifier.fillMaxWidth())
+                        }
                     }
                 }
             }

@@ -141,7 +141,10 @@ fun SpotlightOverlay(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 24.dp, vertical = 28.dp),
+                .padding(
+                    start = 24.dp, end = 24.dp, top = 28.dp,
+                    bottom = 28.dp + com.fitpal.app.ui.navigation.LocalBottomBarInset.current
+                ),
             verticalArrangement = if (below) Arrangement.Bottom else Arrangement.Top,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {

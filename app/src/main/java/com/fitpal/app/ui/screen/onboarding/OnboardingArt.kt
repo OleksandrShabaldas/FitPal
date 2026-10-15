@@ -84,7 +84,7 @@ fun GlowRing(
             val inset = sw / 2f
             val arcSize = Size(size.width - sw, size.height - sw)
             val tl = Offset(inset, inset)
-            drawArc(Color.White.copy(alpha = 0.08f), -90f, 360f, false, tl, arcSize, style = Stroke(sw, cap = StrokeCap.Round))
+            drawArc(com.fitpal.app.ui.theme.filmColor(0.08f), -90f, 360f, false, tl, arcSize, style = Stroke(sw, cap = StrokeCap.Round))
             drawArc(
                 brush = Brush.sweepGradient(colors, center = c),
                 startAngle = -90f, sweepAngle = 360f * sweep.value, useCenter = false,

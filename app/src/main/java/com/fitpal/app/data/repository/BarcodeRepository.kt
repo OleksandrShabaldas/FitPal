@@ -28,7 +28,7 @@ class BarcodeRepository @Inject constructor(
         nutritionDao.getFoodById(cacheId)?.let { return@withContext it }
 
         val url = "https://world.openfoodfacts.org/api/v2/product/$barcode.json" +
-            "?fields=code,product_name,brands,nutriments,serving_quantity"
+            "?fields=$PRODUCT_FIELDS"
         val body = httpGet(url, retries = 2) ?: return@withContext null
         val product = runCatching { JSONObject(body).optJSONObject("product") }.getOrNull()
             ?: return@withContext null
@@ -48,7 +48,7 @@ class BarcodeRepository @Inject constructor(
             val url = "https://world.openfoodfacts.org/cgi/search.pl" +
                 "?search_terms=${URLEncoder.encode(q, "UTF-8")}" +
                 "&search_simple=1&action=process&json=1&page_size=$limit" +
-                "&fields=code,product_name,brands,nutriments,serving_quantity"
+                "&fields=$PRODUCT_FIELDS"
             val body = httpGet(url, retries = 0) ?: return@withContext emptyList()
             val results = parseProductsArray(body)
             if (results.isNotEmpty()) runCatching { nutritionDao.insertAll(results) }
@@ -67,7 +67,7 @@ class BarcodeRepository @Inject constructor(
             val url = "https://world.openfoodfacts.org/api/v2/search" +
                 "?countries_tags_en=${URLEncoder.encode(country, "UTF-8")}" +
                 "&sort_by=popularity_key&page_size=$pageSize&page=$page" +
-                "&fields=code,product_name,brands,nutriments,serving_quantity"
+                "&fields=$PRODUCT_FIELDS"
             val body = httpGet(url, retries = 2) ?: return@withContext CountryPage(emptyList(), ok = false)
             CountryPage(parseProductsArray(body), ok = true)
         }
@@ -136,7 +136,11 @@ class BarcodeRepository @Inject constructor(
         val carbs = nutriments.optDouble("carbohydrates_100g", 0.0).toFloat()
         val fiber = nutriments.optDouble("fiber_100g", 0.0).toFloat()
 
-        if (kcal <= 0f && protein <= 0f && fat <= 0f && carbs <= 0f) return null
+        // A drink by Open Food Facts' own categories, or sold by volume ("500 ml", "1,5 l").
+        val drink = isBeverage(product)
+        // A product with no calories at all is usually missing data — except a drink: water, diet
+        // sodas and plain tea really are ~0 kcal, and used to come back as "not found".
+        if (kcal <= 0f && protein <= 0f && fat <= 0f && carbs <= 0f && !(drink && rawName.isNotEmpty())) return null
 
         val serving = product.optDouble("serving_quantity", 0.0).toFloat().takeIf { it > 0f }
 
@@ -149,7 +153,34 @@ class BarcodeRepository @Inject constructor(
             carbsPer100g = carbs,
             commonServingGrams = serving,
             foodCategory = "Open Food Facts",
-            fiberPer100g = com.fitpal.app.data.NutritionImporter.fiberWithinCarbs(fiber, carbs)
+            fiberPer100g = com.fitpal.app.data.NutritionImporter.fiberWithinCarbs(fiber, carbs),
+            isDrink = drink
         )
+    }
+
+    private fun isBeverage(product: JSONObject): Boolean {
+        val tags = product.optJSONArray("categories_tags")
+        if (tags != null) {
+            for (i in 0 until tags.length()) {
+                val t = tags.optString(i)
+                if (t in BEVERAGE_TAGS || t.startsWith("en:waters") || t.endsWith("-beverages") || t.endsWith("-drinks")) return true
+            }
+        }
+        val unit = product.optString("product_quantity_unit").trim().lowercase()
+        if (unit == "ml" || unit == "l" || unit == "cl") return true
+        val quantity = product.optString("quantity").lowercase()
+        return VOLUME.containsMatchIn(quantity)
+    }
+
+    private companion object {
+        const val PRODUCT_FIELDS =
+            "code,product_name,brands,nutriments,serving_quantity,categories_tags,quantity,product_quantity_unit"
+        val BEVERAGE_TAGS = setOf(
+            "en:beverages", "en:drinks", "en:waters", "en:carbonated-drinks", "en:sodas", "en:juices",
+            "en:fruit-juices", "en:energy-drinks", "en:coffees", "en:teas", "en:milks", "en:plant-based-milks",
+            "en:alcoholic-beverages", "en:beers", "en:wines", "en:iced-teas", "en:sports-drinks"
+        )
+        /** "330 ml", "1,5 l", "0.5L", "33 cl" — sold by volume. */
+        val VOLUME = Regex("[0-9] *(ml|cl|l)([^a-z]|$)")
     }
 }

@@ -81,7 +81,7 @@ class BarcodeViewModel @Inject constructor(
             if (product == null) {
                 _uiState.update { it.copy(lookingUp = false, notFound = true) }
             } else {
-                val drink = com.fitpal.app.domain.Drinks.isDrink(product.description, product.foodCategory)
+                val drink = product.isDrink || com.fitpal.app.domain.Drinks.isDrink(product.description, product.foodCategory)
                 _uiState.update {
                     it.copy(
                         lookingUp = false,
@@ -101,6 +101,22 @@ class BarcodeViewModel @Inject constructor(
                     )
                 }
             }
+        }
+    }
+
+    /** Food / Drink switch on the scanned product (ml vs g, and whether it counts toward water). */
+    fun setDrink(drink: Boolean) {
+        _uiState.update { state ->
+            val p = state.product ?: return@update state
+            if (p.isDrink == drink) return@update state
+            state.copy(
+                product = p.copy(
+                    isDrink = drink,
+                    waterMlPer100g = if (drink && p.waterMlPer100g <= 0f)
+                        com.fitpal.app.domain.Drinks.estimateWaterPer100(p.carbsPer100g, p.proteinPer100g, p.fatPer100g)
+                    else p.waterMlPer100g
+                )
+            )
         }
     }
 

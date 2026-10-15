@@ -91,9 +91,18 @@ class SearchViewModel @Inject constructor(
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     /** Re-log a food to today (current-time meal category), same as the "Your usuals" one-tap. */
-    fun logFoodAgain(item: MealLogItemEntity, onDone: () -> Unit) {
+    fun logFoodAgain(
+        item: MealLogItemEntity,
+        decision: com.fitpal.app.domain.model.LogDecision = com.fitpal.app.domain.model.LogDecision.NONE,
+        onDone: () -> Unit
+    ) {
         viewModelScope.launch {
-            mealRepository.quickLogRecent(item, mealRepository.defaultMealType())
+            mealRepository.quickLogRecent(
+                item, mealRepository.defaultMealType(),
+                meta = com.fitpal.app.data.repository.mealLogMeta(
+                    java.time.LocalDate.now(), com.fitpal.app.domain.model.EatenAt(), decision
+                )
+            )
             onDone()
         }
     }

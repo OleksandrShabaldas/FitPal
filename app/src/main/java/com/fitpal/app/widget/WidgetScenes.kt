@@ -616,13 +616,13 @@ internal object WidgetScenes {
         val limit = cf.settings.dailyLimitMg.coerceAtLeast(1)
         val now = cf.nowMg.roundToInt()
         val sleepLine = cf.sleepFriendlyAt?.let { "Easy on sleep from ${clockLabel(Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalTime())}" }
-            ?: if (now <= 50) "Low enough for sleep" else "Still high for sleep"
+            ?: if (now <= com.fitpal.app.domain.CaffeineSettings.SLEEP_FRIENDLY_MG) "Low enough for sleep" else "Still high for sleep"
         val description = "About $now milligrams of caffeine in you now. $sleepLine."
         val square = w < h * 1.6f
         return WidgetScene(description, home) { p, c, W, H ->
             val color = p.tone(if (cf.overLimit) Tone.OVER else Tone.CAFFEINE)
             if (square) {
-                val lineP = p.text(min(p.dp(10.5f), H * 0.08f), p.tone(if (now <= 50) Tone.GOOD else Tone.CAFFEINE), weight = 600, align = Paint.Align.CENTER)
+                val lineP = p.text(min(p.dp(10.5f), H * 0.08f), p.tone(if (now <= com.fitpal.app.domain.CaffeineSettings.SLEEP_FRIENDLY_MG) Tone.GOOD else Tone.CAFFEINE), weight = 600, align = Paint.Align.CENTER)
                 val lineH = p.lineHeight(lineP)
                 val D = min(W, H - lineH - p.dp(6f))
                 val cy = D / 2f
@@ -641,7 +641,7 @@ internal object WidgetScenes {
                 val base = H * 0.4f + big.textSize * 0.36f
                 val nw = p.drawFit(c, "$now", x0, base, big, W * 0.3f)
                 c.drawText("mg in you", x0 + nw + p.dp(5f), base, unit)
-                val sp = p.text(min(p.dp(11f), H * 0.16f), p.tone(if (now <= 50) Tone.GOOD else Tone.CAFFEINE), weight = 600)
+                val sp = p.text(min(p.dp(11f), H * 0.16f), p.tone(if (now <= com.fitpal.app.domain.CaffeineSettings.SLEEP_FRIENDLY_MG) Tone.GOOD else Tone.CAFFEINE), weight = 600)
                 p.drawFit(c, sleepLine, x0, base + sp.textSize * 1.7f, sp, W - x0)
                 p.bar(c, 0f, H - p.dp(4f), W, p.dp(4f), cf.nowMg / limit, color)
             }

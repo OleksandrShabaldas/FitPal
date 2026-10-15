@@ -54,6 +54,21 @@ val FrauncesFamily = FontFamily(
 
 private const val TNUM = "tnum"
 
+/**
+ * The type for a look: Fraunces headlines everywhere except Material You, which is Inter
+ * throughout (a clean, all-sans system look).
+ */
+fun typographyFor(style: LookStyle): Typography =
+    if (style != LookStyle.MATERIAL) FitPalTypography
+    else FitPalTypography.copy(
+        displayLarge = FitPalTypography.displayLarge.copy(fontFamily = InterFamily, fontWeight = FontWeight.Bold),
+        displayMedium = FitPalTypography.displayMedium.copy(fontFamily = InterFamily, fontWeight = FontWeight.Bold),
+        displaySmall = FitPalTypography.displaySmall.copy(fontFamily = InterFamily, fontWeight = FontWeight.SemiBold),
+        headlineLarge = FitPalTypography.headlineLarge.copy(fontFamily = InterFamily, fontWeight = FontWeight.Bold),
+        headlineMedium = FitPalTypography.headlineMedium.copy(fontFamily = InterFamily, fontWeight = FontWeight.SemiBold),
+        headlineSmall = FitPalTypography.headlineSmall.copy(fontFamily = InterFamily, fontWeight = FontWeight.SemiBold)
+    )
+
 val FitPalTypography = Typography(
     // ---- Display & headline → Fraunces (serif) ----
     displayLarge = TextStyle(

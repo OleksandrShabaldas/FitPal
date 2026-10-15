@@ -12,6 +12,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.core.content.IntentCompat
+import androidx.compose.ui.graphics.toArgb
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fitpal.app.data.repository.SettingsRepository
 import com.fitpal.app.ui.component.FastingBackdate
@@ -28,23 +31,32 @@ import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
 @AndroidEntryPoint
-class MainActivity : ComponentActivity() {
+class FitPalActivity : ComponentActivity() {
 
     @Inject lateinit var settingsRepository: SettingsRepository
     @Inject lateinit var updateManager: UpdateManager
     @Inject lateinit var focusedDate: com.fitpal.app.domain.FocusedDate
+    @Inject lateinit var appForeground: com.fitpal.app.ml.AppForegroundState
 
     // A route a notification / widget / share asked us to open.
     private var pendingRoute by mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // The look before anything draws (Hilt injects in super.onCreate) — with this activity's own
+        // light/dark configuration, so a cold start never flashes the wrong colours.
+        applyLook(settingsRepository.appearance.value)
         enableEdgeToEdge()
+        lifecycleScope.launch {
+            settingsRepository.appearance.collect { applyLook(it) }
+        }
         pendingRoute = routeFor(intent)
         // First launch (and no shared/notification route) → run onboarding to set accurate targets.
         val startOnboarding = !settingsRepository.hasOnboarded.value && pendingRoute == null
         setContent {
             FitPalTheme {
+                // Liquid glass's tilt-lit rims (idle in every other look).
+                com.fitpal.app.ui.component.TiltLight()
                 // The three online model slots, so every AI badge can say "Fallback 2" instead of
                 // spelling out a model id. Blanks are kept so slot numbers match Settings' labels.
                 val model1 by settingsRepository.geminiModel.collectAsStateWithLifecycle()
@@ -52,7 +64,7 @@ class MainActivity : ComponentActivity() {
                 val model3 by settingsRepository.geminiModel3.collectAsStateWithLifecycle()
                 // Fasting schedule, so the Home strip and the log-time warning share one source.
                 val fastingSchedule by settingsRepository.fastingSchedule.collectAsStateWithLifecycle()
-                // The "I ate earlier" allowance for the fasting warning — remembered so a MainActivity
+                // The "I ate earlier" allowance for the fasting warning — remembered so a FitPalActivity
                 // recomposition doesn't hand the guard a fresh instance and dismiss an open dialog.
                 val fastingGrace by settingsRepository.fastingGrace.collectAsStateWithLifecycle()
                 val fastingBackdate = remember(fastingGrace) {
@@ -67,7 +79,9 @@ class MainActivity : ComponentActivity() {
                     LocalFastingSchedule provides fastingSchedule,
                     LocalFastingBackdate provides fastingBackdate
                 ) {
+                    val navConfig by settingsRepository.navConfig.collectAsStateWithLifecycle()
                     FitPalNavHost(
+                        navConfig = navConfig,
                         pendingRoute = pendingRoute,
                         onPendingRouteHandled = { pendingRoute = null },
                         startOnboarding = startOnboarding
@@ -97,6 +111,24 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    /**
+     * Every screen FitPal opens in another app — the photo picker, a file picker, the mail app —
+     * goes through here (`startActivity` does too). Coming back from one of those isn't a fresh
+     * visit, so things shown "once per visit" (the intense-fasting reminder) don't come back.
+     */
+    @Deprecated("Deprecated in Java")
+    override fun startActivityForResult(intent: Intent, requestCode: Int, options: Bundle?) {
+        appForeground.markExternalTrip()
+        @Suppress("DEPRECATION")
+        super.startActivityForResult(intent, requestCode, options)
+    }
+
+    private fun applyLook(appearance: com.fitpal.app.ui.theme.Appearance) {
+        val night = resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK
+        com.fitpal.app.ui.theme.LookState.apply(appearance, this, systemDark = night == android.content.res.Configuration.UI_MODE_NIGHT_YES)
+        window?.decorView?.setBackgroundColor(com.fitpal.app.ui.theme.LookState.colors.inkBlack.toArgb())
     }
 
     override fun onNewIntent(intent: Intent) {

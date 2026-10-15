@@ -228,7 +228,8 @@ fun ManualEntryScreen(
                         onClick = {
                             fastingGuard.attempt(
                                 isForToday = logDate == java.time.LocalDate.now(),
-                                eatenAt = eatenAt.time
+                                eatenAt = eatenAt.time,
+                                intake = com.fitpal.app.domain.model.FastingIntake.of(state.draft.map { it.total.isDrink to it.total.calories })
                             ) { decision -> viewModel.logMeal(decision) }
                         },
                         modifier = Modifier.fillMaxWidth(),

@@ -23,6 +23,13 @@ import com.fitpal.app.ui.theme.CreamFaint
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
+
+/**
+ * How tall charts draw inside the current card — 1 normally, more for a card the user set to Large
+ * (Analytics' layout editor). Every TrendChart / BarTrendChart multiplies its height by it.
+ */
+val LocalChartScale = androidx.compose.runtime.compositionLocalOf { 1f }
+
 /**
  * The signature glowing line chart: a smooth spline with a gradient fill, an
  * optional shaded "usual range" band, an optional dashed target line, a glowing
@@ -46,7 +53,7 @@ fun TrendChart(
     valueFormatter: (Float) -> String = { it.roundToInt().toString() }
 ) {
     val labelArgb = CreamFaint.toArgb()
-    Canvas(modifier = modifier.fillMaxWidth().height(height)) {
+    Canvas(modifier = modifier.fillMaxWidth().height(height * LocalChartScale.current)) {
         val n = values.size
         val idxVals = values.mapIndexedNotNull { i, v -> if (v != null) i to v else null }
         if (idxVals.size < 2 || n < 2) return@Canvas
@@ -217,7 +224,7 @@ fun BarTrendChart(
             }
         }
     } else Modifier
-    Canvas(modifier = modifier.fillMaxWidth().height(height).then(tapModifier)) {
+    Canvas(modifier = modifier.fillMaxWidth().height(height * LocalChartScale.current).then(tapModifier)) {
         if (values.isEmpty()) return@Canvas
         val bottomGutter = 22f
         val chartBottom = size.height - bottomGutter

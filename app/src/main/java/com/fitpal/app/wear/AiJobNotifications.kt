@@ -8,7 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
-import com.fitpal.app.MainActivity
+import com.fitpal.app.FitPalActivity
 import com.fitpal.app.ui.navigation.Screen
 
 /**
@@ -16,7 +16,7 @@ import com.fitpal.app.ui.navigation.Screen
  * [ExerciseAnalysisWorker]. The "Analysing…" notice is the worker's foreground notification; when
  * the job finishes we post a "tap to review" notice that deep-links into the phone app the same
  * way [com.fitpal.app.ml.AnalysisService] and the home-screen widget do
- * ([MainActivity.EXTRA_NAV_ROUTE]).
+ * ([FitPalActivity.EXTRA_NAV_ROUTE]).
  */
 object AiJobNotifications {
 
@@ -116,11 +116,11 @@ object AiJobNotifications {
     )
 
     private fun openIntent(context: Context, route: String): PendingIntent {
-        val intent = Intent(context, MainActivity::class.java).apply {
+        val intent = Intent(context, FitPalActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or
                 Intent.FLAG_ACTIVITY_SINGLE_TOP or
                 Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
-            putExtra(MainActivity.EXTRA_NAV_ROUTE, route)
+            putExtra(FitPalActivity.EXTRA_NAV_ROUTE, route)
         }
         return PendingIntent.getActivity(
             context, route.hashCode(), intent,

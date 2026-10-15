@@ -64,9 +64,9 @@ fun TrailMapCard(display: TrailDisplay, modifier: Modifier = Modifier) {
         animationSpec = tween(600), label = "siteProgress"
     )
 
-    val roadColor = Color.White.copy(alpha = 0.10f)
+    val roadColor = com.fitpal.app.ui.theme.filmColor(0.10f)
     val doneColor = themePalette(display.themeId).leaf
-    val aheadColor = Color.White.copy(alpha = 0.18f)
+    val aheadColor = com.fitpal.app.ui.theme.filmColor(0.18f)
 
     Column(modifier = modifier.fillMaxWidth().glass().padding(16.dp)) {
         Row(

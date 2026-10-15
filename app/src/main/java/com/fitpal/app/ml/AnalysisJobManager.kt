@@ -254,7 +254,7 @@ class AnalysisJobManager @Inject constructor(
                     insights = status.insights,
                     date = job.targetDate,
                     source = status.source,
-                    meta = mealLogMeta(logDate, job.eatenAt, autoSaveDecision(job, logDate), job.tags)
+                    meta = mealLogMeta(logDate, job.eatenAt, autoSaveDecision(job, logDate, status.foods), job.tags)
                 )
             } catch (_: Exception) {
                 // Best effort — nothing more we can do if the save fails as we're shutting down.
@@ -270,9 +270,15 @@ class AnalysisJobManager @Inject constructor(
      * pass either: a meal auto-saved for today during a fast — without a photo proving it was eaten
      * inside the window — counts as logged during the fast, exactly like "log anyway".
      */
-    private fun autoSaveDecision(job: AnalysisJob, logDate: java.time.LocalDate): LogDecision {
+    private fun autoSaveDecision(
+        job: AnalysisJob,
+        logDate: java.time.LocalDate,
+        foods: List<com.fitpal.app.domain.model.DetectedFood>
+    ): LogDecision {
         val schedule = settingsRepository.fastingSchedule.value
         if (!schedule.enabled || logDate != java.time.LocalDate.now()) return LogDecision.NONE
+        // A drink the user's rule allows during a fast (a black coffee) isn't "logged during the fast".
+        if (schedule.allowsDuringFast(com.fitpal.app.domain.model.FastingIntake.ofFoods(foods))) return LogDecision.NONE
         val now = java.time.LocalTime.now().let { it.hour * 60 + it.minute }
         if (schedule.isEatingAt(now)) return LogDecision.NONE
         val photoProof = job.eatenAt.isPhotoTime && schedule.isEatingAt(job.eatenAt.minuteOfDay())

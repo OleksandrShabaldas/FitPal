@@ -199,9 +199,19 @@ class AnalyticsViewModel @Inject constructor(
     val fastingSchedule: StateFlow<com.fitpal.app.domain.model.FastingSchedule> = settingsRepository.fastingSchedule
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), com.fitpal.app.domain.model.FastingSchedule.DISABLED)
 
-    /** Meal (day, log-time) rows over the viewed window — colours the fasting heatmap. */
+    /**
+     * Meal (day, log-time) rows over the viewed window — colours the fasting heatmap. Drink-only logs
+     * the user's drink rule allows are left out, so they never break a day (applied at read time, so
+     * changing the rule re-judges past days too).
+     */
     private val fastingMealTimes: StateFlow<List<com.fitpal.app.data.local.dao.MealTimeRow>> =
         rangeDriven { from, to -> mealRepository.getMealTimesInRange(from, to) }
+            .let { rows -> combine(rows, settingsRepository.fastingSchedule) { r, s -> r.breakingOnly(s) } }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private fun List<com.fitpal.app.data.local.dao.MealTimeRow>.breakingOnly(
+        schedule: com.fitpal.app.domain.model.FastingSchedule
+    ) = filterNot { schedule.allowsDuringFast(it.fastingIntake) }
 
     /** Days the user marked "I ate earlier" (dateIso -> attested eating time) — count as kept. */
     val fastingGrace: StateFlow<Map<String, Int>> = settingsRepository.fastingGrace
@@ -236,7 +246,8 @@ class AnalyticsViewModel @Inject constructor(
             mealRepository.getMealTimesInRange(today.minusDays(90).format(dateFormat), today.format(dateFormat))
                 .collect { recent.value = it }
         }
-        combine(recent, settingsRepository.fastingSchedule, settingsRepository.fastingGrace) { times, schedule, grace ->
+        combine(recent, settingsRepository.fastingSchedule, settingsRepository.fastingGrace) { all, schedule, grace ->
+            val times = all.breakingOnly(schedule)
             fastingStreakOf(
                 schedule.adherenceByDay(
                     times.map { it.date to minuteOfDay(it.timestamp) }, grace.keys, loggedDuringFastDays(times)
@@ -298,12 +309,12 @@ class AnalyticsViewModel @Inject constructor(
     fun setView(title: String, index: Int) = settingsRepository.setAnalyticsView(title, index)
 
     /** The user's chosen order / visibility for the Analytics cards. */
-    val widgetLayout: StateFlow<List<com.fitpal.app.domain.model.WidgetSetting>> =
+    val widgetLayout: StateFlow<List<com.fitpal.app.domain.model.ResolvedCard>> =
         settingsRepository.widgetLayouts
-            .map { com.fitpal.app.domain.model.ScreenWidgets.resolve(it[com.fitpal.app.domain.model.ScreenWidgets.ANALYTICS].orEmpty(), com.fitpal.app.domain.model.ScreenWidgets.defaultsFor(com.fitpal.app.domain.model.ScreenWidgets.ANALYTICS)) }
+            .map { com.fitpal.app.domain.model.ScreenWidgets.resolveCards(com.fitpal.app.domain.model.ScreenWidgets.ANALYTICS, it[com.fitpal.app.domain.model.ScreenWidgets.ANALYTICS].orEmpty()) }
             .stateIn(
                 viewModelScope, SharingStarted.WhileSubscribed(5000),
-                com.fitpal.app.domain.model.ScreenWidgets.resolve(emptyList(), com.fitpal.app.domain.model.ScreenWidgets.defaultsFor(com.fitpal.app.domain.model.ScreenWidgets.ANALYTICS))
+                com.fitpal.app.domain.model.ScreenWidgets.resolveCards(com.fitpal.app.domain.model.ScreenWidgets.ANALYTICS, emptyList())
             )
 
     // ---- Water / Steps per day (range-driven) ----

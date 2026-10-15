@@ -6,7 +6,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
-import com.fitpal.app.MainActivity
+import com.fitpal.app.FitPalActivity
 import com.fitpal.app.domain.model.DietaryRuleKind
 import com.fitpal.app.ui.navigation.Screen
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -51,9 +51,9 @@ class DietaryNotifier @Inject constructor(
     }
 
     private fun openHome(requestCode: Int): PendingIntent {
-        val open = Intent(context, MainActivity::class.java).apply {
+        val open = Intent(context, FitPalActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
-            putExtra(MainActivity.EXTRA_NAV_ROUTE, Screen.Home.route)
+            putExtra(FitPalActivity.EXTRA_NAV_ROUTE, Screen.Home.route)
         }
         return PendingIntent.getActivity(
             context, requestCode, open,

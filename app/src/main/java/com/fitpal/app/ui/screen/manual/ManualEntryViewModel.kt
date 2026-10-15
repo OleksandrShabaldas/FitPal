@@ -137,7 +137,7 @@ class ManualEntryViewModel @Inject constructor(
      * nothing has to be found again and resized (the reason the old tap-to-append was dropped).
      */
     fun pickFood(food: UsdaFoodEntity) {
-        val drink = com.fitpal.app.domain.Drinks.isDrink(food.description, food.foodCategory)
+        val drink = food.isDrink || com.fitpal.app.domain.Drinks.isDrink(food.description, food.foodCategory)
         val foodPortion = food.commonServingGrams ?: DraftItem.DEFAULT_FOOD_PORTION
         val base = Ingredient(
             name = food.description,

@@ -649,11 +649,21 @@ class AnalysisViewModel @Inject constructor(
         }
     }
 
-    /** Pick which candidate dish to log — swaps in its ingredients + variations. */
+    /** Pick which candidate dish to log — swaps in its ingredients + variations (drinks stay put). */
     fun selectDish(index: Int) {
         _uiState.update { state ->
             val candidate = state.dishCandidates.getOrNull(index) ?: return@update state
-            state.copy(selectedDishIndex = index, detectedFoods = listOf(candidate))
+            state.copy(selectedDishIndex = index, detectedFoods = listOf(candidate) + state.detectedFoods.filter { it.isDrink })
+        }
+    }
+
+    /** The Food / Drink switch on a review card: ml vs g, drink presets, and counting toward water. */
+    fun setFoodDrink(foodIndex: Int, drink: Boolean) {
+        _uiState.update { state ->
+            val foods = state.detectedFoods.toMutableList()
+            val food = foods.getOrNull(foodIndex) ?: return@update state
+            foods[foodIndex] = food.asDrink(drink)
+            state.copy(detectedFoods = foods)
         }
     }
 

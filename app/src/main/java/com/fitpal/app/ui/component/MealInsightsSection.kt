@@ -190,7 +190,7 @@ private fun ImpactMeter(label: String, score: Int, text: String) {
     if (score > 0) {
         Spacer(Modifier.height(6.dp))
         Box(
-            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(6.dp)).background(Color.White.copy(alpha = 0.08f))
+            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(6.dp)).background(com.fitpal.app.ui.theme.filmColor(0.08f))
         ) {
             Box(Modifier.fillMaxWidth((score / 5f).coerceIn(0f, 1f)).height(6.dp).clip(RoundedCornerShape(6.dp)).background(color))
         }

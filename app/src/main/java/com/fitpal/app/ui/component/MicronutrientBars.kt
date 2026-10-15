@@ -109,7 +109,7 @@ private fun NutrientCell(n: Nutrient, compact: Boolean, modifier: Modifier = Mod
                 .fillMaxWidth()
                 .height(6.dp)
                 .clip(RoundedCornerShape(6.dp))
-                .background(Color.White.copy(alpha = 0.08f))
+                .background(com.fitpal.app.ui.theme.filmColor(0.08f))
         ) {
             Box(
                 modifier = Modifier

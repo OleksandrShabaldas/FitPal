@@ -116,7 +116,9 @@ fun TrailScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 20.dp, vertical = 4.dp),
+                        .padding(horizontal = 20.dp, vertical = 4.dp)
+                        // Clear the bottom bar when the Trail is one of its tabs.
+                        .padding(bottom = com.fitpal.app.ui.navigation.LocalBottomBarInset.current),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     val p = d.progression
@@ -760,7 +762,7 @@ private fun ChallengeCard(
                     .fillMaxWidth()
                     .height(6.dp)
                     .clip(RoundedCornerShape(50))
-                    .background(Color.White.copy(alpha = 0.08f))
+                    .background(com.fitpal.app.ui.theme.filmColor(0.08f))
             ) {
                 Box(
                     modifier = Modifier
@@ -915,7 +917,7 @@ private fun ProjectRow(
         } else {
             Box(modifier = Modifier.size(30.dp), contentAlignment = Alignment.Center) {
                 Canvas(Modifier.size(9.dp)) {
-                    drawCircle(Color.White.copy(alpha = 0.22f), style = Stroke(width = 1.5f))
+                    drawCircle(com.fitpal.app.ui.theme.filmColor(0.22f), style = Stroke(width = 1.5f))
                 }
             }
         }

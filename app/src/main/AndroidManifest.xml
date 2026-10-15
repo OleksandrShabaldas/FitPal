@@ -42,16 +42,14 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.FitPal">
 
+        <!-- The app's one activity. Its launcher icon comes from the activity-alias below that's
+             enabled (Settings → Appearance → App icon); ".MainActivity" is the original one. -->
         <activity
-            android:name=".MainActivity"
+            android:name=".FitPalActivity"
             android:exported="true"
             android:screenOrientation="portrait"
             tools:ignore="LockedOrientationActivity"
             android:theme="@style/Theme.FitPal">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
             <!-- Share a food photo from any gallery/camera app straight into analysis -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
@@ -63,6 +61,793 @@
                 <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
             </intent-filter>
         </activity>
+
+        <!-- BEGIN GENERATED ICON ALIASES (tools/gen_app_icons.py — one per launcher icon; exactly one is enabled) -->
+        <!-- The original icon. Keeps the launcher component name the app has always had, so an existing home-screen shortcut survives; FitPalActivity is the real activity. -->
+        <activity-alias
+            android:name=".MainActivity"
+            android:enabled="true"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher"
+            android:roundIcon="@mipmap/ic_launcher"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- apple_glow_ocean -->
+        <activity-alias
+            android:name=".icon.AppleGlowOcean"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_apple_glow_ocean"
+            android:roundIcon="@mipmap/ic_app_apple_glow_ocean"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- apple_glow_forest -->
+        <activity-alias
+            android:name=".icon.AppleGlowForest"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_apple_glow_forest"
+            android:roundIcon="@mipmap/ic_app_apple_glow_forest"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- apple_glow_berry -->
+        <activity-alias
+            android:name=".icon.AppleGlowBerry"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_apple_glow_berry"
+            android:roundIcon="@mipmap/ic_app_apple_glow_berry"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- apple_glow_aurora -->
+        <activity-alias
+            android:name=".icon.AppleGlowAurora"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_apple_glow_aurora"
+            android:roundIcon="@mipmap/ic_app_apple_glow_aurora"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- apple_glow_graphite -->
+        <activity-alias
+            android:name=".icon.AppleGlowGraphite"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_apple_glow_graphite"
+            android:roundIcon="@mipmap/ic_app_apple_glow_graphite"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- apple_liquid_dark -->
+        <activity-alias
+            android:name=".icon.AppleLiquidDark"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_apple_liquid_dark"
+            android:roundIcon="@mipmap/ic_app_apple_liquid_dark"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- apple_liquid_light -->
+        <activity-alias
+            android:name=".icon.AppleLiquidLight"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_apple_liquid_light"
+            android:roundIcon="@mipmap/ic_app_apple_liquid_light"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- apple_paper_light -->
+        <activity-alias
+            android:name=".icon.ApplePaperLight"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_apple_paper_light"
+            android:roundIcon="@mipmap/ic_app_apple_paper_light"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- apple_paper_dark -->
+        <activity-alias
+            android:name=".icon.ApplePaperDark"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_apple_paper_dark"
+            android:roundIcon="@mipmap/ic_app_apple_paper_dark"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- apple_material_light -->
+        <activity-alias
+            android:name=".icon.AppleMaterialLight"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_apple_material_light"
+            android:roundIcon="@mipmap/ic_app_apple_material_light"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- apple_material_dark -->
+        <activity-alias
+            android:name=".icon.AppleMaterialDark"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_apple_material_dark"
+            android:roundIcon="@mipmap/ic_app_apple_material_dark"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- ring_glow_ember -->
+        <activity-alias
+            android:name=".icon.RingGlowEmber"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_ring_glow_ember"
+            android:roundIcon="@mipmap/ic_app_ring_glow_ember"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- ring_glow_ocean -->
+        <activity-alias
+            android:name=".icon.RingGlowOcean"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_ring_glow_ocean"
+            android:roundIcon="@mipmap/ic_app_ring_glow_ocean"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- ring_glow_forest -->
+        <activity-alias
+            android:name=".icon.RingGlowForest"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_ring_glow_forest"
+            android:roundIcon="@mipmap/ic_app_ring_glow_forest"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- ring_glow_berry -->
+        <activity-alias
+            android:name=".icon.RingGlowBerry"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_ring_glow_berry"
+            android:roundIcon="@mipmap/ic_app_ring_glow_berry"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- ring_glow_aurora -->
+        <activity-alias
+            android:name=".icon.RingGlowAurora"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_ring_glow_aurora"
+            android:roundIcon="@mipmap/ic_app_ring_glow_aurora"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- ring_glow_graphite -->
+        <activity-alias
+            android:name=".icon.RingGlowGraphite"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_ring_glow_graphite"
+            android:roundIcon="@mipmap/ic_app_ring_glow_graphite"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- ring_liquid_dark -->
+        <activity-alias
+            android:name=".icon.RingLiquidDark"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_ring_liquid_dark"
+            android:roundIcon="@mipmap/ic_app_ring_liquid_dark"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- ring_liquid_light -->
+        <activity-alias
+            android:name=".icon.RingLiquidLight"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_ring_liquid_light"
+            android:roundIcon="@mipmap/ic_app_ring_liquid_light"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- ring_paper_light -->
+        <activity-alias
+            android:name=".icon.RingPaperLight"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_ring_paper_light"
+            android:roundIcon="@mipmap/ic_app_ring_paper_light"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- ring_paper_dark -->
+        <activity-alias
+            android:name=".icon.RingPaperDark"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_ring_paper_dark"
+            android:roundIcon="@mipmap/ic_app_ring_paper_dark"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- ring_material_light -->
+        <activity-alias
+            android:name=".icon.RingMaterialLight"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_ring_material_light"
+            android:roundIcon="@mipmap/ic_app_ring_material_light"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- ring_material_dark -->
+        <activity-alias
+            android:name=".icon.RingMaterialDark"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_ring_material_dark"
+            android:roundIcon="@mipmap/ic_app_ring_material_dark"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- carrot_glow_ember -->
+        <activity-alias
+            android:name=".icon.CarrotGlowEmber"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_carrot_glow_ember"
+            android:roundIcon="@mipmap/ic_app_carrot_glow_ember"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- carrot_glow_ocean -->
+        <activity-alias
+            android:name=".icon.CarrotGlowOcean"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_carrot_glow_ocean"
+            android:roundIcon="@mipmap/ic_app_carrot_glow_ocean"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- carrot_glow_forest -->
+        <activity-alias
+            android:name=".icon.CarrotGlowForest"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_carrot_glow_forest"
+            android:roundIcon="@mipmap/ic_app_carrot_glow_forest"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- carrot_glow_berry -->
+        <activity-alias
+            android:name=".icon.CarrotGlowBerry"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_carrot_glow_berry"
+            android:roundIcon="@mipmap/ic_app_carrot_glow_berry"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- carrot_glow_aurora -->
+        <activity-alias
+            android:name=".icon.CarrotGlowAurora"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_carrot_glow_aurora"
+            android:roundIcon="@mipmap/ic_app_carrot_glow_aurora"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- carrot_glow_graphite -->
+        <activity-alias
+            android:name=".icon.CarrotGlowGraphite"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_carrot_glow_graphite"
+            android:roundIcon="@mipmap/ic_app_carrot_glow_graphite"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- carrot_liquid_dark -->
+        <activity-alias
+            android:name=".icon.CarrotLiquidDark"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_carrot_liquid_dark"
+            android:roundIcon="@mipmap/ic_app_carrot_liquid_dark"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- carrot_liquid_light -->
+        <activity-alias
+            android:name=".icon.CarrotLiquidLight"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_carrot_liquid_light"
+            android:roundIcon="@mipmap/ic_app_carrot_liquid_light"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- carrot_paper_light -->
+        <activity-alias
+            android:name=".icon.CarrotPaperLight"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_carrot_paper_light"
+            android:roundIcon="@mipmap/ic_app_carrot_paper_light"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- carrot_paper_dark -->
+        <activity-alias
+            android:name=".icon.CarrotPaperDark"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_carrot_paper_dark"
+            android:roundIcon="@mipmap/ic_app_carrot_paper_dark"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- carrot_material_light -->
+        <activity-alias
+            android:name=".icon.CarrotMaterialLight"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_carrot_material_light"
+            android:roundIcon="@mipmap/ic_app_carrot_material_light"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- carrot_material_dark -->
+        <activity-alias
+            android:name=".icon.CarrotMaterialDark"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_carrot_material_dark"
+            android:roundIcon="@mipmap/ic_app_carrot_material_dark"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- sprout_glow_ember -->
+        <activity-alias
+            android:name=".icon.SproutGlowEmber"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_sprout_glow_ember"
+            android:roundIcon="@mipmap/ic_app_sprout_glow_ember"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- sprout_glow_ocean -->
+        <activity-alias
+            android:name=".icon.SproutGlowOcean"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_sprout_glow_ocean"
+            android:roundIcon="@mipmap/ic_app_sprout_glow_ocean"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- sprout_glow_forest -->
+        <activity-alias
+            android:name=".icon.SproutGlowForest"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_sprout_glow_forest"
+            android:roundIcon="@mipmap/ic_app_sprout_glow_forest"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- sprout_glow_berry -->
+        <activity-alias
+            android:name=".icon.SproutGlowBerry"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_sprout_glow_berry"
+            android:roundIcon="@mipmap/ic_app_sprout_glow_berry"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- sprout_glow_aurora -->
+        <activity-alias
+            android:name=".icon.SproutGlowAurora"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_sprout_glow_aurora"
+            android:roundIcon="@mipmap/ic_app_sprout_glow_aurora"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- sprout_glow_graphite -->
+        <activity-alias
+            android:name=".icon.SproutGlowGraphite"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_sprout_glow_graphite"
+            android:roundIcon="@mipmap/ic_app_sprout_glow_graphite"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- sprout_liquid_dark -->
+        <activity-alias
+            android:name=".icon.SproutLiquidDark"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_sprout_liquid_dark"
+            android:roundIcon="@mipmap/ic_app_sprout_liquid_dark"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- sprout_liquid_light -->
+        <activity-alias
+            android:name=".icon.SproutLiquidLight"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_sprout_liquid_light"
+            android:roundIcon="@mipmap/ic_app_sprout_liquid_light"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- sprout_paper_light -->
+        <activity-alias
+            android:name=".icon.SproutPaperLight"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_sprout_paper_light"
+            android:roundIcon="@mipmap/ic_app_sprout_paper_light"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- sprout_paper_dark -->
+        <activity-alias
+            android:name=".icon.SproutPaperDark"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_sprout_paper_dark"
+            android:roundIcon="@mipmap/ic_app_sprout_paper_dark"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- sprout_material_light -->
+        <activity-alias
+            android:name=".icon.SproutMaterialLight"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_sprout_material_light"
+            android:roundIcon="@mipmap/ic_app_sprout_material_light"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- sprout_material_dark -->
+        <activity-alias
+            android:name=".icon.SproutMaterialDark"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_sprout_material_dark"
+            android:roundIcon="@mipmap/ic_app_sprout_material_dark"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- fun_pixel_apple -->
+        <activity-alias
+            android:name=".icon.FunPixelApple"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_fun_pixel_apple"
+            android:roundIcon="@mipmap/ic_app_fun_pixel_apple"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- fun_donut -->
+        <activity-alias
+            android:name=".icon.FunDonut"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_fun_donut"
+            android:roundIcon="@mipmap/ic_app_fun_donut"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- fun_avocado -->
+        <activity-alias
+            android:name=".icon.FunAvocado"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_fun_avocado"
+            android:roundIcon="@mipmap/ic_app_fun_avocado"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- fun_broccoli -->
+        <activity-alias
+            android:name=".icon.FunBroccoli"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_fun_broccoli"
+            android:roundIcon="@mipmap/ic_app_fun_broccoli"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- fun_sleepy_bean -->
+        <activity-alias
+            android:name=".icon.FunSleepyBean"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_fun_sleepy_bean"
+            android:roundIcon="@mipmap/ic_app_fun_sleepy_bean"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- fun_pumpkin -->
+        <activity-alias
+            android:name=".icon.FunPumpkin"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_fun_pumpkin"
+            android:roundIcon="@mipmap/ic_app_fun_pumpkin"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- fun_golden_apple -->
+        <activity-alias
+            android:name=".icon.FunGoldenApple"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_fun_golden_apple"
+            android:roundIcon="@mipmap/ic_app_fun_golden_apple"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- fun_incognito -->
+        <activity-alias
+            android:name=".icon.FunIncognito"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_fun_incognito"
+            android:roundIcon="@mipmap/ic_app_fun_incognito"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- END GENERATED ICON ALIASES -->
 
         <!-- Hands the downloaded update APK to the system installer (a file:// URI would throw
              on Android 7+, so the installer gets a content:// URI through this provider). -->

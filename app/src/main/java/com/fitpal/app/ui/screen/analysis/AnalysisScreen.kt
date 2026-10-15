@@ -151,7 +151,10 @@ fun AnalysisScreen(
             copiesChooser = true,
             onConfirmMeal = { date, meal, copies ->
                 showCopyPicker = false
-                fastingGuard.attempt(isForToday = date == java.time.LocalDate.now()) { decision ->
+                fastingGuard.attempt(
+                    isForToday = date == java.time.LocalDate.now(),
+                    intake = com.fitpal.app.domain.model.FastingIntake.ofFoods(state.detectedFoods)
+                ) { decision ->
                     viewModel.copyToDate(date, meal, copies, decision)
                 }
             },
@@ -408,6 +411,7 @@ fun AnalysisScreen(
                                     onAddIngredient = { addIngredientFor = foodIndex },
                                     onEditWithAi = { editWithAiFor = foodIndex },
                                     onRename = { viewModel.renameFood(foodIndex, it) },
+                                    onSetDrink = { viewModel.setFoodDrink(foodIndex, it) },
                                     onRemove = { viewModel.removeFood(foodIndex) },
                                     onToggleSave = {
                                         if (state.savedFoodIndices.contains(foodIndex)) viewModel.removeFromGallery(foodIndex)
@@ -514,7 +518,8 @@ fun AnalysisScreen(
                             fastingGuard.attempt(
                                 isForToday = logDate == java.time.LocalDate.now(),
                                 eatenAt = eatenAt.time,
-                                photoTime = eatenAt.isPhotoTime
+                                photoTime = eatenAt.isPhotoTime,
+                                intake = com.fitpal.app.domain.model.FastingIntake.ofFoods(state.detectedFoods)
                             ) { decision -> viewModel.logMeal(decision) }
                         },
                         modifier = Modifier.fillMaxWidth(),

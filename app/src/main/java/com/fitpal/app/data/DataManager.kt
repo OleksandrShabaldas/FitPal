@@ -55,6 +55,12 @@ class DataManager @Inject constructor(
             root.put("hidden_foods", JSONArray(settings.hiddenFoodIds.value.toList()))
             // "I ate earlier" fasting grace days are also a preferences flag.
             root.put("fasting_grace", JSONObject().apply { settings.fastingGrace.value.forEach { (k, v) -> put(k, v) } })
+            // How the app looks and is laid out (Settings → Appearance / Home & screens). The launcher
+            // icon isn't included — switching it can drop the home-screen shortcut, so it's never
+            // changed without asking.
+            root.put("appearance", JSONObject(settings.appearance.value.toJson()))
+            root.put("widget_layouts", JSONObject(settings.exportWidgetLayoutsJson()))
+            root.put("nav_config", JSONObject(settings.navConfig.value.toJson()))
             context.contentResolver.openOutputStream(uri)?.use { out ->
                 out.write(root.toString().toByteArray(Charsets.UTF_8))
             } ?: return@withContext false
@@ -102,6 +108,10 @@ class DataManager @Inject constructor(
                 val grace = buildMap { obj.keys().forEach { k -> put(k, obj.optInt(k)) } }
                 settings.setFastingGrace(grace)
             }
+            // Backups from before 2.5 have none of these — the current look and layout stay as they are.
+            root.optJSONObject("appearance")?.let { settings.setAppearance(com.fitpal.app.ui.theme.Appearance.fromJson(it.toString())) }
+            root.optJSONObject("widget_layouts")?.let { settings.importWidgetLayoutsJson(it.toString()) }
+            root.optJSONObject("nav_config")?.let { settings.setNavConfig(com.fitpal.app.domain.model.NavConfig.fromJson(it.toString())) }
             true
         } catch (e: Exception) {
             false

@@ -228,7 +228,7 @@ private fun DrawScope.drawPropLabel(name: String, ground: Offset, u: Float, h: F
 private fun DrawScope.drawGhostSlot(slot: Slot, w: Float, h: Float) {
     val u = h * 0.13f * slot.depth
     drawCircle(
-        color = Color.White.copy(alpha = 0.07f),
+        color = com.fitpal.app.ui.theme.filmColor(0.07f),
         radius = u * 0.22f,
         center = Offset(w * slot.x, h * slot.y - u * 0.22f),
         style = Stroke(width = 1.5f)
@@ -236,8 +236,8 @@ private fun DrawScope.drawGhostSlot(slot: Slot, w: Float, h: Float) {
 }
 
 private fun DrawScope.drawHills(w: Float, h: Float, overgrowth: Float) {
-    val far = Color.White.copy(alpha = 0.05f * (1f - overgrowth * 0.4f))
-    val near = Color.White.copy(alpha = 0.07f * (1f - overgrowth * 0.4f))
+    val far = com.fitpal.app.ui.theme.filmColor(0.05f * (1f - overgrowth * 0.4f))
+    val near = com.fitpal.app.ui.theme.filmColor(0.07f * (1f - overgrowth * 0.4f))
 
     val back = Path().apply {
         moveTo(0f, h * 0.46f)
@@ -265,7 +265,7 @@ private fun DrawScope.drawTrailPath(w: Float, h: Float, overgrowth: Float) {
     }
     drawPath(
         path,
-        color = Color.White.copy(alpha = 0.10f * (1f - overgrowth * 0.5f)),
+        color = com.fitpal.app.ui.theme.filmColor(0.10f * (1f - overgrowth * 0.5f)),
         style = Stroke(width = h * 0.045f)
     )
     drawPath(

@@ -21,7 +21,9 @@ data class FastingSchedule(
     /** How firmly the fast is held — see [FastingIntensity]. */
     val intensity: FastingIntensity = FastingIntensity.NORMAL,
     /** How Home's main card draws the timer — see [FastingStyle]. */
-    val style: FastingStyle = FastingStyle.BAR
+    val style: FastingStyle = FastingStyle.BAR,
+    /** Which drinks don't break the fast — see [FastingDrinkRule]. */
+    val drinkRule: FastingDrinkRule = FastingDrinkRule.CALORIE_FREE
 ) {
     /** Fasting is on and set to [FastingIntensity.INTENSE]: the full-screen stop + the Home reminder. */
     val isIntense: Boolean get() = enabled && intensity == FastingIntensity.INTENSE
@@ -43,6 +45,17 @@ data class FastingSchedule(
         )
     }
 
+    /**
+     * Whether logging [intake] during the fast leaves it intact under [drinkRule]: only a log made up
+     * entirely of drinks can, and only within the rule's calorie cap (ANY has none). Shared by the
+     * log-time check, auto-save and the adherence history, so all three agree.
+     */
+    fun allowsDuringFast(intake: FastingIntake): Boolean {
+        if (!intake.allDrinks) return false
+        val cap = drinkRule.maxKcal ?: return drinkRule == FastingDrinkRule.ANY
+        return intake.kcal <= cap
+    }
+
     /** Length of the eating window in minutes (handles the midnight wrap). */
     fun eatingLengthMin(): Int = FastingWindow.eatingLengthMin(eatStartMin, eatEndMin)
 
@@ -61,11 +74,48 @@ enum class FastingPhase { FASTING, EATING }
 /**
  * How firmly FitPal holds you to the fast (Settings → Fasting). Both keep the log-time check;
  * INTENSE adds friction *before* you start: a full-screen stop on Add food that you swipe past, and a
- * reminder that drops in every time you open Home.
+ * reminder that drops in each time you come to the app.
  */
 enum class FastingIntensity(val label: String, val blurb: String) {
     NORMAL("Normal", "A quiet timer on Home, and a check before you log food."),
-    INTENSE("Intense", "A full-screen stop on Add food you have to swipe past, and a reminder every time you open Home.")
+    INTENSE("Intense", "A full-screen stop on Add food you have to swipe past, and a reminder each time you open the app.")
+}
+
+/**
+ * Which drinks are fine during a fast (Settings → Fasting). Calories are counted per log — a black
+ * coffee is a few kcal, a latte well over a hundred — so "calorie-free" and "light" are caps on
+ * the whole log. ANY lets every drink through, even a juice or a protein shake.
+ */
+enum class FastingDrinkRule(val label: String, val blurb: String, val maxKcal: Float?) {
+    OFF("Every drink counts", "Any drink breaks your fast, just like food.", null),
+    CALORIE_FREE("Calorie-free only", "Water, black coffee, plain tea and diet soda — up to 15 kcal.", 15f),
+    LIGHT("Light drinks", "Up to 50 kcal — a splash of milk in your coffee, a broth.", 50f),
+    ANY("Any drink", "Drinks never break your fast — even juice, a latte or a protein shake.", null);
+
+    /** The takeover's reassurance line — what you can still have. */
+    val takeoverLine: String
+        get() = when (this) {
+            OFF -> "Logging a workout or your weight won't break it."
+            CALORIE_FREE -> "Water, black coffee and plain tea won't break it — nor will logging a workout or your weight."
+            LIGHT -> "Drinks up to 50 kcal won't break it — nor will logging a workout or your weight."
+            ANY -> "Drinks won't break it — nor will logging a workout or your weight."
+        }
+}
+
+/**
+ * What a log holds, as far as the fasting rule cares: is it only drinks, and how many kcal in all.
+ * [UNKNOWN] (the default) never counts as a drink, so a caller that doesn't say behaves as before.
+ */
+data class FastingIntake(val allDrinks: Boolean, val kcal: Float) {
+    companion object {
+        val UNKNOWN = FastingIntake(allDrinks = false, kcal = Float.MAX_VALUE)
+
+        fun of(items: List<Pair<Boolean, Float>>): FastingIntake =
+            if (items.isEmpty()) UNKNOWN
+            else FastingIntake(items.all { it.first }, items.sumOf { it.second.toDouble() }.toFloat())
+
+        fun ofFoods(foods: List<DetectedFood>): FastingIntake = of(foods.map { it.isDrink to it.totalCalories })
+    }
 }
 
 /** How the fasting timer is drawn on Home's main card. */

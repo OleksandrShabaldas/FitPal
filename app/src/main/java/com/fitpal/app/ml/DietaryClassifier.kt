@@ -194,12 +194,11 @@ class DietaryClassifier @Inject constructor(
 
     // ---- Offline heuristic ----
 
-    private fun heuristicTags(name: String, kinds: Set<DietaryRuleKind>): Set<DietaryRuleKind> {
-        val lower = name.lowercase()
-        return kinds.filterTo(mutableSetOf()) { kind ->
-            kind.heuristicWords.any { lower.contains(it) }
+    private fun heuristicTags(name: String, kinds: Set<DietaryRuleKind>): Set<DietaryRuleKind> =
+        // Whole words only — "cola" mustn't tag a chocolate bar, nor "soda" baking soda.
+        kinds.filterTo(mutableSetOf()) { kind ->
+            com.fitpal.app.domain.TextMatch.containsAny(name, kind.heuristicWords)
         }
-    }
 
     // ---- Parsing (tolerant of stray text around the JSON) ----
 

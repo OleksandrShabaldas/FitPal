@@ -144,7 +144,7 @@ fun CameraScreen(
                         },
                         modifier = Modifier.align(Alignment.BottomCenter).padding(32.dp).size(72.dp),
                         containerColor = GoldLight,
-                        contentColor = Color(0xFF3A2406)
+                        contentColor = com.fitpal.app.ui.theme.OnGold
                     ) {
                         Icon(Icons.Default.Camera, contentDescription = "Take photo", modifier = Modifier.size(36.dp))
                     }

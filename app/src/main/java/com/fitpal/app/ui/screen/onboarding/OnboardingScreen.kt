@@ -293,7 +293,7 @@ private fun ProgressSegments(step: Step) {
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
         counted.forEachIndexed { i, _ ->
             val color by animateColorAsState(
-                if (i <= current) GoldLight else Color.White.copy(alpha = 0.12f),
+                if (i <= current) GoldLight else com.fitpal.app.ui.theme.filmColor(0.12f),
                 animationSpec = tween(400), label = "segment"
             )
             Box(Modifier.weight(1f).height(4.dp).clip(RoundedCornerShape(50)).background(color))

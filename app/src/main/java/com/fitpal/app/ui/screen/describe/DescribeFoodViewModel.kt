@@ -255,6 +255,16 @@ class DescribeFoodViewModel @Inject constructor(
     }
 
     /** Rename a dish before it's logged — what the AI called it is a suggestion, not a verdict. */
+    /** The Food / Drink switch on a review card. */
+    fun setFoodDrink(foodIndex: Int, drink: Boolean) {
+        _uiState.update { state ->
+            val foods = state.foods.toMutableList()
+            val food = foods.getOrNull(foodIndex) ?: return@update state
+            foods[foodIndex] = food.asDrink(drink)
+            state.copy(foods = foods)
+        }
+    }
+
     fun renameFood(foodIndex: Int, name: String) {
         val clean = name.trim()
         if (clean.isEmpty()) return

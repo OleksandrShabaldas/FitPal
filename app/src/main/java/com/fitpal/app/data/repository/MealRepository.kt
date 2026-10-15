@@ -219,7 +219,12 @@ class MealRepository @Inject constructor(
      * the saved ingredient breakdown when present so it re-logs as the same composite dish, else
      * rebuilds a single ingredient from the item's totals.
      */
-    suspend fun quickLogRecent(item: MealLogItemEntity, mealType: String, date: String? = null): Long {
+    suspend fun quickLogRecent(
+        item: MealLogItemEntity,
+        mealType: String,
+        date: String? = null,
+        meta: MealLogMeta = MealLogMeta()
+    ): Long {
         val ingredients = ingredientsForItem(item).ifEmpty { listOf(itemAsIngredient(item)) }
         val food = DetectedFood(
             label = item.name,
@@ -229,7 +234,7 @@ class MealRepository @Inject constructor(
             ingredients = ingredients,
             isDrink = item.isDrink
         )
-        return logMeal(listOf(food), mealType, date = date)
+        return logMeal(listOf(food), mealType, date = date, meta = meta)
     }
 
     /** Rebuild a single per-100g ingredient from a logged item that has no saved breakdown. */
@@ -752,6 +757,22 @@ class MealRepository @Inject constructor(
     suspend fun renameItem(itemId: Long, name: String) {
         val clean = name.trim()
         if (clean.isNotEmpty()) mealLogDao.updateItemName(itemId, clean)
+    }
+
+    /**
+     * The Food / Drink switch on a logged item — for when the AI or a database name got it wrong.
+     * A drink counts toward the day's water, so one with no water recorded gets an estimate from its
+     * macros; turning it back into a food keeps its water (it still counts, as water from food).
+     * Fasting adherence reads the flag at query time, so the day's fast is re-judged automatically.
+     */
+    suspend fun setItemDrink(itemId: Long, drink: Boolean) {
+        val item = mealLogDao.getItemById(itemId) ?: return
+        if (item.isDrink == drink) return
+        val water = if (drink && item.waterMl <= 0f && item.grams > 0f) {
+            val per100 = 100f / item.grams
+            com.fitpal.app.domain.Drinks.estimateWaterPer100(item.carbs * per100, item.protein * per100, item.fat * per100) * item.grams / 100f
+        } else item.waterMl
+        mealLogDao.updateItemDrink(itemId, drink, water)
     }
 
     /** Persist the meal-detail +/− "Amount" stepper so it survives reopening the entry. */

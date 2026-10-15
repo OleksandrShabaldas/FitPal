@@ -2,6 +2,7 @@ package com.fitpal.app.ui.screen.settings
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Coffee
 import androidx.compose.material.icons.filled.Dashboard
@@ -42,30 +43,31 @@ data class SettingsGroup(val title: String, val categories: List<SettingsCategor
 const val SETTINGS_WIDGETS = "widgets"
 const val SETTINGS_FEEDBACK = "feedback"
 
-private val PROFILE = SettingsCategoryInfo("profile", "Profile & goals", "You, your goal, calorie and macro targets", Icons.Default.Person)
-private val LOGGING = SettingsCategoryInfo("presets", "Logging & meal times", "Quick-add amounts and when each meal counts", Icons.Default.Restaurant)
-private val FASTING = SettingsCategoryInfo("fasting", "Fasting", "Your eating window, the timer and how strict it is", Icons.Default.HourglassEmpty, AccentTrends)
-private val LIMITS = SettingsCategoryInfo("rules", "Food limits", "Daily caps for dessert, fried food and sugary drinks", Icons.Default.Icecream, DessertColor)
-private val CAFFEINE = SettingsCategoryInfo("caffeine", "Caffeine", "What's still in your body and when it wears off", Icons.Default.Coffee, CaffeineColor)
-private val REMINDERS = SettingsCategoryInfo("reminders", "Reminders", "Meal and weigh-in nudges, and your AI overviews", Icons.Default.Notifications)
-private val ACTIVITY = SettingsCategoryInfo("activity", "Activity & devices", "Steps, Samsung Health, your watch and Calistapp", Icons.Default.FitnessCenter, AccentActivity)
-private val AI = SettingsCategoryInfo("ai", "AI models", "Your Gemini key, online models and the offline model", Icons.Default.AutoAwesome)
-private val SCREENS = SettingsCategoryInfo("personalize", "Home & screens", "Reorder and hide cards, compact empty meals", Icons.Default.Dashboard, CreamMuted)
-private val WIDGETS = SettingsCategoryInfo(SETTINGS_WIDGETS, "Home-screen widgets", "Calories, water, fasting and more at a glance", Icons.Default.Widgets, CreamMuted)
-private val DATA = SettingsCategoryInfo("data", "Data & backup", "Export, import or clear your data", Icons.Default.Backup, CreamMuted)
-private val ABOUT = SettingsCategoryInfo("about", "Updates & about", "App updates, version, and the intro again", Icons.Default.Info, CreamMuted)
+private val PROFILE get() = SettingsCategoryInfo("profile", "Profile & goals", "You, your goal, calorie and macro targets", Icons.Default.Person)
+private val LOGGING get() = SettingsCategoryInfo("presets", "Logging & meal times", "Quick-add amounts and when each meal counts", Icons.Default.Restaurant)
+private val FASTING get() = SettingsCategoryInfo("fasting", "Fasting", "Your eating window, the timer and how strict it is", Icons.Default.HourglassEmpty, AccentTrends)
+private val LIMITS get() = SettingsCategoryInfo("rules", "Food limits", "Daily caps for dessert, fried food and sugary drinks", Icons.Default.Icecream, DessertColor)
+private val CAFFEINE get() = SettingsCategoryInfo("caffeine", "Caffeine", "What's still in your body and when it wears off", Icons.Default.Coffee, CaffeineColor)
+private val REMINDERS get() = SettingsCategoryInfo("reminders", "Reminders", "Meal and weigh-in nudges, and your AI overviews", Icons.Default.Notifications)
+private val ACTIVITY get() = SettingsCategoryInfo("activity", "Activity & devices", "Steps, Samsung Health, your watch and Calistapp", Icons.Default.FitnessCenter, AccentActivity)
+private val AI get() = SettingsCategoryInfo("ai", "AI models", "Your Gemini key, online models and the offline model", Icons.Default.AutoAwesome)
+private val APPEARANCE get() = SettingsCategoryInfo("appearance", "Appearance", "Looks, colours, light or dark, and the app icon", Icons.Default.Palette)
+private val SCREENS get() = SettingsCategoryInfo("personalize", "Home & screens", "Arrange and resize cards, the bottom bar, presets", Icons.Default.Dashboard, CreamMuted)
+private val WIDGETS get() = SettingsCategoryInfo(SETTINGS_WIDGETS, "Home-screen widgets", "Calories, water, fasting and more at a glance", Icons.Default.Widgets, CreamMuted)
+private val DATA get() = SettingsCategoryInfo("data", "Data & backup", "Export, import or clear your data", Icons.Default.Backup, CreamMuted)
+private val ABOUT get() = SettingsCategoryInfo("about", "Updates & about", "App updates, version, and the intro again", Icons.Default.Info, CreamMuted)
 
-/** The hub, top to bottom. */
-val SETTINGS_GROUPS = listOf(
+/** The hub, top to bottom. A getter, so the rows' tints follow the current look. */
+val SETTINGS_GROUPS get() = listOf(
     SettingsGroup("You", listOf(PROFILE)),
     SettingsGroup("Tracking", listOf(LOGGING, FASTING, LIMITS, CAFFEINE)),
     SettingsGroup("Notifications", listOf(REMINDERS)),
     SettingsGroup("Connections & AI", listOf(ACTIVITY, AI)),
-    SettingsGroup("App", listOf(SCREENS, WIDGETS, DATA, ABOUT))
+    SettingsGroup("App", listOf(APPEARANCE, SCREENS, WIDGETS, DATA, ABOUT))
 )
 
 /** The real settings categories (the widget gallery row on the hub is its own screen). */
-val SETTINGS_CATEGORIES: List<SettingsCategoryInfo> =
+val SETTINGS_CATEGORIES: List<SettingsCategoryInfo> get() =
     SETTINGS_GROUPS.flatMap { it.categories }.filter { it.id != SETTINGS_WIDGETS }
 
 fun settingsCategoryTitle(id: String): String =
@@ -100,7 +102,7 @@ val SETTINGS_SEARCH_INDEX = listOf(
     SettingsSearchEntry("Quick-add amounts", "presets", "presets", "meal presets drink presets portion serving grams ml quick add"),
     SettingsSearchEntry("Meal times", "presets", "meal_times", "breakfast lunch dinner snack time window"),
     // Fasting
-    SettingsSearchEntry("Intermittent fasting", "fasting", "fasting", "fast eating window 16:8 18:6 omad timer ring bar intensity intense strict warn notify notification"),
+    SettingsSearchEntry("Intermittent fasting", "fasting", "fasting", "fast eating window 16:8 18:6 omad timer ring bar intensity intense strict warn notify notification drinks drink coffee black coffee tea water diet soda zero calorie protein shake break"),
     // Food limits
     SettingsSearchEntry("Food limits", "rules", "rules", "dessert sweets fried fast food sugary drinks soda cola daily limit cap rules warn"),
     // Caffeine
@@ -119,8 +121,14 @@ val SETTINGS_SEARCH_INDEX = listOf(
     // AI
     SettingsSearchEntry("Online AI", "ai", "online_ai", "gemini api key model fallback test connection quota quick check models flash lite"),
     SettingsSearchEntry("On-device AI model", "ai", "ondevice", "offline gemma download model european foods open food facts food database import"),
+    // Appearance
+    SettingsSearchEntry("Look", "appearance", "look", "theme style glow liquid glass paper material you dark light mode night colours colors palette ocean forest berry aurora graphite ember wallpaper dynamic"),
+    SettingsSearchEntry("App icon", "appearance", "app_icon", "icon launcher apple carrot sprout ring logo home screen icon change"),
+    SettingsSearchEntry("Fine-tune the look", "appearance", "look_tuning", "glow grain texture opacity transparency corners rounding compact spacing density reduce motion animation"),
     // Home & screens
-    SettingsSearchEntry("Customize screens", "personalize", "customize", "reorder cards show hide home analytics layout"),
+    SettingsSearchEntry("Customize screens", "personalize", "customize", "reorder cards show hide home analytics add food layout size small medium large style widgets arrange"),
+    SettingsSearchEntry("Bottom bar", "personalize", "nav_bar", "tabs navigation nav bar tab bar labels plus button camera describe docked floating trail"),
+    SettingsSearchEntry("Layout presets", "personalize", "layout_presets", "preset minimal quick logger data nerd coach original layout reset"),
     SettingsSearchEntry("Compact empty meals", "personalize", "home_display", "home empty meals slim"),
     SettingsSearchEntry("Home-screen widgets", SETTINGS_WIDGETS, null, "widget launcher home screen glance"),
     // Data & backup
