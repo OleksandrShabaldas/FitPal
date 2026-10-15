@@ -2,9 +2,12 @@ package com.fitpal.app.ui.screen.settings
 
 import android.widget.Toast
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -15,6 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
@@ -28,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -35,7 +40,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toBitmap
-import com.fitpal.app.ui.component.SegmentedPills
 import com.fitpal.app.ui.theme.AppIcon
 import com.fitpal.app.ui.theme.AppIconCatalog
 import com.fitpal.app.ui.theme.AppIconSwitcher
@@ -48,7 +52,7 @@ import com.fitpal.app.ui.theme.accentGlass
 import com.fitpal.app.ui.theme.glass
 
 /**
- * Settings → Appearance → App icon: a motif (apple, ring, carrot, sprout — or the fun ones), then a
+ * Settings → Appearance → App icon: a motif (apple, ring, carrot, sprout, leaves — or the fun ones), then a
  * colourway made to match each look. Offers the icon that matches the current look, and warns
  * before switching that the launcher may need the shortcut re-added.
  */
@@ -57,7 +61,7 @@ import com.fitpal.app.ui.theme.glass
 internal fun AppIconSection() {
     val context = LocalContext.current
     var current by remember { mutableStateOf(AppIconSwitcher.current(context)) }
-    val groups = listOf("apple" to "Apple", "ring" to "Ring", "carrot" to "Carrot", "sprout" to "Sprout", "fun" to "Fun")
+    val groups = listOf("apple" to "Apple", "ring" to "Ring", "carrot" to "Carrot", "sprout" to "Sprout", "leaves" to "Leaves", "fun" to "Fun")
     var group by remember { mutableStateOf(current.group) }
     var pending by remember { mutableStateOf<AppIcon?>(null) }
     val look = LookState.look
@@ -87,12 +91,23 @@ internal fun AppIconSection() {
             }
         }
         Spacer(Modifier.height(12.dp))
-        SegmentedPills(
-            labels = groups.map { it.second },
-            selectedIndex = groups.indexOfFirst { it.first == group }.coerceAtLeast(0),
-            accent = GoldLight,
-            onSelect = { group = groups[it].first }
-        )
+        // Six motifs don't fit equal-width segments on a phone, so the pills scroll sideways.
+        Row(
+            Modifier.fillMaxWidth().glass(RoundedCornerShape(50)).horizontalScroll(rememberScrollState()).padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            groups.forEach { (id, label) ->
+                val selected = id == group
+                Box(
+                    Modifier.clip(RoundedCornerShape(50))
+                        .background(if (selected) GoldLight.copy(alpha = 0.18f) else Color.Transparent)
+                        .clickable { group = id }
+                        .padding(horizontal = 14.dp, vertical = 9.dp)
+                ) {
+                    Text(label, style = MaterialTheme.typography.labelLarge, color = if (selected) GoldLight else CreamMuted)
+                }
+            }
+        }
         Spacer(Modifier.height(12.dp))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             AppIconCatalog.all.filter { it.group == group }.forEach { icon ->

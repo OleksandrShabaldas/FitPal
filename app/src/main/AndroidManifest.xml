@@ -735,6 +735,174 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity-alias>
+        <!-- leaves_glow_ember -->
+        <activity-alias
+            android:name=".icon.LeavesGlowEmber"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_leaves_glow_ember"
+            android:roundIcon="@mipmap/ic_app_leaves_glow_ember"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- leaves_glow_ocean -->
+        <activity-alias
+            android:name=".icon.LeavesGlowOcean"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_leaves_glow_ocean"
+            android:roundIcon="@mipmap/ic_app_leaves_glow_ocean"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- leaves_glow_forest -->
+        <activity-alias
+            android:name=".icon.LeavesGlowForest"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_leaves_glow_forest"
+            android:roundIcon="@mipmap/ic_app_leaves_glow_forest"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- leaves_glow_berry -->
+        <activity-alias
+            android:name=".icon.LeavesGlowBerry"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_leaves_glow_berry"
+            android:roundIcon="@mipmap/ic_app_leaves_glow_berry"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- leaves_glow_aurora -->
+        <activity-alias
+            android:name=".icon.LeavesGlowAurora"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_leaves_glow_aurora"
+            android:roundIcon="@mipmap/ic_app_leaves_glow_aurora"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- leaves_glow_graphite -->
+        <activity-alias
+            android:name=".icon.LeavesGlowGraphite"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_leaves_glow_graphite"
+            android:roundIcon="@mipmap/ic_app_leaves_glow_graphite"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- leaves_liquid_dark -->
+        <activity-alias
+            android:name=".icon.LeavesLiquidDark"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_leaves_liquid_dark"
+            android:roundIcon="@mipmap/ic_app_leaves_liquid_dark"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- leaves_liquid_light -->
+        <activity-alias
+            android:name=".icon.LeavesLiquidLight"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_leaves_liquid_light"
+            android:roundIcon="@mipmap/ic_app_leaves_liquid_light"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- leaves_paper_light -->
+        <activity-alias
+            android:name=".icon.LeavesPaperLight"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_leaves_paper_light"
+            android:roundIcon="@mipmap/ic_app_leaves_paper_light"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- leaves_paper_dark -->
+        <activity-alias
+            android:name=".icon.LeavesPaperDark"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_leaves_paper_dark"
+            android:roundIcon="@mipmap/ic_app_leaves_paper_dark"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- leaves_material_light -->
+        <activity-alias
+            android:name=".icon.LeavesMaterialLight"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_leaves_material_light"
+            android:roundIcon="@mipmap/ic_app_leaves_material_light"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <!-- leaves_material_dark -->
+        <activity-alias
+            android:name=".icon.LeavesMaterialDark"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_app_leaves_material_dark"
+            android:roundIcon="@mipmap/ic_app_leaves_material_dark"
+            android:label="@string/app_name"
+            android:targetActivity=".FitPalActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
         <!-- fun_pixel_apple -->
         <activity-alias
             android:name=".icon.FunPixelApple"
