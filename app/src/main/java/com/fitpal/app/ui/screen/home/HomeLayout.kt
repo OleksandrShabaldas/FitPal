@@ -91,7 +91,10 @@ internal fun SmallTile(
         Spacer(Modifier.height(10.dp))
         // Hero numbers are Inter, tabular (the design system's rule) — not the serif headline face.
         Text(value, style = MaterialTheme.typography.titleLarge.copy(fontSize = androidx.compose.ui.unit.TextUnit(24f, androidx.compose.ui.unit.TextUnitType.Sp)), fontWeight = FontWeight.Bold, color = Cream, maxLines = 1)
-        Text(sub, style = MaterialTheme.typography.labelSmall, color = CreamFaint, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        // One line, always: text never changes a card's size, so tiles in a row stay level.
+        Text(sub, style = MaterialTheme.typography.labelSmall, color = CreamFaint, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        // The action sits in a slot at the bottom, so a tile with a button lines up with one without.
+        Spacer(Modifier.weight(1f))
         if (action != null) {
             Spacer(Modifier.height(10.dp))
             action()

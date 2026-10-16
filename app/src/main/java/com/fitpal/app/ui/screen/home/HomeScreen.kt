@@ -44,7 +44,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -141,8 +143,9 @@ import com.fitpal.app.ui.component.minuteOfDayNow
 import com.fitpal.app.ui.component.MacroRingsRow
 import com.fitpal.app.ui.component.MealTypeSelector
 import com.fitpal.app.ui.component.MicronutrientBars
-import com.fitpal.app.ui.theme.AccentGarden
+import com.fitpal.app.ui.theme.AccentActivity
 import com.fitpal.app.ui.theme.AccentTrends
+import com.fitpal.app.ui.theme.FastingColor
 import com.fitpal.app.ui.theme.CalorieColor
 import com.fitpal.app.ui.theme.Cream
 import com.fitpal.app.ui.theme.CreamFaint
@@ -329,7 +332,7 @@ fun HomeScreen(
             }
             "water" -> if (small) SmallTile(
                 Icons.Default.WaterDrop, "Water", "${water.toInt()} ml",
-                if (waterGoal > 0) "of $waterGoal ml" else "drinks + food", AccentTrends,
+                if (waterGoal > 0) "of $waterGoal ml" else "drinks and food", AccentTrends,
                 { onOpenWater(selectedDate.toString()) }, m,
                 action = waterPresets.firstOrNull()?.let { ml ->
                     {
@@ -348,7 +351,7 @@ fun HomeScreen(
                 val log = { showStepDialog = true; viewModel.loadStepSources() }
                 if (small) SmallTile(
                     Icons.AutoMirrored.Filled.DirectionsWalk, "Steps", "%,d".format(dailySteps.coerceAtLeast(0)),
-                    if (stepCalories > 0) "${stepCalories.toInt()} kcal burned" else "Tap to log steps", AccentGarden, log, m
+                    if (stepCalories > 0) "+${stepCalories.toInt()} kcal" else "No steps yet", AccentActivity, log, m
                 ) else Box(m) { StepsCard(totalSteps = dailySteps, caloriesBurned = stepCalories, onLogSteps = log) }
             }
             "exercise" -> {
@@ -356,8 +359,8 @@ fun HomeScreen(
                 if (small) SmallTile(
                     Icons.Default.FitnessCenter, "Exercise",
                     if (exerciseCalories > 0) "${exerciseCalories.toInt()} kcal" else "—",
-                    if (exerciseEntries.isEmpty()) "Tap to log a workout" else "${exerciseEntries.size} logged · tap to add",
-                    AccentGarden, add, m
+                    if (exerciseEntries.isEmpty()) "No workouts yet" else "${exerciseEntries.size} logged",
+                    AccentActivity, add, m
                 ) else Box(m) {
                     ExerciseCard(
                         totalBurned = exerciseCalories, entries = exerciseEntries, onAdd = add,
@@ -368,7 +371,7 @@ fun HomeScreen(
             "weight" -> if (small) SmallTile(
                 Icons.Default.MonitorWeight, "Weight",
                 latestWeight?.weightKg?.let { "${"%.1f".format(it)} kg" } ?: "— kg",
-                "Tap to log", GoldLight, onOpenWeighIn, m
+                if (latestWeight != null) "Latest weigh-in" else "No weigh-ins yet", GoldLight, onOpenWeighIn, m
             ) else Box(m) { WeightCard(latestWeight = latestWeight?.weightKg, onLog = onOpenWeighIn) }
             "macros" -> Box(m) {
                 MacrosCard(
@@ -385,7 +388,7 @@ fun HomeScreen(
                 SmallTile(
                     Icons.Default.LocalCafe, "Caffeine",
                     now?.let { "${it.roundToInt()} mg" } ?: "Off",
-                    if (now != null) "in your body now · tap for sleep" else "Turn on in Settings → Caffeine",
+                    if (now != null) "in you now" else "Turn on in Settings",
                     CaffeineColor, { if (caffeineView != null) showCaffeine = true }, m
                 )
             }
@@ -507,8 +510,9 @@ fun HomeScreen(
                         } else {
                             item(key = row.joinToString("+") { it.key }) {
                                 when {
-                                    row.size == 2 -> Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                        row.forEach { homeCard(it, Modifier.weight(1f)) }
+                                    // Two cards in a row share a height, whatever their text or buttons.
+                                    row.size == 2 -> Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        row.forEach { homeCard(it, Modifier.weight(1f).fillMaxHeight()) }
                                     }
                                     first.size == com.fitpal.app.domain.model.CardSize.S -> Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                         homeCard(first, Modifier.weight(1f))
@@ -1019,8 +1023,8 @@ private fun MacrosCard(
 private fun FastingCard(schedule: com.fitpal.app.domain.model.FastingSchedule, small: Boolean, modifier: Modifier) {
     if (!schedule.enabled) {
         SmallTile(
-            Icons.Default.HourglassEmpty, "Fasting", "Off", "Set your eating window in Settings → Fasting",
-            AccentTrends, onClick = {}, modifier = modifier
+            Icons.Default.HourglassEmpty, "Fasting", "Off", "Turn on in Settings",
+            FastingColor, onClick = {}, modifier = modifier
         )
         return
     }
@@ -1109,7 +1113,7 @@ private fun MealCategorySection(
         }
         if (section.items.isEmpty()) {
             Text(
-                text = "Nothing yet — tap + to add",
+                text = "Nothing yet",
                 style = MaterialTheme.typography.bodySmall,
                 color = CreamFaint,
                 modifier = Modifier.padding(start = 6.dp, bottom = 2.dp)
@@ -1298,7 +1302,7 @@ private fun AiDailyReviewCard(selectedDate: LocalDate, onOpen: () -> Unit) {
                 color = Cream
             )
             Text(
-                text = "Tap for your personal review of this day",
+                text = "Your personal review of the day",
                 style = MaterialTheme.typography.bodySmall,
                 color = CreamMuted
             )
@@ -1321,7 +1325,7 @@ private fun WaterCard(totalMl: Float, goalMl: Int, presets: List<Int>, onAddWate
         ) {
             Column {
                 Text("Water", style = MaterialTheme.typography.titleMedium, color = Cream)
-                Text("Drinks + water from food · tap for details", style = MaterialTheme.typography.bodySmall, color = CreamMuted)
+                Text("Drinks and water from food", style = MaterialTheme.typography.bodySmall, color = CreamMuted)
             }
             Column(horizontalAlignment = Alignment.End) {
                 Text("${totalMl.toInt()} ml", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = AccentTrends)
@@ -1383,19 +1387,19 @@ private fun HomeSearchBar(onClick: () -> Unit) {
 @Composable
 private fun StepsCard(totalSteps: Int, caloriesBurned: Float, onLogSteps: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().accentGlass(AccentGarden).clickable(onClick = onLogSteps).padding(16.dp),
+        modifier = Modifier.fillMaxWidth().accentGlass(AccentActivity).clickable(onClick = onLogSteps).padding(16.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column {
             Text("Steps", style = MaterialTheme.typography.titleMedium, color = Cream)
             Text(
-                text = if (caloriesBurned > 0) "${caloriesBurned.toInt()} kcal burned" else "Tap to log steps",
+                text = if (caloriesBurned > 0) "+${caloriesBurned.toInt()} kcal in your budget" else "No steps yet",
                 style = MaterialTheme.typography.bodySmall,
                 color = CreamMuted
             )
         }
-        Text("%,d".format(totalSteps.coerceAtLeast(0)), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = AccentGarden)
+        Text("%,d".format(totalSteps.coerceAtLeast(0)), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = AccentActivity)
     }
 }
 
@@ -1409,7 +1413,7 @@ private fun WeightCard(latestWeight: Float?, onLog: () -> Unit) {
         Column {
             Text("Weight", style = MaterialTheme.typography.titleMedium, color = Cream)
             Text(
-                text = if (latestWeight != null) "Tap to log today's weight" else "Tap to log your weight",
+                text = if (latestWeight != null) "Log today's weight" else "Log your first weigh-in",
                 style = MaterialTheme.typography.bodySmall,
                 color = CreamMuted
             )
@@ -1431,7 +1435,7 @@ private fun ExerciseCard(
     onDelete: (Long) -> Unit,
     onEntryClick: (Long) -> Unit
 ) {
-    Column(modifier = Modifier.fillMaxWidth().accentGlass(AccentGarden).padding(16.dp)) {
+    Column(modifier = Modifier.fillMaxWidth().accentGlass(AccentActivity).padding(16.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,

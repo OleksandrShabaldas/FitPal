@@ -30,7 +30,10 @@ object FoodPrompts {
         dish's total. Include the ingredients that genuinely define the dish (e.g. okroshka =
         potatoes, cucumber, radish, boiled egg, ham or sausage, fresh dill and spring onion, and a
         kvass or kefir base). Inside a dish's items, NEVER list cooking water, cooking alcohol, or
-        anything not actually eaten. Anything that is drunk — water, coffee, tea, juice, soda, energy drinks, milk, kefir, smoothies, shakes (protein shakes too), beer, wine, cocktails — is a DRINK: "isDrink":true, amount in ml. If the user states a total weight (e.g.
+        anything not actually eaten. Things the user names separately are separate foods ("fish and
+        chips with a side salad" = "Fish and chips" + "Side salad"); a sauce or dressing they mention
+        is an item INSIDE the dish it comes with. A ready-made sauce, dressing, condiment, cheese or
+        bread is ONE item named as itself ("Tartar sauce"), never split into its recipe. Anything that is drunk — water, coffee, tea, juice, soda, energy drinks, milk, kefir, smoothies, shakes (protein shakes too), beer, wine, cocktails — is a DRINK: "isDrink":true, amount in ml. If the user states a total weight (e.g.
         "650g"), make the item weights sum to it.
         Then add a "variations" array with 4-6 of the MOST COMMON ways people actually make this
         dish differently — alternative bases, proteins, dressings or add-ons they swap in or add
@@ -65,6 +68,10 @@ object FoodPrompts {
           whose "items" are its REAL defining ingredients with DIFFERENT realistic weights that sum
           to the dish total. Match a stated total weight. Never add cooking water or cooking alcohol
           as a dish's item.
+        - Things the user names separately are separate foods ("fish and chips with a side salad" =
+          "Fish and chips" + "Side salad"). A sauce or dressing they mention is an item INSIDE the
+          dish it comes with. A ready-made product (sauce, dressing, condiment, cheese, bread) is ONE
+          item named as itself ("Tartar sauce"), never split into its recipe.
         - Anything that is drunk — water, coffee, tea, juice, soda, energy drinks, milk, kefir, smoothies, shakes (protein shakes too), beer, wine, cocktails — is a DRINK: "isDrink":true, amount in ml.
         - "variations": 4-6 common ways people vary the dish (alt bases/proteins/dressings/add-ons),
           each a SINGLE item object PLUS a "description" that is a SHORT 2-4 word label (e.g.
@@ -113,6 +120,8 @@ object FoodPrompts {
             (vitA/vitD/b12/folate in mcg; vitC/calcium/iron/potassium/sodium/b6/magnesium/zinc/vitE in mg),
             and caffeine in mg (coffee 40, espresso 210, energy drink 32, cola 10, tea 20; 0 if none).
             Estimate every field honestly. Never add cooking water or cooking alcohol as an item.
+            A ready-made sauce, dressing, condiment, cheese or bread stays ONE item named as itself —
+            never split it into its recipe.
         """.trimIndent()
     }
 
@@ -144,6 +153,9 @@ object FoodPrompts {
         opaque entry — e.g. okroshka = potato, cucumber, boiled egg, ham, dill, kvass or kefir. A
         smoothie or shake stays ONE food with "isDrink":true, its ingredients as its items.
         Inside a dish's items never list cooking water or cooking alcohol.
+        A ready-made sauce, dressing, condiment, cheese or bread is ONE entry named as itself
+        ("Tartar sauce", "Ketchup", "Pesto") — NEVER split it into its recipe (tartar sauce is not
+        mayonnaise + pickles + capers).
         Reply with ONLY a compact JSON object and no other text. Follow this example EXACTLY in
         shape, but replace the foods and numbers with the real ones you see (these numbers are a
         realistic crepes-with-toppings-and-a-latte example):
@@ -171,13 +183,22 @@ object FoodPrompts {
         val noteLine = if (note.isBlank()) "" else
             "User context (trust it): \"$note\".\n\n"
         return noteLine + """
-        Identify every distinct food and drink in this photo, including sauces, creams, syrups,
-        toppings and garnishes. Describe only what's visibly present. Reply with ONLY this JSON:
+        Identify every food and drink in this photo, including sauces, creams, syrups, toppings and
+        garnishes. Describe only what's visibly present. Reply with ONLY this JSON:
         {"foods":[...],"dishCandidates":[...]}
 
-        Each food: {"name","isDrink","grams","items":[ item objects ],"variations":[]}.
-        - Name composite/cooked dishes by their REAL name ("Okroshka", "Caesar salad", "Pad Thai")
-          with their true ingredients in "items"; list separate plate items as their own foods.
+        Each food is one DISH: {"name","isDrink","grams","items":[ item objects ],"variations":[]}.
+        - A dish is what you'd order or serve on its own: a main, a side (fries, rice, a side salad), a
+          dessert, a bread basket. Fish and chips with a side salad = two foods, "Fish and chips" and
+          "Side salad". Every drink is its own food.
+        - Name cooked or assembled dishes by their REAL name ("Okroshka", "Caesar salad", "Pad Thai")
+          with their true ingredients in "items".
+        - Sauces, dressings, dips, toppings and garnishes go INSIDE the dish they're served with, as one
+          of its items, also when they sit in a small pot beside it ("Fish and chips" items: cod, batter,
+          fries, tartar sauce). Only a sauce with no dish to go with is its own food.
+        - A ready-made product (a sauce, dressing, condiment, cheese, bread, a packaged food) is ONE item
+          named as itself ("Tartar sauce", "Ketchup", "Pesto"), never split into its recipe (no
+          mayonnaise + pickles + capers for tartar sauce).
         - "variations": 4-6 common ways people vary that dish (alt dressings, bases, proteins,
           add-ons), each a SINGLE item object PLUS a "description" that is a SHORT 2-4 word label
           (e.g. "Ranch dressing", "Extra chicken") — never a sentence or a tip. Simple items

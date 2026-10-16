@@ -114,6 +114,8 @@ data class FitPalColors(
     val calorie: Color,
     val dessert: Color, val fried: Color, val sugaryDrink: Color, val caffeine: Color,
     val accentActivity: Color, val accentTrends: Color, val accentGarden: Color,
+    /** Fasting's own colour (night violet) — water keeps the blue, so the two never read as one thing. */
+    val fasting: Color,
     /** Faint fill for empty bar tracks, dividers and chips (white film on dark, ink film on light). */
     val track: Color,
     /** The backdrop's darkening film (0 on light looks). */
@@ -202,7 +204,8 @@ object Palettes {
         protein = Color(0xFFF0997B), fat = Color(0xFFF2C14E), carb = Color(0xFFA6CF6E), fiber = Color(0xFFB89E8A),
         macroOver = Color(0xFFE0584A),
         dessert = Color(0xFFE9A6C3), fried = Color(0xFFE59A5B), sugaryDrink = Color(0xFF7FC4E8), caffeine = Color(0xFFC9A27E),
-        accentActivity = Color(0xFF5FD0C4), accentTrends = Color(0xFF6FA8FF), accentGarden = Color(0xFF8CC152)
+        accentActivity = Color(0xFF5FD0C4), accentTrends = Color(0xFF6FA8FF), accentGarden = Color(0xFF8CC152),
+        fasting = Color(0xFFA592FF)
     )
 
     // Deeper versions of the same hues so they read on cream/white (the widgets' Paper tones).
@@ -213,7 +216,8 @@ object Palettes {
         protein = Color(0xFFC45E3E), fat = Color(0xFFB08312), carb = Color(0xFF5A8C28), fiber = Color(0xFF866B56),
         macroOver = Color(0xFFC03A2D),
         dessert = Color(0xFFB8527F), fried = Color(0xFFB8622A), sugaryDrink = Color(0xFF2F86B8), caffeine = Color(0xFF87603C),
-        accentActivity = Color(0xFF1E8C80), accentTrends = Color(0xFF3A70D6), accentGarden = Color(0xFF4C8A2C)
+        accentActivity = Color(0xFF1E8C80), accentTrends = Color(0xFF3A70D6), accentGarden = Color(0xFF4C8A2C),
+        fasting = Color(0xFF6A55D0)
     )
 
     private data class Semantic(
@@ -221,7 +225,8 @@ object Palettes {
         val loggedBest: Color, val loggedGood: Color, val loggedMid: Color, val loggedLow: Color, val loggedWorst: Color,
         val protein: Color, val fat: Color, val carb: Color, val fiber: Color, val macroOver: Color,
         val dessert: Color, val fried: Color, val sugaryDrink: Color, val caffeine: Color,
-        val accentActivity: Color, val accentTrends: Color, val accentGarden: Color
+        val accentActivity: Color, val accentTrends: Color, val accentGarden: Color,
+        val fasting: Color
     )
 
     private fun build(
@@ -248,6 +253,7 @@ object Palettes {
         calorie = goldLight,
         dessert = s.dessert, fried = s.fried, sugaryDrink = s.sugaryDrink, caffeine = s.caffeine,
         accentActivity = s.accentActivity, accentTrends = s.accentTrends, accentGarden = s.accentGarden,
+        fasting = s.fasting,
         track = if (isLight) text.copy(alpha = 0.08f) else Color.White.copy(alpha = 0.10f),
         backdropShade = backdropShade,
         backdrops = backdrops

@@ -81,6 +81,8 @@ val CaffeineColor: Color get() = c.caffeine
 val AccentToday: Color get() = c.goldLight
 val AccentActivity: Color get() = c.accentActivity
 val AccentTrends: Color get() = c.accentTrends
+/** Fasting's identity colour (timer, ring, streak) — its own hue, not water's blue. */
+val FastingColor: Color get() = c.fasting
 val AccentGarden: Color get() = c.accentGarden
 val AccentRecords: Color get() = c.goldLight
 

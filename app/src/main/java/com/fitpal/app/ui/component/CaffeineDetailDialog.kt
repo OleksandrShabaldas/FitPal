@@ -58,6 +58,8 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -217,10 +219,17 @@ private fun CaffeineCurve(view: CaffeineView, nowMillis: Long, whatIf: CaffeineD
     if (points.isEmpty()) return
     // The calculator's drink on top of what's really there — a second, dashed line.
     val whatIfPoints = whatIf?.let { Caffeine.curve(view.doses + it, start, end, 96, view.settings.halfLifeHours) }
-    val peak = (maxOf(points.maxOrNull() ?: 0f, whatIfPoints?.maxOrNull() ?: 0f))
-        .coerceAtLeast(CaffeineSettings.SLEEP_FRIENDLY_MG * 2f)
+    // The scale follows the day's real peak (with a little headroom), so a small amount is still a
+    // visible curve. It never drops below 60 mg, which keeps the 50 mg line on the chart.
+    val peak = (maxOf(points.maxOrNull() ?: 0f, whatIfPoints?.maxOrNull() ?: 0f) * 1.15f)
+        .coerceAtLeast(60f)
     val nowFrac = ((nowMillis - start).toFloat() / (end - start)).coerceIn(0f, 1f)
     val sleepFrac = CaffeineSettings.SLEEP_FRIENDLY_MG / peak
+    val textMeasurer = rememberTextMeasurer()
+    val axisStyle = MaterialTheme.typography.labelSmall.copy(color = CreamFaint)
+    val sleepStyle = MaterialTheme.typography.labelSmall.copy(color = ScoreFair)
+    // A round number near the top for the one gridline that gives the chart its scale.
+    val topMg = ((peak * 0.92f / 10f).toInt() * 10).coerceAtLeast(60)
 
     Column {
         Canvas(modifier = Modifier.fillMaxWidth().height(130.dp)) {
@@ -229,7 +238,12 @@ private fun CaffeineCurve(view: CaffeineView, nowMillis: Long, whatIf: CaffeineD
             fun x(i: Int) = w * i / (points.size - 1)
             fun y(v: Float) = h - (v / peak).coerceIn(0f, 1f) * h * 0.92f
 
-            // Sleep-friendly line.
+            // The scale: one faint gridline with its amount.
+            val yTop = y(topMg.toFloat())
+            drawLine(Cream.copy(alpha = 0.08f), Offset(0f, yTop), Offset(w, yTop), strokeWidth = 1.dp.toPx())
+            drawText(textMeasurer, "$topMg mg", topLeft = Offset(0f, yTop + 2.dp.toPx()), style = axisStyle)
+
+            // Sleep-friendly line, labelled on the chart itself.
             val ySleep = h - sleepFrac.coerceIn(0f, 1f) * h * 0.92f
             drawLine(
                 color = ScoreFair.copy(alpha = 0.55f),
@@ -237,6 +251,8 @@ private fun CaffeineCurve(view: CaffeineView, nowMillis: Long, whatIf: CaffeineD
                 strokeWidth = 1.5.dp.toPx(),
                 pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 8f))
             )
+            val sleepLabel = textMeasurer.measure("${CaffeineSettings.SLEEP_FRIENDLY_MG} mg · easy on sleep below", sleepStyle)
+            drawText(sleepLabel, topLeft = Offset(w - sleepLabel.size.width, ySleep - sleepLabel.size.height - 2.dp.toPx()))
 
             val line = Path().apply {
                 moveTo(x(0), y(points[0]))
@@ -282,16 +298,39 @@ private fun CaffeineCurve(view: CaffeineView, nowMillis: Long, whatIf: CaffeineD
             drawCircle(Cream, radius = 3.5.dp.toPx(), center = Offset(nowX, nowY))
         }
         Spacer(Modifier.height(4.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(timeLabel(start), style = MaterialTheme.typography.labelSmall, color = CreamFaint)
-            Text("now", style = MaterialTheme.typography.labelSmall, color = CreamMuted)
-            Text(timeLabel(end), style = MaterialTheme.typography.labelSmall, color = CreamFaint)
+        TimeAxis(startLabel = timeLabel(start), endLabel = timeLabel(end), nowFrac = nowFrac)
+        if (whatIf != null) {
+            Text("Gold dashes: with the drink below.", style = MaterialTheme.typography.labelSmall, color = CreamFaint)
         }
-        Text(
-            "Dashed line: ${CaffeineSettings.SLEEP_FRIENDLY_MG} mg, where it stops getting in the way of sleep for most people." +
-                (if (whatIf != null) " The second dashed line: with the drink below." else ""),
-            style = MaterialTheme.typography.labelSmall, color = CreamFaint
-        )
+    }
+}
+
+/**
+ * The time labels under the curve: start and end at the edges, and "now" directly under the now
+ * marker ([nowFrac] of the width) — pushed aside only as far as it takes not to overlap an edge label.
+ */
+@Composable
+private fun TimeAxis(startLabel: String, endLabel: String, nowFrac: Float) {
+    androidx.compose.ui.layout.Layout(
+        content = {
+            Text(startLabel, style = MaterialTheme.typography.labelSmall, color = CreamFaint)
+            Text("now", style = MaterialTheme.typography.labelSmall, color = Cream)
+            Text(endLabel, style = MaterialTheme.typography.labelSmall, color = CreamFaint)
+        },
+        modifier = Modifier.fillMaxWidth()
+    ) { measurables, constraints ->
+        val loose = constraints.copy(minWidth = 0)
+        val (startP, nowP, endP) = measurables.map { it.measure(loose) }
+        val w = constraints.maxWidth
+        val gap = 4.dp.roundToPx()
+        val nowX = (w * nowFrac - nowP.width / 2f).toInt()
+            .coerceIn(startP.width + gap, (w - endP.width - gap - nowP.width).coerceAtLeast(startP.width + gap))
+        val height = maxOf(startP.height, nowP.height, endP.height)
+        layout(w, height) {
+            startP.place(0, 0)
+            nowP.place(nowX, 0)
+            endP.place(w - endP.width, 0)
+        }
     }
 }
 

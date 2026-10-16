@@ -90,32 +90,35 @@ class AnalyticsViewModel @Inject constructor(
         if (r == AnalyticsRange.WEEK) a.plusWeeks(1) else a.plusDays(30)
 
     /**
-     * The "last N days" window most widgets use (calories, activity, water, …). In WEEK mode it ends
-     * today (or the viewed week's Sunday if paged back) and spans 7 days; in MONTH mode it equals the
-     * 30-day period. Only logged-days, calorie-balance and macro-balance use the calendar [rangeOf].
+     * The days of the viewed period that have happened: the period clipped to today. Every card uses the
+     * same period (one meaning of "week"); charts draw the whole period with the days still to come as
+     * gaps, and averages and changes use only these days.
      */
-    private fun rollingOf(r: AnalyticsRange, a: LocalDate): Pair<LocalDate, LocalDate> {
-        val (_, pEnd) = rangeOf(r, a)
-        val end = if (pEnd.isAfter(today)) today else pEnd
-        return end.minusDays((r.days - 1).toLong()) to end
+    private fun elapsedOf(r: AnalyticsRange, a: LocalDate): Pair<LocalDate, LocalDate> {
+        val (pStart, pEnd) = rangeOf(r, a)
+        return pStart to (if (pEnd.isAfter(today)) today else pEnd)
     }
 
-    /** The union of the calendar period and the rolling window — what we actually fetch per-day data for. */
-    private fun dataOf(r: AnalyticsRange, a: LocalDate): Pair<LocalDate, LocalDate> {
-        val (pS, pE) = rangeOf(r, a)
-        val (rS, rE) = rollingOf(r, a)
-        return minOf(pS, rS) to maxOf(pE, rE)
-    }
+    /** The period just before the viewed one — what "vs last week" compares against. */
+    private fun previousOf(r: AnalyticsRange, a: LocalDate): Pair<LocalDate, LocalDate> = rangeOf(r, prevAnchor(r, a))
+
+    /** The previous period through the viewed one — what we actually fetch per-day data for. */
+    private fun dataOf(r: AnalyticsRange, a: LocalDate): Pair<LocalDate, LocalDate> =
+        previousOf(r, a).first to rangeOf(r, a).second
 
     private val periodBounds: StateFlow<Pair<LocalDate, LocalDate>> =
         combine(_range, _anchor) { r, a -> rangeOf(r, a) }
             .stateIn(viewModelScope, SharingStarted.Eagerly, rangeOf(AnalyticsRange.WEEK, _anchor.value))
 
-    private val rollingBounds: StateFlow<Pair<LocalDate, LocalDate>> =
-        combine(_range, _anchor) { r, a -> rollingOf(r, a) }
-            .stateIn(viewModelScope, SharingStarted.Eagerly, rollingOf(AnalyticsRange.WEEK, _anchor.value))
+    private val elapsedBounds: StateFlow<Pair<LocalDate, LocalDate>> =
+        combine(_range, _anchor) { r, a -> elapsedOf(r, a) }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, elapsedOf(AnalyticsRange.WEEK, _anchor.value))
 
-    /** What per-day queries fetch — the union, so both date sets can be sliced from one result. */
+    private val previousBounds: StateFlow<Pair<LocalDate, LocalDate>> =
+        combine(_range, _anchor) { r, a -> previousOf(r, a) }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, previousOf(AnalyticsRange.WEEK, _anchor.value))
+
+    /** What per-day queries fetch — previous + viewed period, so both can be sliced from one result. */
     private val dataBounds: StateFlow<Pair<LocalDate, LocalDate>> =
         combine(_range, _anchor) { r, a -> dataOf(r, a) }
             .stateIn(viewModelScope, SharingStarted.Eagerly, dataOf(AnalyticsRange.WEEK, _anchor.value))
@@ -124,10 +127,14 @@ class AnalyticsViewModel @Inject constructor(
         .map { it.first }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), periodBounds.value.first)
     val periodEnd: StateFlow<LocalDate> = periodBounds
         .map { it.second }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), periodBounds.value.second)
-    val rollingStart: StateFlow<LocalDate> = rollingBounds
-        .map { it.first }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), rollingBounds.value.first)
-    val rollingEnd: StateFlow<LocalDate> = rollingBounds
-        .map { it.second }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), rollingBounds.value.second)
+    val elapsedStart: StateFlow<LocalDate> = elapsedBounds
+        .map { it.first }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), elapsedBounds.value.first)
+    val elapsedEnd: StateFlow<LocalDate> = elapsedBounds
+        .map { it.second }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), elapsedBounds.value.second)
+    val previousStart: StateFlow<LocalDate> = previousBounds
+        .map { it.first }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), previousBounds.value.first)
+    val previousEnd: StateFlow<LocalDate> = previousBounds
+        .map { it.second }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), previousBounds.value.second)
 
     /** The earliest day with any logged meal — gates how far back paging can go. */
     val earliestLogged: StateFlow<LocalDate?> = mealRepository.getLoggedDatesDesc()
@@ -184,11 +191,11 @@ class AnalyticsViewModel @Inject constructor(
         flow
     }
 
-    // ---- Micronutrient totals (a "last N days" widget → rolling window) ----
+    // ---- Micronutrient totals over the days of the period so far ----
     val microsTotals: StateFlow<DailyMicros?> = run {
         val flow = MutableStateFlow<DailyMicros?>(null)
         viewModelScope.launch {
-            rollingBounds.collectLatest { (start, end) ->
+            elapsedBounds.collectLatest { (start, end) ->
                 mealRepository.getMicrosForRange(start.format(dateFormat), end.format(dateFormat)).collect { flow.value = it }
             }
         }

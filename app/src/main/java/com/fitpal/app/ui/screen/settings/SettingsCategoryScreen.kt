@@ -125,12 +125,14 @@ fun SettingsCategoryScreen(
             when (category) {
                 "profile" -> {
                     SettingsAnchor("profile", focus) { ProfileSection(viewModel) }
+                    SettingsAnchor("your_day", focus) { YourDaySection(viewModel) }
                     SettingsAnchor("calorie_goal", focus) { CalorieGoalSection(viewModel) }
                     SettingsAnchor("macros", focus) { MacroTargetsSection(viewModel) }
                     SettingsAnchor("situation", focus) { PersonalContextSection(viewModel) }
                 }
                 "presets" -> {
                     SettingsAnchor("presets", focus) { PresetsSection(viewModel) }
+                    SettingsAnchor("water", focus) { WaterGoalSection(viewModel) }
                     SettingsAnchor("meal_times", focus) { MealTimesSection(viewModel) }
                 }
                 "fasting" -> {
@@ -1154,6 +1156,67 @@ private fun EatingHoursRow(schedule: com.fitpal.app.domain.model.FastingSchedule
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             suffix = { Text("h") },
             modifier = Modifier.width(120.dp)
+        )
+    }
+}
+
+/** Your day: when it starts and ends. Water's pace is spread between the two. */
+@Composable
+private fun YourDaySection(viewModel: SettingsViewModel) {
+    val wake by viewModel.wakeMinutes.collectAsStateWithLifecycle()
+    val bed by viewModel.bedMinutes.collectAsStateWithLifecycle()
+    Box(modifier = Modifier.fillMaxWidth().glass()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("Your day", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(
+                "When you usually wake up and go to bed. Your water's pace is spread between the two.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(8.dp))
+            TimePickRow("Wake up", wake) { viewModel.setWakeMinutes(it) }
+            TimePickRow("Bedtime", bed) { viewModel.setBedMinutes(it) }
+        }
+    }
+}
+
+/** The daily water goal (automatic from your weight, or your own) and where the quick-add buttons live. */
+@Composable
+private fun WaterGoalSection(viewModel: SettingsViewModel) {
+    val override by viewModel.waterGoalOverride.collectAsStateWithLifecycle()
+    val latest by viewModel.latestWeight.collectAsStateWithLifecycle()
+    val presets by viewModel.waterPresets.collectAsStateWithLifecycle()
+    val auto = com.fitpal.app.data.repository.SettingsRepository.autoWaterGoal(latest?.weightKg ?: 70f)
+    val goal = if (override > 0) override else auto
+    var editing by remember { mutableStateOf(false) }
+    Box(modifier = Modifier.fillMaxWidth().glass()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("Water", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Row(
+                modifier = Modifier.fillMaxWidth().clickable { editing = true }.padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Daily goal", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    "%,d ml".format(goal) + if (override > 0) "" else " · automatic",
+                    style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary
+                )
+            }
+            Text(
+                "Quick-add buttons: " + presets.joinToString(" · ") { "+$it" } + ". Change them on the Water page with Edit.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+    if (editing) {
+        com.fitpal.app.ui.screen.water.WaterGoalSheet(
+            goalMl = goal,
+            isAutomatic = override <= 0,
+            autoGoalMl = auto,
+            onSave = { viewModel.setWaterGoal(it); editing = false },
+            onDismiss = { editing = false }
         )
     }
 }

@@ -585,10 +585,14 @@ class MealRepository @Inject constructor(
     }
 
     /** Log plain water (a quick-add). Counts fully toward water intake, never shown among meals. */
-    suspend fun logWater(ml: Float, date: String? = null): Long {
+    /**
+     * Log plain water. [timestamp] is when it was drunk (default now) — passed when undoing a removal,
+     * so the glass goes back where it was on the day's timeline. Returns the new meal log's id.
+     */
+    suspend fun logWater(ml: Float, date: String? = null, timestamp: Long? = null): Long {
         val logDate = date ?: todayString()
         // Tag with the "water" sentinel category so it stays out of Breakfast/Lunch/… on Home.
-        val mealLog = MealLogEntity(date = logDate, mealType = MealTypes.WATER)
+        val mealLog = MealLogEntity(date = logDate, mealType = MealTypes.WATER, timestamp = timestamp ?: System.currentTimeMillis())
         val item = MealLogItemEntity(
             mealLogId = 0,
             name = "Water",
@@ -606,6 +610,10 @@ class MealRepository @Inject constructor(
 
     fun getTotalWaterForDate(date: String): Flow<Float> =
         mealLogDao.getTotalWaterForDate(date)
+
+    /** The day's water, item by item with eaten times (newest first) — the Water page's timeline. */
+    fun getWaterTimeline(date: String): Flow<List<com.fitpal.app.data.local.dao.WaterTimelineRow>> =
+        mealLogDao.getWaterTimeline(date)
 
     suspend fun getItemById(itemId: Long): MealLogItemEntity? = mealLogDao.getItemById(itemId)
 

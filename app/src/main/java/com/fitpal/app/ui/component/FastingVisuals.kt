@@ -61,7 +61,7 @@ import androidx.compose.ui.unit.dp
 import com.fitpal.app.domain.model.FastingSchedule
 import com.fitpal.app.domain.model.FastingState
 import com.fitpal.app.domain.model.FastingStyle
-import com.fitpal.app.ui.theme.AccentTrends
+import com.fitpal.app.ui.theme.FastingColor
 import com.fitpal.app.ui.theme.CalorieColor
 import com.fitpal.app.ui.theme.Cream
 import com.fitpal.app.ui.theme.CreamFaint
@@ -103,7 +103,7 @@ fun rememberFastingState(schedule: FastingSchedule): FastingState {
 }
 
 /** Fasting reads in the Trends blue; the eating window in the Today gold. */
-fun fastingAccent(state: FastingState): Color = if (state.isFasting) AccentTrends else GoldLight
+fun fastingAccent(state: FastingState): Color = if (state.isFasting) FastingColor else GoldLight
 
 /** How long into the current fast (minutes) — the fast's full length minus what's left of it. */
 fun fastingElapsedMin(schedule: FastingSchedule, state: FastingState): Int {
@@ -282,7 +282,7 @@ fun FastingBanner(schedule: FastingSchedule, onDismiss: () -> Unit, modifier: Mo
             // through the glass would muddle the reminder.
             .background(OverlaySurface.copy(alpha = 1f), shape)
             .glassOverlay(shape)
-            .border(1.dp, AccentTrends.copy(alpha = 0.35f), shape)
+            .border(1.dp, FastingColor.copy(alpha = 0.35f), shape)
             .pointerInput(Unit) {
                 detectVerticalDragGestures(
                     onDragEnd = { if (drag < -40.dp.toPx()) dismiss() else drag = 0f },
@@ -303,9 +303,9 @@ fun FastingBanner(schedule: FastingSchedule, onDismiss: () -> Unit, modifier: Mo
                 val tl = Offset(sw / 2, sw / 2)
                 val arc = Size(size.width - sw, size.height - sw)
                 drawArc(com.fitpal.app.ui.theme.filmColor(0.10f), -90f, 360f, false, tl, arc, style = Stroke(sw))
-                drawArc(AccentTrends, -90f, 360f * state.progressFraction.coerceIn(0f, 1f), false, tl, arc, style = Stroke(sw, cap = StrokeCap.Round))
+                drawArc(FastingColor, -90f, 360f * state.progressFraction.coerceIn(0f, 1f), false, tl, arc, style = Stroke(sw, cap = StrokeCap.Round))
             }
-            Icon(Icons.Default.HourglassEmpty, contentDescription = null, tint = AccentTrends, modifier = Modifier.size(16.dp))
+            Icon(Icons.Default.HourglassEmpty, contentDescription = null, tint = FastingColor, modifier = Modifier.size(16.dp))
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
@@ -339,7 +339,7 @@ fun FastingStyleThumbnail(style: FastingStyle, modifier: Modifier = Modifier) {
                 val barW = size.width * 0.82f
                 val x0 = (size.width - barW) / 2f
                 drawLine(track, Offset(x0, barY), Offset(x0 + barW, barY), 3.dp.toPx(), StrokeCap.Round)
-                drawLine(AccentTrends, Offset(x0, barY), Offset(x0 + barW * 0.62f, barY), 3.dp.toPx(), StrokeCap.Round)
+                drawLine(FastingColor, Offset(x0, barY), Offset(x0 + barW * 0.62f, barY), 3.dp.toPx(), StrokeCap.Round)
                 val d = size.height * 0.68f
                 val c = Offset(size.width / 2f, barY + 9.dp.toPx() + d / 2f)
                 drawThumbRing(c, d, ringStroke, track)
@@ -349,7 +349,7 @@ fun FastingStyleThumbnail(style: FastingStyle, modifier: Modifier = Modifier) {
                 val c = Offset(size.width / 2f, size.height * 0.5f)
                 drawThumbRing(c, d, ringStroke, track)
                 drawFastingArc(
-                    c, d / 2f + 7.dp.toPx(), 0.62f, AccentTrends, knobPulse = 1f,
+                    c, d / 2f + 7.dp.toPx(), 0.62f, FastingColor, knobPulse = 1f,
                     stroke = 2.5.dp.toPx(), knob = 3.5.dp.toPx(), halo = 6.dp.toPx()
                 )
             }

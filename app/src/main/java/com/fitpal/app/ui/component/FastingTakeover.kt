@@ -33,7 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.fitpal.app.domain.model.FastingSchedule
 import com.fitpal.app.ui.screen.onboarding.GlowRing
-import com.fitpal.app.ui.theme.AccentTrends
+import com.fitpal.app.ui.theme.FastingColor
 import com.fitpal.app.ui.theme.Cream
 import com.fitpal.app.ui.theme.CreamFaint
 import com.fitpal.app.ui.theme.CreamMuted
@@ -41,7 +41,7 @@ import com.fitpal.app.ui.theme.InterFamily
 import com.fitpal.app.ui.theme.glassSoft
 
 /** A lighter step of the fasting blue, for the ring's sweep. */
-private val FastingBlueLight = Color(0xFF9CC2FF)
+private val FastingLight = Color(0xFFC8BEFF)
 
 /**
  * INTENSE fasting's stop on Add food: a full-screen "you're fasting" page laid over the logging
@@ -97,8 +97,8 @@ fun FastingTakeover(
                 GlowRing(
                     target = state.progressFraction,
                     diameter = 220.dp,
-                    colors = listOf(AccentTrends, FastingBlueLight, AccentTrends),
-                    glow = AccentTrends
+                    colors = listOf(FastingColor, FastingLight, FastingColor),
+                    glow = FastingColor
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(

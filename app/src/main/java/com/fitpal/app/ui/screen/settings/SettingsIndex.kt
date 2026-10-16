@@ -17,7 +17,7 @@ import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.fitpal.app.ui.theme.AccentActivity
-import com.fitpal.app.ui.theme.AccentTrends
+import com.fitpal.app.ui.theme.FastingColor
 import com.fitpal.app.ui.theme.CaffeineColor
 import com.fitpal.app.ui.theme.CreamMuted
 import com.fitpal.app.ui.theme.DessertColor
@@ -45,7 +45,7 @@ const val SETTINGS_FEEDBACK = "feedback"
 
 private val PROFILE get() = SettingsCategoryInfo("profile", "Profile & goals", "You, your goal, calorie and macro targets", Icons.Default.Person)
 private val LOGGING get() = SettingsCategoryInfo("presets", "Logging & meal times", "Quick-add amounts and when each meal counts", Icons.Default.Restaurant)
-private val FASTING get() = SettingsCategoryInfo("fasting", "Fasting", "Your eating window, the timer and how strict it is", Icons.Default.HourglassEmpty, AccentTrends)
+private val FASTING get() = SettingsCategoryInfo("fasting", "Fasting", "Your eating window, the timer and how strict it is", Icons.Default.HourglassEmpty, FastingColor)
 private val LIMITS get() = SettingsCategoryInfo("rules", "Food limits", "Daily caps for dessert, fried food and sugary drinks", Icons.Default.Icecream, DessertColor)
 private val CAFFEINE get() = SettingsCategoryInfo("caffeine", "Caffeine", "What's still in your body and when it wears off", Icons.Default.Coffee, CaffeineColor)
 private val REMINDERS get() = SettingsCategoryInfo("reminders", "Reminders", "Meal and weigh-in nudges, and your AI overviews", Icons.Default.Notifications)
@@ -97,9 +97,11 @@ val SETTINGS_SEARCH_INDEX = listOf(
     SettingsSearchEntry("Your profile", "profile", "profile", "sex age height weight current weight fitness goal lose gain maintain muscle"),
     SettingsSearchEntry("Daily calorie goal", "profile", "calorie_goal", "calorie target override budget kcal limit"),
     SettingsSearchEntry("Macro targets", "profile", "macros", "protein fat carbs carbohydrates fibre fiber target grams"),
+    SettingsSearchEntry("Your day", "profile", "your_day", "wake up waking bedtime bed time sleep morning night day starts ends pace"),
     SettingsSearchEntry("About your situation", "profile", "situation", "personal context limitations allergies vegetarian vegan halal budget parents school work coach ai overview"),
     // Logging & meal times
     SettingsSearchEntry("Quick-add amounts", "presets", "presets", "meal presets drink presets portion serving grams ml quick add"),
+    SettingsSearchEntry("Water goal", "presets", "water", "water goal hydration drink daily ml litres liters quick add water buttons"),
     SettingsSearchEntry("Meal times", "presets", "meal_times", "breakfast lunch dinner snack time window"),
     // Fasting
     SettingsSearchEntry("Intermittent fasting", "fasting", "fasting", "fast eating window 16:8 18:6 omad timer ring bar intensity intense strict warn notify notification drinks drink coffee black coffee tea water diet soda zero calorie protein shake break"),

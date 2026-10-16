@@ -76,6 +76,18 @@ data class DailyWaterSplit(
     val foodWater: Float
 )
 
+/** One item that added water on a day, with when it was eaten — the Water page's timeline. */
+data class WaterTimelineRow(
+    val itemId: Long,
+    val mealLogId: Long,
+    val name: String,
+    val waterMl: Float,
+    val isDrink: Boolean,
+    val calories: Float,
+    val mealType: String,
+    val timestamp: Long
+)
+
 /** One row per logged meal — its day plus when it was eaten — for the fasting-adherence heatmap. */
 data class MealTimeRow(
     val date: String,
@@ -481,6 +493,17 @@ interface MealLogDao {
         WHERE mealLogId IN (SELECT id FROM meal_logs WHERE date = :date)
     """)
     fun getTotalWaterForDate(date: String): Flow<Float>
+
+    /** Every item that added water on [date], newest first, with its meal's eaten time. */
+    @Query("""
+        SELECT i.id AS itemId, i.mealLogId AS mealLogId, i.name AS name, i.waterMl AS waterMl,
+               i.isDrink AS isDrink, i.calories AS calories, m.mealType AS mealType, m.timestamp AS timestamp
+        FROM meal_log_items i
+        JOIN meal_logs m ON i.mealLogId = m.id
+        WHERE m.date = :date AND i.waterMl > 0
+        ORDER BY m.timestamp DESC, i.id DESC
+    """)
+    fun getWaterTimeline(date: String): Flow<List<WaterTimelineRow>>
 
     /** Per-day nutrition totals for a date range — used by Analytics charts. */
     @Query("""

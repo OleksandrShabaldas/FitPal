@@ -61,6 +61,8 @@ class DataManager @Inject constructor(
             root.put("appearance", JSONObject(settings.appearance.value.toJson()))
             root.put("widget_layouts", JSONObject(settings.exportWidgetLayoutsJson()))
             root.put("nav_config", JSONObject(settings.navConfig.value.toJson()))
+            // Your day (Profile): wake-up and bedtime, in minutes of the day.
+            root.put("your_day", JSONObject().put("wake", settings.wakeMinutes.value).put("bed", settings.bedMinutes.value))
             context.contentResolver.openOutputStream(uri)?.use { out ->
                 out.write(root.toString().toByteArray(Charsets.UTF_8))
             } ?: return@withContext false
@@ -112,6 +114,10 @@ class DataManager @Inject constructor(
             root.optJSONObject("appearance")?.let { settings.setAppearance(com.fitpal.app.ui.theme.Appearance.fromJson(it.toString())) }
             root.optJSONObject("widget_layouts")?.let { settings.importWidgetLayoutsJson(it.toString()) }
             root.optJSONObject("nav_config")?.let { settings.setNavConfig(com.fitpal.app.domain.model.NavConfig.fromJson(it.toString())) }
+            root.optJSONObject("your_day")?.let { day ->
+                if (day.has("wake")) settings.setWakeMinutes(day.optInt("wake", SettingsRepository.DEFAULT_WAKE_MINUTES))
+                if (day.has("bed")) settings.setBedMinutes(day.optInt("bed", SettingsRepository.DEFAULT_BED_MINUTES))
+            }
             true
         } catch (e: Exception) {
             false

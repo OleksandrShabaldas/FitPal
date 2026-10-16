@@ -110,6 +110,7 @@ import com.fitpal.app.ui.component.GradientBackdrop
 import com.fitpal.app.ui.component.MacroRingsRow
 import com.fitpal.app.ui.component.fastingClockLabel
 import com.fitpal.app.ui.theme.AccentTrends
+import com.fitpal.app.ui.theme.FastingColor
 import com.fitpal.app.ui.theme.CaffeineColor
 import com.fitpal.app.ui.theme.Cream
 import com.fitpal.app.ui.theme.CreamFaint
@@ -720,7 +721,7 @@ private fun ExtrasStep(draft: OnboardingDraft, viewModel: OnboardingViewModel, o
         Staggered(1) {
             ToggleCard(
                 icon = Icons.Default.HourglassEmpty,
-                accent = AccentTrends,
+                accent = FastingColor,
                 title = "Intermittent fasting",
                 body = "A daily eating window, a live countdown on Home, and a gentle check if you log during a fast.",
                 checked = draft.fastingOn,

@@ -298,6 +298,10 @@ object FoodJsonParser {
         }
         if (ingredients.isEmpty()) return null
         val label = name.ifEmpty { ingredients.first().name }
+        // A ready-made sauce the model broke into its recipe goes back to being one item.
+        if (ingredients.size > 1 && com.fitpal.app.domain.Condiments.isCondiment(label)) {
+            ingredients = listOf(collapseCondiment(label, ingredients))
+        }
         val drink = drinkFlag(obj, label)
         return buildFood(
             label = label,
@@ -332,6 +336,33 @@ object FoodJsonParser {
     }
 
     /** A drink the model gave no water for still counts toward hydration — estimated from its macros. */
+    /**
+     * One item named [name] carrying the combined nutrition of [parts], per 100 g — "Tartar sauce,
+     * 30 g" instead of mayonnaise + pickles + capers (see [com.fitpal.app.domain.Condiments]). The
+     * parts are already calorie-reconciled, and a weighted average keeps them so.
+     */
+    private fun collapseCondiment(name: String, parts: List<Ingredient>): Ingredient {
+        val grams = parts.sumOf { it.grams.toDouble() }.toFloat()
+        if (grams <= 0f) return parts.first().copy(name = name)
+        fun per100(total: Double) = (total / grams * 100.0).toFloat()
+        val knownCaffeine = parts.mapNotNull { it.caffeineMg }
+        return Ingredient(
+            name = name,
+            grams = grams,
+            caloriesPer100g = per100(parts.sumOf { it.calories.toDouble() }),
+            proteinPer100g = per100(parts.sumOf { it.protein.toDouble() }),
+            fatPer100g = per100(parts.sumOf { it.fat.toDouble() }),
+            carbsPer100g = per100(parts.sumOf { it.carbs.toDouble() }),
+            fiberPer100g = per100(parts.sumOf { it.fiber.toDouble() }),
+            waterMlPer100g = per100(parts.sumOf { it.waterMl.toDouble() }),
+            // scaledTo(g) multiplies by g/100, so 10 000/g turns the summed amounts back into per-100 g.
+            microsPer100g = parts.map { it.microsPer100g.scaledTo(it.grams) }
+                .reduce { a, b -> a + b }
+                .scaledTo(10_000f / grams),
+            caffeineMgPer100g = if (knownCaffeine.isEmpty()) null else per100(knownCaffeine.sumOf { it.toDouble() })
+        )
+    }
+
     private fun withDrinkWater(ingredients: List<Ingredient>, drink: Boolean): List<Ingredient> =
         if (!drink) ingredients
         else ingredients.map { ing ->

@@ -635,6 +635,29 @@ class SettingsRepository @Inject constructor(
         _waterGoalOverrideMl.value = clamped
     }
 
+    // --- Your day (Profile): when the day starts and ends, in minutes of the day. Water's pace is
+    // spread between the two; caffeine will judge sleep against the bedtime. ---
+
+    private val _wakeMinutes = MutableStateFlow(prefs.getInt(KEY_WAKE_MINUTES, DEFAULT_WAKE_MINUTES))
+    /** When the user usually wakes up (default 7:00 AM). */
+    val wakeMinutes: StateFlow<Int> = _wakeMinutes
+
+    fun setWakeMinutes(minutes: Int) {
+        val m = minutes.coerceIn(0, 24 * 60 - 1)
+        prefs.edit().putInt(KEY_WAKE_MINUTES, m).apply()
+        _wakeMinutes.value = m
+    }
+
+    private val _bedMinutes = MutableStateFlow(prefs.getInt(KEY_BED_MINUTES, DEFAULT_BED_MINUTES))
+    /** When the user usually goes to bed (default 11:00 PM). */
+    val bedMinutes: StateFlow<Int> = _bedMinutes
+
+    fun setBedMinutes(minutes: Int) {
+        val m = minutes.coerceIn(0, 24 * 60 - 1)
+        prefs.edit().putInt(KEY_BED_MINUTES, m).apply()
+        _bedMinutes.value = m
+    }
+
     // --- Home: collapse empty meal panels into a slim "add" row (off = always show all four) ---
 
     private val _compactEmptyMeals = MutableStateFlow(prefs.getBoolean(KEY_COMPACT_EMPTY_MEALS, false))
@@ -966,6 +989,10 @@ class SettingsRepository @Inject constructor(
         private const val KEY_SKIPPED_UPDATE = "skipped_update_version"
         private const val KEY_COMPACT_EMPTY_MEALS = "compact_empty_meals"
         private const val KEY_WATER_GOAL = "water_goal_ml"
+        private const val KEY_WAKE_MINUTES = "your_day_wake_min"
+        private const val KEY_BED_MINUTES = "your_day_bed_min"
+        const val DEFAULT_WAKE_MINUTES = 7 * 60
+        const val DEFAULT_BED_MINUTES = 23 * 60
         private const val KEY_ONBOARDED = "has_onboarded"
         private const val KEY_REMINDER_ENABLED = "reminder_enabled"
         private const val KEY_REMINDER_MINUTES = "reminder_minutes"

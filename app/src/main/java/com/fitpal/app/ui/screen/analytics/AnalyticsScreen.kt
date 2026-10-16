@@ -23,6 +23,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -90,6 +92,7 @@ import com.fitpal.app.ui.component.TrendChart
 import com.fitpal.app.ui.theme.AccentActivity
 import com.fitpal.app.ui.theme.AccentGarden
 import com.fitpal.app.ui.theme.AccentTrends
+import com.fitpal.app.ui.theme.FastingColor
 import com.fitpal.app.ui.theme.CarbColor
 import com.fitpal.app.ui.theme.Cream
 import com.fitpal.app.ui.theme.CreamFaint
@@ -110,6 +113,7 @@ import com.fitpal.app.ui.theme.glass
 import com.fitpal.app.ui.theme.scoreColor
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -127,8 +131,10 @@ fun AnalyticsScreen(
     val range by viewModel.range.collectAsStateWithLifecycle()
     val periodStart by viewModel.periodStart.collectAsStateWithLifecycle()
     val periodEnd by viewModel.periodEnd.collectAsStateWithLifecycle()
-    val rollingStart by viewModel.rollingStart.collectAsStateWithLifecycle()
-    val rollingEnd by viewModel.rollingEnd.collectAsStateWithLifecycle()
+    val elapsedStart by viewModel.elapsedStart.collectAsStateWithLifecycle()
+    val elapsedEnd by viewModel.elapsedEnd.collectAsStateWithLifecycle()
+    val previousStart by viewModel.previousStart.collectAsStateWithLifecycle()
+    val previousEnd by viewModel.previousEnd.collectAsStateWithLifecycle()
     val anchor by viewModel.anchor.collectAsStateWithLifecycle()
     val canGoPrev by viewModel.canGoPrev.collectAsStateWithLifecycle()
     val canGoNext by viewModel.canGoNext.collectAsStateWithLifecycle()
@@ -190,46 +196,48 @@ fun AnalyticsScreen(
     val weekReview = com.fitpal.app.domain.ReviewPeriods.week(anchor, today)
     val monthReview = com.fitpal.app.domain.ReviewPeriods.month(anchor, today)
 
-    // Two windows. weekDates = the calendar period (Mon–Sun week, or 30 days) — used by logged-days,
-    // calorie-balance, macro-balance and the Calories widget. rollingDates = the last N days — used
-    // by every other widget.
+    // One window for every card: the viewed period (the Mon–Sun week, or the 30 days ending at the
+    // anchor). Charts span the whole period, with days still to come as gaps; averages use the days so
+    // far (elapsedDates); prevDates is the period before, for the "vs last week" changes.
     val weekDates = generateSequence(periodStart) { it.plusDays(1) }.takeWhile { !it.isAfter(periodEnd) }.toList()
-    val rollingDates = generateSequence(rollingStart) { it.plusDays(1) }.takeWhile { !it.isAfter(rollingEnd) }.toList()
+    val elapsedDates = generateSequence(elapsedStart) { it.plusDays(1) }.takeWhile { !it.isAfter(elapsedEnd) }.toList()
+    val prevDates = generateSequence(previousStart) { it.plusDays(1) }.takeWhile { !it.isAfter(previousEnd) }.toList()
     val weekKeys = weekDates.map { it.format(iso) }
-    val rollingKeys = rollingDates.map { it.format(iso) }
-    // All days we have data for (the union), for building lookup maps + per-day scores.
-    val allDates = (weekDates + rollingDates).distinct().sorted()
+    val elapsedKeys = elapsedDates.map { it.format(iso) }
+    val prevKeys = prevDates.map { it.format(iso) }
+    // Every day we fetched data for (previous + viewed period), for lookup maps + per-day scores.
+    val allDates = (prevDates + weekDates).distinct().sorted()
 
-    val startLbl = rollingStart.format(dayMonth)
-    val endLbl = if (rollingEnd == today) "now" else rollingEnd.format(dayMonth)
+    val startLbl = periodStart.format(dayMonth)
+    val endLbl = if (periodEnd == today) "now" else periodEnd.format(dayMonth)
     val periodLabel = "${periodStart.format(dayMonth)} – ${periodEnd.format(dayMonth)}"
-    // Calendar-week start/end labels — only the Calories widget uses these (it tracks the current week).
-    val periodStartLbl = periodStart.format(dayMonth)
-    val periodEndLbl = if (periodEnd == today) "now" else periodEnd.format(dayMonth)
+    val previousLabel = if (range == AnalyticsRange.WEEK) "last week" else "the 30 days before"
     fun seriesOf(keys: List<String>, map: Map<String, Float>): List<Float?> = keys.map { map[it] }
+    fun averageOf(keys: List<String>, map: Map<String, Float>): Float? =
+        keys.mapNotNull { map[it] }.takeIf { it.isNotEmpty() }?.average()?.toFloat()
 
     val calMap = rows.associate { it.date to it.calories }
+    val stepMap = stepRows.associate { it.date to it.steps.toFloat() }
     val stepBurnMap = stepRows.associate { it.date to it.caloriesBurned * (100 - stepTrim) / 100f }
     val exMap = exerciseBurn.associate { it.date to it.burned }
     val totalBurnMap = (stepBurnMap.keys + exMap.keys).associateWith { (stepBurnMap[it] ?: 0f) + (exMap[it] ?: 0f) }
 
-    // Rolling-window series (the default for most widgets).
-    val calSeries = seriesOf(rollingKeys, calMap)
-    val stepSeries = seriesOf(rollingKeys, stepRows.associate { it.date to it.steps.toFloat() })
-    val burnSeries = seriesOf(rollingKeys, totalBurnMap)
+    val calSeries = seriesOf(weekKeys, calMap)
+    val stepSeries = seriesOf(weekKeys, stepMap)
+    val burnSeries = seriesOf(weekKeys, totalBurnMap)
     // Net calories that actually count toward the budget = eaten − burned (steps + workouts).
-    val netCalSeries: List<Float?> = rollingKeys.map { key ->
+    val netCalSeries: List<Float?> = weekKeys.map { key ->
         rows.find { it.date == key }?.let { (it.calories - (totalBurnMap[key] ?: 0f)).coerceAtLeast(0f) }
     }
-    // Same net-calorie figure but over the calendar week (Mon–Sun) — the Calories widget alone uses
-    // this so it shows the *current week*, not a rolling last-7-days window.
-    val netCalWeekSeries: List<Float?> = weekKeys.map { key ->
-        rows.find { it.date == key }?.let { (it.calories - (totalBurnMap[key] ?: 0f)).coerceAtLeast(0f) }
-    }
-    val waterSeries = seriesOf(rollingKeys, waterSplit.associate { it.date to (it.drinkWater + it.foodWater) })
-    val rollingWaterSplit = waterSplit.filter { it.date in rollingKeys }
-    val avgDrink = (rollingWaterSplit.sumOf { it.drinkWater.toDouble() } / range.days).toInt()
-    val avgFood = (rollingWaterSplit.sumOf { it.foodWater.toDouble() } / range.days).toInt()
+    val waterMap = waterSplit.associate { it.date to (it.drinkWater + it.foodWater) }
+    val waterSeries = seriesOf(weekKeys, waterMap)
+    val elapsedWaterSplit = waterSplit.filter { it.date in elapsedKeys }
+    val elapsedDays = elapsedDates.size.coerceAtLeast(1)
+    val avgDrink = (elapsedWaterSplit.sumOf { it.drinkWater.toDouble() } / elapsedDays).toInt()
+    val avgFood = (elapsedWaterSplit.sumOf { it.foodWater.toDouble() } / elapsedDays).toInt()
+    val prevAvgWater = waterSplit.filter { it.date in prevKeys }
+        .takeIf { it.isNotEmpty() }
+        ?.let { (it.sumOf { r -> (r.drinkWater + r.foodWater).toDouble() } / prevDates.size.coerceAtLeast(1)).toFloat() }
 
     val calGoal = targets?.calories ?: 0
     val pT = targets?.proteinG?.toFloat() ?: 0f
@@ -246,11 +254,11 @@ fun AnalyticsScreen(
             row.calories, calGoal, row.protein, pT, row.fat, fT, row.carbs, cT, row.fiber, fibT, -1f
         ).score
     }
-    val scoreSeries: List<Float?> = rollingKeys.map { scoreByDate[it]?.toFloat() }
+    val scoreSeries: List<Float?> = weekKeys.map { scoreByDate[it]?.toFloat() }
 
-    // Row subsets per window (for averages / balance computed in-screen).
-    val rollingRows = rows.filter { it.date in rollingKeys }
+    // The viewed period's rows (only days so far can have any) and the previous period's.
     val weekRows = rows.filter { it.date in weekKeys }
+    val prevRows = rows.filter { it.date in prevKeys }
 
     // Every day ever logged, oldest → newest (the DAO already sorts) — the x-axis for Lifetime views.
     val lifetimeDates = lifetimeRows.mapNotNull { runCatching { LocalDate.parse(it.date) }.getOrNull() }
@@ -274,7 +282,7 @@ fun AnalyticsScreen(
             when (w.key) {
                 "balance" -> if (weekRows.isNotEmpty() && calGoal > 0) add("balance")
                 "maintenance" -> if (lifetimeMaintenance != null) add("maintenance")
-                "averages" -> if (rollingRows.isNotEmpty()) add("averages")
+                "averages" -> if (weekRows.isNotEmpty()) add("averages")
                 "ai" -> { add("aihdr"); add("aiToday"); add("aiWeek"); add("aiMonth") }
                 else -> add(w.key)
             }
@@ -354,26 +362,35 @@ fun AnalyticsScreen(
                 when (widget.key) {
                     // ---- Summary tiles ----
                     "tiles" -> item {
-                        val avgCal = calSeries.filterNotNull().takeIf { it.isNotEmpty() }?.let { it.sum() / it.size }
-                        val avgSteps = stepSeries.filterNotNull().takeIf { it.isNotEmpty() }?.let { it.sum() / it.size }
+                        val avgCal = averageOf(weekKeys, calMap)
+                        val avgSteps = averageOf(weekKeys, stepMap)
                         // Avg score + logged days are merged into one compact tile, both over the week.
                         val weekScores = weekDates.mapNotNull { scoreByDate[it.format(iso)] }
                         val avgScore = weekScores.takeIf { it.isNotEmpty() }?.let { it.sum() / it.size }
                         // Same calculation as the weight card's change chip, so the two always agree.
-                        val wChange = com.fitpal.app.domain.WeightTrend.changeOver(weights, rollingStart, rollingEnd)
+                        val wChange = com.fitpal.app.domain.WeightTrend.changeOver(weights, elapsedStart, elapsedEnd)
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                StatTile(Modifier.weight(1f), "Avg calories", avgCal?.let { "${it.toInt()}" } ?: "—", "kcal/day", GoldLight, "tile_cal", spotlight, viewModel::toggleSpotlight) { jumpTo("calories") }
-                                StatTile(Modifier.weight(1f), "Avg steps", avgSteps?.let { "${it.toInt()}" } ?: "—", "per day", AccentActivity, "tile_steps", spotlight, viewModel::toggleSpotlight) { jumpTo("activity") }
-                            }
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            // Tiles in a row share a height, whatever their text.
+                            Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 StatTile(
-                                    Modifier.weight(1f), "Weight change",
+                                    Modifier.weight(1f).fillMaxHeight(), "Avg calories", avgCal?.let { "%,d".format(it.roundToInt()) } ?: "—", "kcal/day", GoldLight,
+                                    "tile_cal", spotlight, viewModel::toggleSpotlight,
+                                    change = percentChange(avgCal, averageOf(prevKeys, calMap), previousLabel, higherIsBetter = null)
+                                ) { jumpTo("calories") }
+                                StatTile(
+                                    Modifier.weight(1f).fillMaxHeight(), "Avg steps", avgSteps?.let { "%,d".format(it.roundToInt()) } ?: "—", "per day", AccentActivity,
+                                    "tile_steps", spotlight, viewModel::toggleSpotlight,
+                                    change = percentChange(avgSteps, averageOf(prevKeys, stepMap), previousLabel, higherIsBetter = true)
+                                ) { jumpTo("activity") }
+                            }
+                            Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                StatTile(
+                                    Modifier.weight(1f).fillMaxHeight(), "Weight change",
                                     wChange?.let { (if (it >= 0) "+" else "") + "%.1f".format(it) } ?: "—", "kg", GoldLight,
                                     "tile_weight", spotlight, viewModel::toggleSpotlight
                                 ) { jumpTo("weight") }
                                 LoggedScoreTile(
-                                    Modifier.weight(1f),
+                                    Modifier.weight(1f).fillMaxHeight(),
                                     dates = weekDates,
                                     colorFor = { d -> scoreByDate[d.format(iso)]?.let { loggedDayColor(it) } },
                                     avgScore = avgScore,
@@ -392,7 +409,11 @@ fun AnalyticsScreen(
                         // goal + what you burned, so net = eaten − goal − burned (matches Home).
                         val net = weekRows.sumOf { (it.calories - calGoal - (totalBurnMap[it.date] ?: 0f)).toDouble() }.toInt()
                         val over = net > 0
-                        val periodWord = if (range.days <= 7) "this week" else "this month"
+                        // Per-day net, this period vs the one before: sums over different numbers of
+                        // logged days can't be compared, daily averages can.
+                        val prevNet = prevRows.takeIf { it.isNotEmpty() }
+                            ?.let { rs -> rs.sumOf { (it.calories - calGoal - (totalBurnMap[it.date] ?: 0f)).toDouble() } / rs.size }
+                        val dailyChange = prevNet?.let { (net.toDouble() / weekRows.size - it).roundToInt() }
                         Column(
                             modifier = Modifier.fillMaxWidth()
                                 .cardSurface("balance" in spotlight)
@@ -406,7 +427,7 @@ fun AnalyticsScreen(
                                 Text("Calorie balance", style = MaterialTheme.typography.titleMedium, color = Cream, modifier = Modifier.weight(1f))
                                 Text("›", style = MaterialTheme.typography.titleLarge, color = CreamMuted)
                             }
-                            Text("Net vs your goal after steps & exercise, $periodWord · tap for the full breakdown", style = MaterialTheme.typography.bodySmall, color = CreamMuted)
+                            Text("After steps & exercise", style = MaterialTheme.typography.bodySmall, color = CreamMuted)
                             Spacer(Modifier.height(10.dp))
                             Text(
                                 text = (if (over) "+" else "") + "$net kcal",
@@ -425,6 +446,15 @@ fun AnalyticsScreen(
                                 },
                                 style = MaterialTheme.typography.bodySmall, color = CreamMuted
                             )
+                            dailyChange?.let { d ->
+                                Text(
+                                    text = when {
+                                        kotlin.math.abs(d) < 25 -> "About the same each day as $previousLabel"
+                                        else -> "${if (d > 0) "+" else "−"}${"%,d".format(kotlin.math.abs(d))} kcal a day vs $previousLabel"
+                                    },
+                                    style = MaterialTheme.typography.labelSmall, color = CreamFaint
+                                )
+                            }
                         }
                     }
 
@@ -432,7 +462,7 @@ fun AnalyticsScreen(
                     "heatmap" -> item {
                         SwitchableChartCard("Logged days", listOf("Calendar", "Legend"), viewState = analyticsViews, onSetView = viewModel::setView, spotlight = spotlight, onToggleSpotlight = viewModel::toggleSpotlight) { v ->
                             if (v == 0) {
-                                Text("${weekRows.size} of ${weekDates.size} logged · tap a day for details", style = MaterialTheme.typography.bodySmall, color = CreamMuted)
+                                Text("${weekRows.size} of ${weekDates.size} logged", style = MaterialTheme.typography.bodySmall, color = CreamMuted)
                                 Spacer(Modifier.height(10.dp))
                                 LoggedHeatmap(
                                     dates = weekDates,
@@ -464,7 +494,7 @@ fun AnalyticsScreen(
                         ) {
                             if (!fastingSchedule.enabled) {
                                 Text(
-                                    "Turn on intermittent fasting in Settings → Fasting to see which days you kept your fast.",
+                                    "Turn on fasting in Settings to see which days you kept your fast.",
                                     style = MaterialTheme.typography.bodySmall, color = CreamMuted
                                 )
                             } else {
@@ -474,7 +504,7 @@ fun AnalyticsScreen(
                                     Text(
                                         text = if (fastingStreak > 0) "$fastingStreak" else "—",
                                         style = MaterialTheme.typography.headlineMedium,
-                                        color = AccentGarden
+                                        color = FastingColor
                                     )
                                     Column {
                                         Text("day streak", style = MaterialTheme.typography.labelMedium, color = Cream)
@@ -485,8 +515,6 @@ fun AnalyticsScreen(
                                     }
                                 }
                                 Spacer(Modifier.height(12.dp))
-                                Text("Tap a day for details", style = MaterialTheme.typography.labelSmall, color = CreamFaint)
-                                Spacer(Modifier.height(8.dp))
                                 LoggedHeatmap(
                                     dates = weekDates,
                                     colorFor = { d ->
@@ -529,31 +557,29 @@ fun AnalyticsScreen(
                     }
 
                     // ---- Calories (net of what you burned from steps + workouts) ----
-                    // Unlike the other trend widgets, Calories tracks the *current calendar week*
-                    // (Mon–Sun), so it uses weekDates/netCalWeekSeries instead of the rolling window.
                     "calories" -> item {
                         androidx.compose.runtime.CompositionLocalProvider(com.fitpal.app.ui.component.LocalChartScale provides widget.chartScale) {
                         SwitchableChartCard("Calories", listOf("Trend", "Vs goal"), viewState = analyticsViews, onSetView = viewModel::setView, highlight = highlight == "calories", spotlight = spotlight, onToggleSpotlight = viewModel::toggleSpotlight) { v ->
                             when {
-                                !enough(netCalWeekSeries) -> NotEnough()
+                                !enough(netCalSeries) -> NotEnough()
                                 v == 0 -> TrendChart(
-                                    values = netCalWeekSeries, accent = Gold,
+                                    values = netCalSeries, accent = Gold,
                                     target = calGoal.takeIf { it > 0 }?.toFloat(),
-                                    startLabel = periodStartLbl, endLabel = periodEndLbl
+                                    startLabel = startLbl, endLabel = endLbl
                                 )
                                 else -> BarTrendChart(
-                                    values = netCalWeekSeries.map { it ?: 0f },
+                                    values = netCalSeries.map { it ?: 0f },
                                     accent = ScoreFair,
                                     target = calGoal.takeIf { it > 0 }?.toFloat(),
                                     overColor = ScorePoor,
-                                    startLabel = periodStartLbl, endLabel = periodEndLbl,
+                                    startLabel = startLbl, endLabel = endLbl,
                                     labels = weekDates.map { it.dayOfMonth.toString() },
                                     highlightIndex = weekDates.indexOfFirst { it == today }.takeIf { it >= 0 },
                                     onBarClick = { i -> weekDates.getOrNull(i)?.let(openDayIfLogged) }
                                 )
                             }
                             Spacer(Modifier.height(6.dp))
-                            Text("Net of calories burned (steps + workouts) · ${if (range == AnalyticsRange.WEEK) "this week" else "this period"} · tap a bar to open that day", style = MaterialTheme.typography.labelSmall, color = CreamFaint)
+                            Text("Net of steps and workouts", style = MaterialTheme.typography.labelSmall, color = CreamFaint)
                         }
                     }
                     }
@@ -616,7 +642,7 @@ fun AnalyticsScreen(
                             trailing = { LifetimePill(allTime) { viewModel.toggleLifetime("micros") } }
                         ) {
                             if (allTime) MicronutrientAnalysis(lifetimeMicros, lifetimeRows.size)
-                            else MicronutrientAnalysis(microsTotals, rollingRows.size)
+                            else MicronutrientAnalysis(microsTotals, weekRows.size)
                         }
                     }
 
@@ -650,11 +676,17 @@ fun AnalyticsScreen(
                                 Spacer(Modifier.height(12.dp))
                                 Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                                     WaterChip(AccentTrends, "Drinks", "$avgDrink ml/day")
-                                    WaterChip(AccentGarden, "From food", "$avgFood ml/day")
+                                    WaterChip(WaterFromFood, "From food", "$avgFood ml/day")
+                                }
+                                if (elapsedWaterSplit.isNotEmpty()) {
+                                    percentChange((avgDrink + avgFood).toFloat(), prevAvgWater, previousLabel, higherIsBetter = true)?.let {
+                                        Spacer(Modifier.height(6.dp))
+                                        PeriodChangeText(it)
+                                    }
                                 }
                             } else {
-                                val drinkSeries = seriesOf(rollingKeys, waterSplit.associate { it.date to it.drinkWater })
-                                val foodSeries = seriesOf(rollingKeys, waterSplit.associate { it.date to it.foodWater })
+                                val drinkSeries = seriesOf(weekKeys, waterSplit.associate { it.date to it.drinkWater })
+                                val foodSeries = seriesOf(weekKeys, waterSplit.associate { it.date to it.foodWater })
                                 Text("Clear drinks", style = MaterialTheme.typography.labelMedium, color = CreamMuted)
                                 Spacer(Modifier.height(4.dp))
                                 if (enough(drinkSeries)) {
@@ -664,7 +696,7 @@ fun AnalyticsScreen(
                                 Text("From food", style = MaterialTheme.typography.labelMedium, color = CreamMuted)
                                 Spacer(Modifier.height(4.dp))
                                 if (enough(foodSeries)) {
-                                    TrendChart(values = foodSeries, accent = AccentGarden, startLabel = startLbl, endLabel = endLbl, height = 120.dp)
+                                    TrendChart(values = foodSeries, accent = WaterFromFood, startLabel = startLbl, endLabel = endLbl, height = 120.dp)
                                 } else NotEnough()
                             }
                         }
@@ -689,7 +721,7 @@ fun AnalyticsScreen(
                             val weightDelta = if ("weight" in lifetime) {
                                 com.fitpal.app.domain.WeightTrend.lifetimeChange(weights)
                             } else {
-                                com.fitpal.app.domain.WeightTrend.changeOver(weights, rollingStart, rollingEnd)
+                                com.fitpal.app.domain.WeightTrend.changeOver(weights, elapsedStart, elapsedEnd)
                             }
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -699,7 +731,7 @@ fun AnalyticsScreen(
                                 Column {
                                     Text("Weight", style = MaterialTheme.typography.titleMedium, color = Cream)
                                     Text(
-                                        text = if (latestWeight != null) "Last logged ${latestWeight!!.date}" else "Tap to log your weight",
+                                        text = latestWeight?.let { w -> "Last logged ${runCatching { LocalDate.parse(w.date).format(dayMonth) }.getOrDefault(w.date)}" } ?: "No weigh-ins yet",
                                         style = MaterialTheme.typography.bodySmall, color = CreamMuted
                                     )
                                 }
@@ -734,7 +766,7 @@ fun AnalyticsScreen(
                                     .map { byDate[it.format(iso)] }
                                     .toList()
                             } else {
-                                seriesOf(rollingKeys, byDate)
+                                seriesOf(weekKeys, byDate)
                             }
 
                             Spacer(Modifier.height(12.dp))
@@ -771,38 +803,42 @@ fun AnalyticsScreen(
                     // Always from the whole history, so it's the same number in every range.
                     "maintenance" -> lifetimeMaintenance?.let { maint -> item {
                         ChartCard(
-                            "Maintenance estimate", "from your whole history",
+                            "Maintenance estimate", "",
                             highlight = highlight == "maintenance",
                             spotlight = spotlight, onToggleSpotlight = viewModel::toggleSpotlight,
-                            onClick = { showMaintenanceInfo = true }
+                            onClick = { showMaintenanceInfo = true },
+                            trailing = {
+                                com.fitpal.app.ui.component.InfoButton(
+                                    title = "Maintenance estimate",
+                                    text = "What all your logged days and weigh-ins suggest you actually burn. " +
+                                        "It's a rough estimate: it can still read high while you're losing weight quickly, " +
+                                        "and settles as your weight steadies. It never changes your calorie goal."
+                                )
+                            }
                         ) {
                             Text(
                                 "≈ ${"%,d".format(maint)} kcal/day",
                                 style = MaterialTheme.typography.headlineSmall, color = GoldLight
                             )
-                            Spacer(Modifier.height(8.dp))
                             Text(
-                                buildString {
-                                    append("What all your logged days and weigh-ins suggest you actually burn. ")
-                                    if (calGoal > 0) append("Your target is ${"%,d".format(calGoal)} kcal. ")
-                                    append("A rough estimate — it can still read high while you're losing weight quickly, and settles as your weight steadies.")
-                                },
+                                if (calGoal > 0) "What you really burn, from your history · your goal is ${"%,d".format(calGoal)}"
+                                else "What you really burn, from your history",
                                 style = MaterialTheme.typography.bodySmall, color = CreamMuted
                             )
                             Spacer(Modifier.height(10.dp))
                             Text(
-                                "Tap to see how this is worked out ›",
+                                "How it's worked out ›",
                                 style = MaterialTheme.typography.labelMedium, color = GoldLight
                             )
                         }
                     } }
 
                     // ---- Averages ----
-                    "averages" -> if (rollingRows.isNotEmpty()) item {
+                    "averages" -> if (weekRows.isNotEmpty()) item {
                         ChartCard("Averages", "", spotlight = spotlight, onToggleSpotlight = viewModel::toggleSpotlight) {
                             // Average over EATEN days only — a water-only day logs as a 0-kcal row and
                             // would otherwise drag every average down (same rule as the maintenance estimate).
-                            val eaten = rollingRows.filter { it.calories > 0f }
+                            val eaten = weekRows.filter { it.calories > 0f }
                             val n = eaten.size.coerceAtLeast(1)
                             listOf(
                                 "Calories" to "${(eaten.sumOf { it.calories.toDouble() } / n).toInt()} kcal",
@@ -1228,6 +1264,7 @@ private fun StatTile(
     spotKey: String,
     spotlight: Set<String>,
     onToggleSpotlight: (String) -> Unit,
+    change: PeriodChange? = null,
     onClick: () -> Unit
 ) {
     Column(
@@ -1236,12 +1273,43 @@ private fun StatTile(
             .combinedClickable(onClick = onClick, onLongClick = { onToggleSpotlight(spotKey) })
             .padding(14.dp)
     ) {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = CreamMuted)
+        Text(label, style = MaterialTheme.typography.labelMedium, color = CreamMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Spacer(Modifier.height(6.dp))
-        Text(value, style = MaterialTheme.typography.titleLarge, color = accent)
-        Text(unit, style = MaterialTheme.typography.labelSmall, color = CreamFaint)
+        Text(value, style = MaterialTheme.typography.titleLarge, color = accent, maxLines = 1)
+        Text(unit, style = MaterialTheme.typography.labelSmall, color = CreamFaint, maxLines = 1)
+        change?.let {
+            Spacer(Modifier.height(4.dp))
+            PeriodChangeText(it)
+        }
     }
 }
+
+/** How a number moved against the previous period, as one short line ("↑ 8% vs last week"). */
+private data class PeriodChange(val text: String, val color: Color)
+
+/**
+ * [current] vs [previous] as a percentage change, or null when there's nothing fair to compare.
+ * [higherIsBetter] colours an improvement green; null (or a move the wrong way) stays quiet — a change
+ * line informs, it doesn't scold.
+ */
+private fun percentChange(current: Float?, previous: Float?, previousLabel: String, higherIsBetter: Boolean?): PeriodChange? {
+    if (current == null || previous == null || previous <= 0f) return null
+    val pct = ((current - previous) / previous * 100f).roundToInt()
+    if (pct == 0) return PeriodChange("Same as $previousLabel", CreamFaint)
+    val improved = higherIsBetter != null && (pct > 0) == higherIsBetter
+    return PeriodChange(
+        "${if (pct > 0) "↑" else "↓"} ${kotlin.math.abs(pct)}% vs $previousLabel",
+        if (improved) ScoreFair else CreamFaint
+    )
+}
+
+@Composable
+private fun PeriodChangeText(change: PeriodChange) {
+    Text(change.text, style = MaterialTheme.typography.labelSmall, color = change.color, maxLines = 1, overflow = TextOverflow.Ellipsis)
+}
+
+/** Water that came from food: the water colour, lighter — still water, not a different feature. */
+private val WaterFromFood: Color get() = AccentTrends.copy(alpha = 0.55f)
 
 /**
  * A compact tile merging the average balance score with a mini logged-days heatmap — sits in the

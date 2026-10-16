@@ -80,6 +80,17 @@ class SettingsViewModel @Inject constructor(
     fun rescheduleReminders() = reminderManager.reschedule()
 
     // ---- Meal time windows (which meal a logged food falls into) ----
+    // Your day: when it starts and ends (water's pace, and later caffeine's bedtime check).
+    val wakeMinutes: StateFlow<Int> = settingsRepository.wakeMinutes
+    val bedMinutes: StateFlow<Int> = settingsRepository.bedMinutes
+    fun setWakeMinutes(m: Int) = settingsRepository.setWakeMinutes(m)
+    fun setBedMinutes(m: Int) = settingsRepository.setBedMinutes(m)
+
+    // Water goal: 0 = automatic (~35 ml per kg).
+    val waterGoalOverride: StateFlow<Int> = settingsRepository.waterGoalOverrideMl
+    val waterPresets: StateFlow<List<Int>> = settingsRepository.waterPresets
+    fun setWaterGoal(ml: Int) = settingsRepository.setWaterGoalOverrideMl(ml)
+
     val mealWindows: StateFlow<com.fitpal.app.domain.model.MealWindows> = settingsRepository.mealWindows
     fun setMealWindows(w: com.fitpal.app.domain.model.MealWindows) = settingsRepository.setMealWindows(w)
 

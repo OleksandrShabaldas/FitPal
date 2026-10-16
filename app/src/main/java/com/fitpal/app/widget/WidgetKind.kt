@@ -90,7 +90,7 @@ enum class Tone(val onDark: Int, val onLight: Int) {
     CARBS(0xFFA6CF6E.toInt(), 0xFF5A8C28.toInt()),
     FIBER(0xFFB89E8A.toInt(), 0xFF866B56.toInt()),
     WATER(0xFF6FA8FF.toInt(), 0xFF3A70D6.toInt()),
-    FASTING(0xFF6FA8FF.toInt(), 0xFF3A70D6.toInt()),
+    FASTING(0xFFA592FF.toInt(), 0xFF6A55D0.toInt()),
     EATING(0xFFF3CE7C.toInt(), 0xFFB5822A.toInt()),
     OVER(0xFFE0584A.toInt(), 0xFFC03A2D.toInt()),
     CAFFEINE(0xFFC9A27E.toInt(), 0xFF87603C.toInt()),

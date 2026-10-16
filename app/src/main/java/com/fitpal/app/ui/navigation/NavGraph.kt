@@ -442,7 +442,12 @@ fun FitPalNavHost(
                 route = Screen.WaterDetail.route,
                 arguments = listOf(navArgument(Screen.WaterDetail.ARG_DATE) { type = NavType.StringType })
             ) {
-                WaterDetailScreen(onBack = safeBack)
+                WaterDetailScreen(
+                    onBack = safeBack,
+                    onOpenSettings = { navController.navigate(Screen.SettingsCategory.buildRoute("presets", "water")) },
+                    onOpenEntry = { id -> navController.navigate(Screen.EntryDetail.buildRoute(id)) },
+                    onOpenDay = { day -> navController.navigate(Screen.WaterDetail.buildRoute(day.toString())) }
+                )
             }
 
             composable(
