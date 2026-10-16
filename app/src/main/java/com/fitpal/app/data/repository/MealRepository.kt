@@ -196,6 +196,10 @@ class MealRepository @Inject constructor(
     fun getMealTimesInRange(from: String, to: String): Flow<List<com.fitpal.app.data.local.dao.MealTimeRow>> =
         mealLogDao.getMealTimesInRange(from, to)
 
+    /** The day's meals with eaten times — the Fasting page's "today's meals". */
+    fun getMealsForDay(date: String): Flow<List<com.fitpal.app.data.local.dao.DayMealRow>> =
+        mealLogDao.getMealsForDay(date)
+
     /** Per-day water totals for a date range — analytics water chart. */
     fun getDailyWaterRange(from: String, to: String): Flow<List<DailyWaterRow>> =
         mealLogDao.getDailyWaterRange(from, to)
@@ -574,6 +578,17 @@ class MealRepository @Inject constructor(
     /** Live total calories on [date] counting toward one dietary rule — drives the Home strip. */
     fun dietaryConsumedForDate(date: String, kind: DietaryRuleKind): Flow<Float> =
         mealLogDao.getTaggedCaloriesForDate(date, kind.likePattern)
+
+    /** Calories per day counting toward one dietary rule over [from]..[to] — the food-limits page's week. */
+    fun dietaryConsumedByDay(from: String, to: String, kind: DietaryRuleKind): Flow<List<com.fitpal.app.data.local.dao.DailyTaggedRow>> =
+        mealLogDao.getTaggedCaloriesByDay(from, to, kind.likePattern)
+
+    /**
+     * Correct an item's food-limit tags by hand ("this isn't dessert"). The tally is worked out from the
+     * tags, so every total that counts the item follows on its own.
+     */
+    suspend fun setItemRuleTags(itemId: Long, kinds: Set<DietaryRuleKind>) =
+        mealLogDao.updateItemRuleTags(itemId, DietaryRuleKind.tagsToDb(kinds))
 
     /** One-shot per-rule consumed totals for [date] — used by the pre-log gate. */
     suspend fun dietaryConsumedTodayOnce(date: String): Map<DietaryRuleKind, Int> {

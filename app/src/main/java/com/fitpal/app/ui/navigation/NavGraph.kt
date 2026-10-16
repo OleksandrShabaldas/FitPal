@@ -219,7 +219,13 @@ fun FitPalNavHost(
                 route = Screen.WeighIn.route,
                 dialogProperties = DialogProperties(usePlatformDefaultWidth = false)
             ) {
-                WeighInRoute(onDone = safeBack)
+                WeighInRoute(
+                    onDone = safeBack,
+                    onOpenTrend = {
+                        navController.popBackStack()
+                        navController.navigate(Screen.Weight.route)
+                    }
+                )
             }
 
             composable(Screen.Feedback.route) {
@@ -248,6 +254,11 @@ fun FitPalNavHost(
                     onLogExercise = { navController.navigate(Screen.LogExercise.route) },
                     onExerciseClick = { id -> navController.navigate(Screen.ExerciseDetail.buildRoute(id)) },
                     onOpenWater = { date -> navController.navigate(Screen.WaterDetail.buildRoute(date)) },
+                    onOpenSteps = { date -> navController.navigate(Screen.Steps.buildRoute(date)) },
+                    onOpenCaffeine = { date -> navController.navigate(Screen.Caffeine.buildRoute(date)) },
+                    onOpenFasting = { date -> navController.navigate(Screen.Fasting.buildRoute(date)) },
+                    onOpenWeight = { navController.navigate(Screen.Weight.route) },
+                    onOpenLimits = { date, kind -> navController.navigate(Screen.Limits.buildRoute(date, kind)) },
                     onSwipeToNextScreen = neighbour(com.fitpal.app.domain.model.NavTab.HOME, +1)
                 )
             }
@@ -267,7 +278,8 @@ fun FitPalNavHost(
                     onOpenCalorieDetail = { range, anchor ->
                         navController.navigate(Screen.CalorieDetail.buildRoute(range, anchor))
                     },
-                    onOpenWeighIn = { navController.navigate(Screen.WeighIn.route) }
+                    onOpenWeight = { navController.navigate(Screen.Weight.route) },
+                    onOpenFasting = { date -> navController.navigate(Screen.Fasting.buildRoute(date)) }
                 )
             }
 
@@ -447,6 +459,63 @@ fun FitPalNavHost(
                     onOpenSettings = { navController.navigate(Screen.SettingsCategory.buildRoute("presets", "water")) },
                     onOpenEntry = { id -> navController.navigate(Screen.EntryDetail.buildRoute(id)) },
                     onOpenDay = { day -> navController.navigate(Screen.WaterDetail.buildRoute(day.toString())) }
+                )
+            }
+
+            composable(
+                route = Screen.Steps.route,
+                arguments = listOf(navArgument(Screen.Steps.ARG_DATE) { type = NavType.StringType })
+            ) {
+                com.fitpal.app.ui.screen.steps.StepsScreen(
+                    onBack = safeBack,
+                    onOpenSettings = { navController.navigate(Screen.SettingsCategory.buildRoute("activity", "steps_goal")) },
+                    onOpenDay = { day -> navController.navigate(Screen.Steps.buildRoute(day.toString())) }
+                )
+            }
+
+            composable(
+                route = Screen.Caffeine.route,
+                arguments = listOf(navArgument(Screen.Caffeine.ARG_DATE) { type = NavType.StringType })
+            ) {
+                com.fitpal.app.ui.screen.caffeine.CaffeineScreen(
+                    onBack = safeBack,
+                    onOpenSettings = { navController.navigate(Screen.SettingsCategory.buildRoute("caffeine")) },
+                    onOpenEntry = { id -> navController.navigate(Screen.EntryDetail.buildRoute(id)) },
+                    onOpenDay = { day -> navController.navigate(Screen.Caffeine.buildRoute(day.toString())) }
+                )
+            }
+
+            composable(
+                route = Screen.Fasting.route,
+                arguments = listOf(navArgument(Screen.Fasting.ARG_DATE) { type = NavType.StringType })
+            ) {
+                com.fitpal.app.ui.screen.fasting.FastingScreen(
+                    onBack = safeBack,
+                    onOpenSettings = { navController.navigate(Screen.SettingsCategory.buildRoute("fasting")) },
+                    onOpenMeal = { id -> navController.navigate(Screen.MealGroup.buildRoute(id)) },
+                    onOpenDay = { day -> navController.navigate(Screen.Fasting.buildRoute(day.toString())) }
+                )
+            }
+
+            composable(Screen.Weight.route) {
+                com.fitpal.app.ui.screen.weight.WeightScreen(
+                    onBack = safeBack,
+                    onOpenSettings = { navController.navigate(Screen.SettingsCategory.buildRoute("profile", "profile")) }
+                )
+            }
+
+            composable(
+                route = Screen.Limits.route,
+                arguments = listOf(
+                    navArgument(Screen.Limits.ARG_DATE) { type = NavType.StringType },
+                    navArgument(Screen.Limits.ARG_FOCUS) { type = NavType.StringType; nullable = true; defaultValue = null }
+                )
+            ) {
+                com.fitpal.app.ui.screen.limits.LimitsScreen(
+                    onBack = safeBack,
+                    onOpenSettings = { navController.navigate(Screen.SettingsCategory.buildRoute("rules")) },
+                    onOpenEntry = { id -> navController.navigate(Screen.EntryDetail.buildRoute(id)) },
+                    onOpenDay = { day -> navController.navigate(Screen.Limits.buildRoute(day.toString())) }
                 )
             }
 

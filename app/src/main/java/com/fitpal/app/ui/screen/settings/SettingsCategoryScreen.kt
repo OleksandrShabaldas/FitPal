@@ -151,6 +151,7 @@ fun SettingsCategoryScreen(
                     SettingsAnchor("reliability", focus) { BackgroundReliabilitySection(viewModel) }
                 }
                 "activity" -> {
+                    SettingsAnchor("steps_goal", focus) { StepGoalSection(viewModel) }
                     SettingsAnchor("steps", focus) { StepCaloriesSection(viewModel) }
                     SettingsAnchor("health", focus) { SamsungHealthSection(viewModel) }
                     SettingsAnchor("watch", focus) { WatchSection(viewModel) }
@@ -1157,6 +1158,54 @@ private fun EatingHoursRow(schedule: com.fitpal.app.domain.model.FastingSchedule
             suffix = { Text("h") },
             modifier = Modifier.width(120.dp)
         )
+    }
+}
+
+/** The daily step goal: automatic (your recent average + 10%) unless you set one. */
+@Composable
+private fun StepGoalSection(viewModel: SettingsViewModel) {
+    val manual by viewModel.stepGoalManual.collectAsStateWithLifecycle()
+    val auto by viewModel.stepGoalAuto.collectAsStateWithLifecycle()
+    var editing by remember { mutableStateOf(false) }
+    Box(modifier = Modifier.fillMaxWidth().glass()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("Step goal", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(
+                "Automatic is your average over the last two weeks plus 10%, so it grows with you.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth().clickable { editing = true }.padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Daily goal", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    if (manual > 0) "%,d steps".format(manual) else "%,d steps · automatic".format(auto),
+                    style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+    }
+    if (editing) {
+        var text by remember { mutableStateOf((if (manual > 0) manual else auto).toString()) }
+        val steps = text.toIntOrNull()?.takeIf { it in 1000..50_000 }
+        com.fitpal.app.ui.component.TrackerSheet(title = "Daily step goal", onDismiss = { editing = false }) {
+            com.fitpal.app.ui.component.GlassNumberField(
+                text = text, onText = { text = it },
+                step = 500f, min = 1000f, max = 50_000f, fallback = auto.toFloat(), maxChars = 5,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Text(
+                "Automatic right now: %,d steps.".format(auto),
+                style = MaterialTheme.typography.bodySmall, color = com.fitpal.app.ui.theme.CreamMuted
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                com.fitpal.app.ui.component.GlassButton("Use automatic", onClick = { viewModel.setStepGoalManual(0); editing = false }, modifier = Modifier.weight(1f))
+                com.fitpal.app.ui.component.GoldButton("Save", onClick = { steps?.let { viewModel.setStepGoalManual(it) }; editing = false }, enabled = steps != null, modifier = Modifier.weight(1f))
+            }
+        }
     }
 }
 

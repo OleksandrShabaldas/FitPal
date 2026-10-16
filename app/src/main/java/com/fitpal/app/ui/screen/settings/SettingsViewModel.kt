@@ -80,6 +80,11 @@ class SettingsViewModel @Inject constructor(
     fun rescheduleReminders() = reminderManager.reschedule()
 
     // ---- Meal time windows (which meal a logged food falls into) ----
+    // Step goal: 0 = automatic (recent average + 10%).
+    val stepGoalManual: StateFlow<Int> = settingsRepository.stepGoalManual
+    val stepGoalAuto: StateFlow<Int> = settingsRepository.stepGoalAuto
+    fun setStepGoalManual(steps: Int) = settingsRepository.setStepGoalManual(steps)
+
     // Your day: when it starts and ends (water's pace, and later caffeine's bedtime check).
     val wakeMinutes: StateFlow<Int> = settingsRepository.wakeMinutes
     val bedMinutes: StateFlow<Int> = settingsRepository.bedMinutes

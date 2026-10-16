@@ -117,15 +117,21 @@ fun HeroDrawerHandle(open: Boolean, alertColor: Color?, onToggle: () -> Unit, mo
  * (today); for a past day it shows that day's total. Tapping it opens the full caffeine view.
  */
 @Composable
-fun HeroDrawerRings(state: HeroDrawerState, nowMillis: Long, onOpenCaffeine: () -> Unit, modifier: Modifier = Modifier) {
+fun HeroDrawerRings(
+    state: HeroDrawerState,
+    nowMillis: Long,
+    onOpenCaffeine: () -> Unit,
+    modifier: Modifier = Modifier,
+    onOpenLimit: (DietaryRuleKind) -> Unit = {}
+) {
     Row(modifier = modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-        state.rules.forEach { status -> RuleRing(status) }
+        state.rules.forEach { status -> RuleRing(status) { onOpenLimit(status.kind) } }
         state.caffeine?.let { c -> CaffeineRing(c, nowMillis, onOpenCaffeine) }
     }
 }
 
 @Composable
-private fun RuleRing(status: DietaryRuleStatus) {
+private fun RuleRing(status: DietaryRuleStatus, onClick: () -> Unit) {
     val accent = ruleColor(status.kind)
     MiniRing(
         label = ruleShortName(status.kind),
@@ -141,7 +147,8 @@ private fun RuleRing(status: DietaryRuleStatus) {
             status.isOver -> MacroOver
             status.isNear -> Gold
             else -> null
-        }
+        },
+        onClick = onClick
     )
 }
 

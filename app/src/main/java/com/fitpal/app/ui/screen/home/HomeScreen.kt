@@ -180,6 +180,12 @@ fun HomeScreen(
     onSwipeToNextScreen: () -> Unit = {},
     /** Open the shared weigh-in (the same one the weigh-in notification opens). */
     onOpenWeighIn: () -> Unit = {},
+    // The tracker pages, for the day being viewed (docs/redesign/).
+    onOpenSteps: (String) -> Unit = {},
+    onOpenCaffeine: (String) -> Unit = {},
+    onOpenFasting: (String) -> Unit = {},
+    onOpenWeight: () -> Unit = {},
+    onOpenLimits: (date: String, kind: String?) -> Unit = { _, _ -> },
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val nutrition by viewModel.dailyNutrition.collectAsStateWithLifecycle()
@@ -189,10 +195,6 @@ fun HomeScreen(
     val selectedDate by viewModel.selectedDate.collectAsStateWithLifecycle()
     val targets by viewModel.dailyTargets.collectAsStateWithLifecycle()
     val dailySteps by viewModel.dailySteps.collectAsStateWithLifecycle()
-    val manualSteps by viewModel.manualSteps.collectAsStateWithLifecycle()
-    val syncedSteps by viewModel.syncedSteps.collectAsStateWithLifecycle()
-    val stepSources by viewModel.stepSources.collectAsStateWithLifecycle()
-    val stepsLastSyncedAt by viewModel.stepsLastSyncedAt.collectAsStateWithLifecycle()
     val dailyStreak by viewModel.dailyStreak.collectAsStateWithLifecycle()
     val trailPending by viewModel.trailPending.collectAsStateWithLifecycle()
     val exerciseCalories by viewModel.exerciseCalories.collectAsStateWithLifecycle()
@@ -208,7 +210,6 @@ fun HomeScreen(
     val dietaryStatuses by viewModel.dietaryStatuses.collectAsStateWithLifecycle()
     val heroDrawerOpen by viewModel.heroDrawerOpen.collectAsStateWithLifecycle()
     val caffeineView by viewModel.caffeineView.collectAsStateWithLifecycle()
-    var showCaffeine by remember { mutableStateOf(false) }
     // A once-a-minute clock so "caffeine in your body now" keeps draining while Home is open.
     var nowMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(caffeineView != null) {
@@ -240,7 +241,6 @@ fun HomeScreen(
     var editingItem by remember { mutableStateOf<MealLogItemEntity?>(null) }
     var editingType by remember { mutableStateOf(MealTypes.BREAKFAST) }
     var showCalendar by remember { mutableStateOf(false) }
-    var showStepDialog by remember { mutableStateOf(false) }
     // Copying a logged entry onto today counts as eating now, so it must pass the same fasting gate
     // (warn + "I ate this earlier" grace) as any other log — a copy is just another way to log.
     val fastingGuard = rememberFastingGuard()
@@ -317,7 +317,9 @@ fun HomeScreen(
                     drawerOpen = heroDrawerOpen,
                     onToggleDrawer = viewModel::toggleHeroDrawer,
                     nowMillis = nowMillis,
-                    onOpenCaffeine = { showCaffeine = true },
+                    onOpenCaffeine = { onOpenCaffeine(selectedDate.toString()) },
+                    onOpenLimit = { kind -> onOpenLimits(selectedDate.toString(), kind.id) },
+                    onOpenFasting = { onOpenFasting(selectedDate.toString()) },
                     size = card.size,
                     variant = card.variant ?: "ring"
                 )
@@ -348,7 +350,7 @@ fun HomeScreen(
                 )
             }
             "steps" -> {
-                val log = { showStepDialog = true; viewModel.loadStepSources() }
+                val log = { onOpenSteps(selectedDate.toString()) }
                 if (small) SmallTile(
                     Icons.AutoMirrored.Filled.DirectionsWalk, "Steps", "%,d".format(dailySteps.coerceAtLeast(0)),
                     if (stepCalories > 0) "+${stepCalories.toInt()} kcal" else "No steps yet", AccentActivity, log, m
@@ -371,8 +373,8 @@ fun HomeScreen(
             "weight" -> if (small) SmallTile(
                 Icons.Default.MonitorWeight, "Weight",
                 latestWeight?.weightKg?.let { "${"%.1f".format(it)} kg" } ?: "— kg",
-                if (latestWeight != null) "Latest weigh-in" else "No weigh-ins yet", GoldLight, onOpenWeighIn, m
-            ) else Box(m) { WeightCard(latestWeight = latestWeight?.weightKg, onLog = onOpenWeighIn) }
+                if (latestWeight != null) "Latest weigh-in" else "No weigh-ins yet", GoldLight, onOpenWeight, m
+            ) else Box(m) { WeightCard(latestWeight = latestWeight?.weightKg, onLog = onOpenWeight) }
             "macros" -> Box(m) {
                 MacrosCard(
                     bars = card.variant == "bars",
@@ -382,14 +384,14 @@ fun HomeScreen(
                     fiber = nutrition.fiber, fiberTarget = targets?.fiberG?.toFloat() ?: 0f
                 )
             }
-            "fasting" -> FastingCard(schedule = fastingSchedule, small = small, modifier = m)
+            "fasting" -> FastingCard(schedule = fastingSchedule, small = small, modifier = m, onClick = { onOpenFasting(selectedDate.toString()) })
             "caffeine" -> {
                 val now = caffeineView?.amountAt(nowMillis)
                 SmallTile(
                     Icons.Default.LocalCafe, "Caffeine",
                     now?.let { "${it.roundToInt()} mg" } ?: "Off",
                     if (now != null) "in you now" else "Turn on in Settings",
-                    CaffeineColor, { if (caffeineView != null) showCaffeine = true }, m
+                    CaffeineColor, { if (caffeineView != null) onOpenCaffeine(selectedDate.toString()) }, m
                 )
             }
         }
@@ -610,32 +612,6 @@ fun HomeScreen(
         )
     }
 
-    if (showStepDialog) {
-        StepInputDialog(
-            initialManual = manualSteps,
-            initialSynced = syncedSteps,
-            sources = stepSources,
-            lastSyncedAt = stepsLastSyncedAt,
-            canSync = viewModel.healthConnectAvailable,
-            onSync = { viewModel.syncHealthConnect() },
-            onSave = { manual, synced ->
-                viewModel.setManualSteps(manual)
-                viewModel.setSyncedSteps(synced)
-                showStepDialog = false
-            },
-            onDismiss = { showStepDialog = false }
-        )
-    }
-
-    if (showCaffeine) {
-        caffeineView?.let { view ->
-            com.fitpal.app.ui.component.CaffeineDetailDialog(
-                view = view,
-                nowMillis = nowMillis,
-                onDismiss = { showCaffeine = false }
-            )
-        }
-    }
 }
 
 // ======================== HEADER ========================
@@ -820,6 +796,8 @@ private fun HeroCard(
     onToggleDrawer: () -> Unit = {},
     nowMillis: Long = System.currentTimeMillis(),
     onOpenCaffeine: () -> Unit = {},
+    onOpenLimit: (com.fitpal.app.domain.model.DietaryRuleKind) -> Unit = {},
+    onOpenFasting: () -> Unit = {},
     /** L = ring + the vitamins page to swipe to; M = the ring page only, shorter. */
     size: com.fitpal.app.domain.model.CardSize = com.fitpal.app.domain.model.CardSize.L,
     /** "ring" (the calorie ring) or "numbers" (one big number over a bar). */
@@ -848,6 +826,7 @@ private fun HeroCard(
                         state = drawer,
                         nowMillis = nowMillis,
                         onOpenCaffeine = onOpenCaffeine,
+                        onOpenLimit = onOpenLimit,
                         modifier = Modifier.padding(top = 2.dp)
                     )
                     Spacer(Modifier.height(12.dp))
@@ -861,7 +840,7 @@ private fun HeroCard(
         // The arc wraps the ring — with the big-number style there's no ring, so the strip shows instead.
         val fastingAroundRing = showFasting && fastingSchedule.style == FastingStyle.RING && !numbers
         if (showFasting && !fastingAroundRing) {
-            FastingStrip(fastingSchedule)
+            FastingStrip(fastingSchedule, modifier = Modifier.clickable(onClick = onOpenFasting))
         }
         // The main page: the ring (or the big number) and the macros.
         val mainPage: @Composable () -> Unit = {
@@ -1020,7 +999,7 @@ private fun MacrosCard(
 
 /** The fasting timer as its own card — the strip, or a half-width countdown. */
 @Composable
-private fun FastingCard(schedule: com.fitpal.app.domain.model.FastingSchedule, small: Boolean, modifier: Modifier) {
+private fun FastingCard(schedule: com.fitpal.app.domain.model.FastingSchedule, small: Boolean, modifier: Modifier, onClick: () -> Unit = {}) {
     if (!schedule.enabled) {
         SmallTile(
             Icons.Default.HourglassEmpty, "Fasting", "Off", "Turn on in Settings",
@@ -1035,10 +1014,10 @@ private fun FastingCard(schedule: com.fitpal.app.domain.model.FastingSchedule, s
             com.fitpal.app.ui.component.fastingCountdownLabel(state.minutesLeftInPhase),
             if (state.isFasting) "until ${com.fitpal.app.ui.component.fastingClockLabel(state.nextChangeMin)}"
             else "left · closes ${com.fitpal.app.ui.component.fastingClockLabel(state.nextChangeMin)}",
-            com.fitpal.app.ui.component.fastingAccent(state), onClick = {}, modifier = modifier
+            com.fitpal.app.ui.component.fastingAccent(state), onClick = onClick, modifier = modifier
         )
     } else {
-        Box(modifier.glass().padding(horizontal = 16.dp, vertical = 12.dp)) { FastingStrip(schedule) }
+        Box(modifier.glass().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 12.dp)) { FastingStrip(schedule) }
     }
 }
 
@@ -1559,122 +1538,6 @@ private fun EditEntryDialog(
 }
 
 /** A human-readable name for a step source (Health Connect package or the watch's own report). */
-private fun friendlyStepSource(pkg: String): String = when {
-    pkg == com.fitpal.app.data.repository.StepRepository.WATCH_SOURCE_KEY -> "Your watch (FitPal)"
-    pkg == "com.fitpal.app" -> "FitPal"
-    "shealth" in pkg -> "Samsung Health"
-    "fitness" in pkg -> "Google Fit"
-    "gms" in pkg -> "Google"
-    else -> pkg.substringAfterLast('.').replaceFirstChar { it.uppercase() }
-}
-
-@Composable
-private fun StepInputDialog(
-    initialManual: Int,
-    initialSynced: Int,
-    sources: Map<String, Int>,
-    lastSyncedAt: Long,
-    canSync: Boolean,
-    onSync: () -> Unit,
-    onSave: (manual: Int, synced: Int) -> Unit,
-    onDismiss: () -> Unit
-) {
-    // Manual is a SET value and may be negative — the +/− toggle holds the sign so a plain
-    // number keyboard is enough. Synced mirrors the Samsung Health count and can be corrected.
-    var subtract by remember(initialManual) { mutableStateOf(initialManual < 0) }
-    var manualMag by remember(initialManual) {
-        mutableStateOf(if (initialManual != 0) initialManual.toString().removePrefix("-") else "")
-    }
-    var syncedText by remember(initialSynced) {
-        mutableStateOf(if (initialSynced != 0) initialSynced.toString() else "")
-    }
-    val manual = (manualMag.toIntOrNull() ?: 0) * (if (subtract) -1 else 1)
-    val synced = syncedText.toIntOrNull() ?: 0
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Steps") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Manual steps", style = MaterialTheme.typography.labelLarge, color = Cream)
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { subtract = !subtract }, modifier = Modifier.width(56.dp)) {
-                            Text(if (subtract) "−" else "+", style = MaterialTheme.typography.titleMedium)
-                        }
-                        OutlinedTextField(
-                            value = manualMag,
-                            onValueChange = { manualMag = it.filter { c -> c.isDigit() } },
-                            placeholder = { Text("0") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            singleLine = true,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                    Text(
-                        "Sets your manual count (doesn't add). Tap − to trim the synced steps.",
-                        style = MaterialTheme.typography.labelSmall, color = CreamFaint
-                    )
-                }
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Samsung Health (synced)", style = MaterialTheme.typography.labelLarge, color = Cream)
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            value = syncedText,
-                            onValueChange = { syncedText = it.filter { c -> c.isDigit() } },
-                            placeholder = { Text("0") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            singleLine = true,
-                            modifier = Modifier.weight(1f)
-                        )
-                        if (canSync) {
-                            TextButton(onClick = onSync) { Text("Sync") }
-                        }
-                    }
-                    Text(
-                        if (lastSyncedAt > 0L)
-                            "Checked Health Connect ${android.text.format.DateUtils.getRelativeTimeSpanString(lastSyncedAt, System.currentTimeMillis(), android.text.format.DateUtils.MINUTE_IN_MILLIS)}."
-                        else "Not synced yet.",
-                        style = MaterialTheme.typography.labelSmall, color = CreamFaint
-                    )
-                    Text(
-                        "Samsung Health updates Health Connect on its own schedule, so this can trail what " +
-                            "Samsung Health shows. If today looks low, open Samsung Health to push its latest " +
-                            "count, then tap Sync.",
-                        style = MaterialTheme.typography.labelSmall, color = CreamFaint
-                    )
-                    val ctx = LocalContext.current
-                    TextButton(onClick = {
-                        val intent = ctx.packageManager.getLaunchIntentForPackage("com.sec.android.app.shealth")
-                        if (intent != null) ctx.startActivity(intent)
-                        else android.widget.Toast.makeText(ctx, "Samsung Health isn't installed", android.widget.Toast.LENGTH_SHORT).show()
-                    }) { Text("Open Samsung Health") }
-                    Text(
-                        "The higher of Health Connect and what your watch reports directly. Open FitPal " +
-                            "on your watch once and tap \"Sync watch steps\" so the watch can report its own " +
-                            "count — then watch steps can't go missing even if Samsung Health doesn't share them.",
-                        style = MaterialTheme.typography.labelSmall, color = CreamFaint
-                    )
-                }
-                if (sources.isNotEmpty()) {
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text("Health Connect has, today:", style = MaterialTheme.typography.labelMedium, color = CreamMuted)
-                        sources.entries.sortedByDescending { it.value }.forEach { (pkg, count) ->
-                            Text("• ${friendlyStepSource(pkg)}: %,d".format(count), style = MaterialTheme.typography.labelSmall, color = CreamFaint)
-                        }
-                    }
-                }
-                Text(
-                    "Total: %,d steps".format((manual + synced).coerceAtLeast(0)),
-                    style = MaterialTheme.typography.bodyMedium, color = CreamMuted
-                )
-            }
-        },
-        confirmButton = { TextButton(onClick = { onSave(manual, synced) }) { Text("Save") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    )
-}
-
 @Composable
 private fun CalorieCalendarDialog(
     initialDate: LocalDate,

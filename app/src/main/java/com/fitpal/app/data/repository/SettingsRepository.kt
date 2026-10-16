@@ -635,6 +635,39 @@ class SettingsRepository @Inject constructor(
         _waterGoalOverrideMl.value = clamped
     }
 
+    // --- Step goal (Settings → Activity & devices). 0 = automatic: your recent average + 10%,
+    // worked out at most once a day (StepRepository.refreshAutoStepGoal) so it holds steady all day. ---
+
+    private val _stepGoalManual = MutableStateFlow(prefs.getInt(KEY_STEP_GOAL, 0))
+    /** A step goal set by hand; 0 = automatic. */
+    val stepGoalManual: StateFlow<Int> = _stepGoalManual
+
+    fun setStepGoalManual(steps: Int) {
+        val v = steps.coerceIn(0, 50_000)
+        prefs.edit().putInt(KEY_STEP_GOAL, v).apply()
+        _stepGoalManual.value = v
+        recomputeStepGoal()
+    }
+
+    private val _stepGoalAuto = MutableStateFlow(prefs.getInt(KEY_STEP_GOAL_AUTO, com.fitpal.app.domain.StepGoal.FALLBACK))
+    /** The last automatic goal worked out, and the day it was worked out on. */
+    val stepGoalAuto: StateFlow<Int> = _stepGoalAuto
+    val stepGoalAutoDate: String get() = prefs.getString(KEY_STEP_GOAL_AUTO_DATE, "") ?: ""
+
+    fun setStepGoalAuto(steps: Int, dateIso: String) {
+        prefs.edit().putInt(KEY_STEP_GOAL_AUTO, steps).putString(KEY_STEP_GOAL_AUTO_DATE, dateIso).apply()
+        _stepGoalAuto.value = steps
+        recomputeStepGoal()
+    }
+
+    private val _stepGoal = MutableStateFlow(if (_stepGoalManual.value > 0) _stepGoalManual.value else _stepGoalAuto.value)
+    /** The goal in effect: the hand-set one, or the automatic one. */
+    val stepGoal: StateFlow<Int> = _stepGoal
+
+    private fun recomputeStepGoal() {
+        _stepGoal.value = if (_stepGoalManual.value > 0) _stepGoalManual.value else _stepGoalAuto.value
+    }
+
     // --- Your day (Profile): when the day starts and ends, in minutes of the day. Water's pace is
     // spread between the two; caffeine will judge sleep against the bedtime. ---
 
@@ -989,6 +1022,9 @@ class SettingsRepository @Inject constructor(
         private const val KEY_SKIPPED_UPDATE = "skipped_update_version"
         private const val KEY_COMPACT_EMPTY_MEALS = "compact_empty_meals"
         private const val KEY_WATER_GOAL = "water_goal_ml"
+        private const val KEY_STEP_GOAL = "step_goal"
+        private const val KEY_STEP_GOAL_AUTO = "step_goal_auto"
+        private const val KEY_STEP_GOAL_AUTO_DATE = "step_goal_auto_date"
         private const val KEY_WAKE_MINUTES = "your_day_wake_min"
         private const val KEY_BED_MINUTES = "your_day_bed_min"
         const val DEFAULT_WAKE_MINUTES = 7 * 60

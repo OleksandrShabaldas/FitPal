@@ -57,7 +57,9 @@ fun WeighInCard(
     goal: FitnessGoal,
     onSave: (Float) -> Unit,
     onCancel: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** Open the Weight page; shows a quiet "See your trend" link when given. */
+    onOpenTrend: (() -> Unit)? = null
 ) {
     val today = LocalDate.now().toString()
     // Re-weighing today replaces today's entry, so compare against the one before it.
@@ -115,6 +117,9 @@ fun WeighInCard(
                 colors = ButtonDefaults.buttonColors(containerColor = GoldLight, contentColor = InkBlack),
                 modifier = Modifier.weight(1f)
             ) { Text("Save", fontWeight = FontWeight.SemiBold) }
+        }
+        if (onOpenTrend != null) {
+            TextButton(onClick = onOpenTrend) { Text("See your trend ›", color = GoldLight) }
         }
     }
 }

@@ -71,7 +71,7 @@ class ChallengeRepository @Inject constructor(
         val monthlyKey = ChallengeRules.monthlyKey(today)
 
         val targets = targetsOrNull()
-        val stepGoal = 8000
+        val stepGoal = settingsRepository.stepGoal.value
 
         // The anchor — always present, never rotates.
         challengeDao.insertIfAbsent(

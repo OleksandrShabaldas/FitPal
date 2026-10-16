@@ -155,20 +155,7 @@ class HomeViewModel @Inject constructor(
         combine(_selectedDate, settingsRepository.caffeineSettings) { date, s -> date to s }
             .flatMapLatest { (date, s) ->
                 if (!s.enabled) return@flatMapLatest flowOf(null)
-                val dayIso = date.format(dateFormat)
-                mealRepository.caffeineRowsInRange(date.minusDays(1).format(dateFormat), dayIso).map { rows ->
-                    val withMg = rows.mapNotNull { r ->
-                        com.fitpal.app.domain.Caffeine.dose(r.timestamp, r.name, r.grams, r.caffeineMg)?.let { r to it }
-                    }
-                    val dayDoses = withMg.filter { it.first.date == dayIso }.map { it.second }
-                    com.fitpal.app.ui.component.CaffeineView(
-                        settings = s,
-                        doses = withMg.map { it.second },
-                        dayDoses = dayDoses,
-                        dayTotalMg = dayDoses.sumOf { it.mg.toDouble() }.toFloat(),
-                        isToday = date == LocalDate.now()
-                    )
-                }
+                com.fitpal.app.ui.screen.caffeine.caffeineDayFlow(mealRepository, s, date).map { it.view }
             }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
@@ -181,19 +168,14 @@ class HomeViewModel @Inject constructor(
             DailyMicros(0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f)
         )
 
+    init {
+        // The automatic step goal is worked out at most once a day; Home is the daily first stop.
+        viewModelScope.launch { runCatching { stepRepository.refreshAutoStepGoal() } }
+    }
+
     /** Steps for the selected date (manual + synced combined). */
     val dailySteps: StateFlow<Int> = selectedDateString
         .flatMapLatest { stepRepository.getTotalSteps(it) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
-
-    /** Steps entered by hand for the selected date (may be negative — a trim). */
-    val manualSteps: StateFlow<Int> = selectedDateString
-        .flatMapLatest { stepRepository.getManualSteps(it) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
-
-    /** Steps synced from Samsung Health for the selected date. */
-    val syncedSteps: StateFlow<Int> = selectedDateString
-        .flatMapLatest { stepRepository.getSyncedSteps(it) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
     /** Calories burned from steps for the selected date. */
@@ -339,22 +321,6 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch { mealRepository.logWater(ml, date = selectedDateIso()) }
     }
 
-    /** SET the hand-entered steps for the viewed day (replaces, doesn't add; may be negative). */
-    fun setManualSteps(steps: Int) {
-        viewModelScope.launch {
-            val kg = latestWeight.value?.weightKg ?: 70f
-            stepRepository.setManualStepsForDate(selectedDateIso(), steps, kg)
-        }
-    }
-
-    /** SET the synced (Samsung Health) steps for the viewed day — a manual correction. */
-    fun setSyncedSteps(steps: Int) {
-        viewModelScope.launch {
-            val kg = latestWeight.value?.weightKg ?: 70f
-            stepRepository.setSyncedStepsForDate(selectedDateIso(), steps, kg)
-        }
-    }
-
     fun deleteItem(id: Long) {
         viewModelScope.launch { mealRepository.deleteItem(id) }
     }
@@ -400,29 +366,11 @@ class HomeViewModel @Inject constructor(
     }
     fun clearPendingMealType() { mealLogContext.clear() }
 
-    /** Whether Samsung Health / Health Connect is available on this device. */
-    val healthConnectAvailable: Boolean get() = stepRepository.healthConnectAvailable()
-
-    /** Per-app step counts in Health Connect for the viewed day (so the user can see sources). */
-    private val _stepSources = MutableStateFlow<Map<String, Int>>(emptyMap())
-    val stepSources: StateFlow<Map<String, Int>> = _stepSources.asStateFlow()
-
-    fun loadStepSources() {
-        viewModelScope.launch {
-            runCatching { _stepSources.value = stepRepository.stepSourcesForDate(selectedDateIso()) }
-        }
-    }
-
-    /** When steps were last pulled from Health Connect (epoch millis; 0 = never). */
-    val stepsLastSyncedAt: StateFlow<Long> = stepRepository.lastSyncedAt
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0L)
-
     /** Pull fresh steps from Health Connect (no-op if not connected). */
     fun syncHealthConnect() {
         viewModelScope.launch {
             val kg = latestWeight.value?.weightKg ?: 70f
             runCatching { stepRepository.syncFromHealthConnect(kg) }
-            loadStepSources()
             // FitPal is opened ~daily, so this is the most reliable moment to hand fresh steps to
             // Calistapp: wake it to pull them. Gated by the user's Calistapp-sync toggle; harmless
             // if Calistapp isn't installed.

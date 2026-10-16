@@ -101,6 +101,7 @@ val SETTINGS_SEARCH_INDEX = listOf(
     SettingsSearchEntry("About your situation", "profile", "situation", "personal context limitations allergies vegetarian vegan halal budget parents school work coach ai overview"),
     // Logging & meal times
     SettingsSearchEntry("Quick-add amounts", "presets", "presets", "meal presets drink presets portion serving grams ml quick add"),
+    SettingsSearchEntry("Step goal", "activity", "steps_goal", "step goal daily steps walking target automatic average"),
     SettingsSearchEntry("Water goal", "presets", "water", "water goal hydration drink daily ml litres liters quick add water buttons"),
     SettingsSearchEntry("Meal times", "presets", "meal_times", "breakfast lunch dinner snack time window"),
     // Fasting

@@ -124,8 +124,10 @@ fun AnalyticsScreen(
     onSwipeToCollection: () -> Unit = {},
     onOpenDay: () -> Unit = {},
     onOpenCalorieDetail: (range: String, anchor: String) -> Unit = { _, _ -> },
-    /** Open the shared weigh-in (the same one the weigh-in notification opens). */
-    onOpenWeighIn: () -> Unit = {},
+    /** Open the Weight page. */
+    onOpenWeight: () -> Unit = {},
+    /** Open the Fasting page for a day. */
+    onOpenFasting: (String) -> Unit = {},
     viewModel: AnalyticsViewModel = hiltViewModel()
 ) {
     val range by viewModel.range.collectAsStateWithLifecycle()
@@ -490,7 +492,8 @@ fun AnalyticsScreen(
                             "Fasting",
                             if (fastingSchedule.enabled) "Days you stayed inside your eating window" else "Set an eating window in Settings",
                             spotlight = spotlight,
-                            onToggleSpotlight = viewModel::toggleSpotlight
+                            onToggleSpotlight = viewModel::toggleSpotlight,
+                            onClick = { if (fastingSchedule.enabled) onOpenFasting(today.toString()) }
                         ) {
                             if (!fastingSchedule.enabled) {
                                 Text(
@@ -711,7 +714,7 @@ fun AnalyticsScreen(
                                 .cardSurface("Weight" in spotlight)
                                 .then(highlightBorder(highlight == "weight"))
                                 .combinedClickable(
-                                    onClick = onOpenWeighIn,
+                                    onClick = onOpenWeight,
                                     onLongClick = { viewModel.toggleSpotlight("Weight") }
                                 )
                                 .padding(16.dp)

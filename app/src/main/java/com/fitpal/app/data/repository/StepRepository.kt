@@ -143,6 +143,30 @@ class StepRepository @Inject constructor(
         }
     }
 
+    // ---- Step goal ----
+
+    /** The step goal in effect (hand-set, or automatic from your recent days). */
+    val stepGoal: kotlinx.coroutines.flow.StateFlow<Int> get() = settingsRepository.stepGoal
+
+    /**
+     * Work the automatic goal out again from the last 14 days — at most once a day, so the goal holds
+     * steady while the day is in progress (it would otherwise creep as today's steps came in).
+     */
+    suspend fun refreshAutoStepGoal() {
+        val today = LocalDate.now()
+        val todayIso = today.format(dateFormat)
+        if (settingsRepository.stepGoalAutoDate == todayIso) return
+        val rows = stepDao.getDailyStepsOnce(today.minusDays(14).format(dateFormat), today.minusDays(1).format(dateFormat))
+        settingsRepository.setStepGoalAuto(com.fitpal.app.domain.StepGoal.automatic(rows.map { it.steps }), todayIso)
+    }
+
+    /** The day's steps by hour from Health Connect (null when it has none) — the Steps page's Today chart. */
+    suspend fun stepsByHour(dateIso: String): List<Long>? =
+        runCatching { healthConnectManager.readStepsByHour(LocalDate.parse(dateIso)) }.getOrNull()
+
+    /** What the watch itself reported for the day (0 = nothing). */
+    fun watchStepsFor(dateIso: String): Int = settingsRepository.watchStepsFor(dateIso)
+
     // ---- Health Connect (Samsung Health) ----
 
     fun healthConnectAvailable(): Boolean = healthConnectManager.isAvailable()

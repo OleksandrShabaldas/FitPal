@@ -82,6 +82,7 @@ internal object WidgetScenes {
     }
 
     private val home = WidgetTarget.Open(Screen.Home.route, focusToday = true)
+    private val fastingPage: WidgetTarget get() = WidgetTarget.Open(Screen.Fasting.buildRoute(LocalDate.now().toString()))
 
     // ======================== TODAY ========================
 
@@ -402,7 +403,7 @@ internal object WidgetScenes {
             w < h * 1.6f -> {
                 val dia = min(w, h)
                 val timerSize = dia * 0.17f
-                WidgetScene(description, home, timer = SceneTimer(until, timerSize)) { p, c, W, H ->
+                WidgetScene(description, fastingPage, timer = SceneTimer(until, timerSize)) { p, c, W, H ->
                     val color = p.tone(tone)
                     val D = min(W, H)
                     val stroke = max(p.dp(4f), D * 0.07f)
@@ -416,7 +417,7 @@ internal object WidgetScenes {
             }
             h < 110f -> {
                 val timerSize = min(h * 0.34f, 28f)
-                WidgetScene(description, home, timer = SceneTimer(until, timerSize)) { p, c, W, H ->
+                WidgetScene(description, fastingPage, timer = SceneTimer(until, timerSize)) { p, c, W, H ->
                     val color = p.tone(tone)
                     val side = (W - p.dp(timerSize) * 4.4f) / 2f - p.dp(6f)
                     val iconSize = min(H * 0.3f, p.dp(18f))
@@ -431,7 +432,7 @@ internal object WidgetScenes {
             }
             else -> {
                 val timerSize = min(h * 0.22f, w * 0.11f).coerceAtMost(40f)
-                WidgetScene(description, home, timer = SceneTimer(until, timerSize)) { p, c, W, H ->
+                WidgetScene(description, fastingPage, timer = SceneTimer(until, timerSize)) { p, c, W, H ->
                     val color = p.tone(tone)
                     val title = p.text(min(p.dp(15f), H * 0.12f), weight = 600, serif = true)
                     val iconSize = title.textSize * 1.1f
@@ -619,7 +620,7 @@ internal object WidgetScenes {
             ?: if (now <= com.fitpal.app.domain.CaffeineSettings.SLEEP_FRIENDLY_MG) "Low enough for sleep" else "Still high for sleep"
         val description = "About $now milligrams of caffeine in you now. $sleepLine."
         val square = w < h * 1.6f
-        return WidgetScene(description, home) { p, c, W, H ->
+        return WidgetScene(description, WidgetTarget.Open(Screen.Caffeine.buildRoute(LocalDate.now().toString()))) { p, c, W, H ->
             val color = p.tone(if (cf.overLimit) Tone.OVER else Tone.CAFFEINE)
             if (square) {
                 val lineP = p.text(min(p.dp(10.5f), H * 0.08f), p.tone(if (now <= com.fitpal.app.domain.CaffeineSettings.SLEEP_FRIENDLY_MG) Tone.GOOD else Tone.CAFFEINE), weight = 600, align = Paint.Align.CENTER)

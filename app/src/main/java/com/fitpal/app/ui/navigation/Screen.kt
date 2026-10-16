@@ -70,6 +70,36 @@ sealed class Screen(val route: String) {
         fun buildRoute(date: String): String = "water_detail/$date"
     }
 
+    // ---- Tracker pages (docs/redesign/01-tracker-template.md): one per tracker, for a day ----
+
+    /** Steps for a day: the goal ring, the week, where the count comes from. */
+    data object Steps : Screen("steps/{date}") {
+        const val ARG_DATE = "date"
+        fun buildRoute(date: String): String = "steps/$date"
+    }
+
+    /** Caffeine for a day, judged against bedtime. */
+    data object Caffeine : Screen("caffeine/{date}") {
+        const val ARG_DATE = "date"
+        fun buildRoute(date: String): String = "caffeine/$date"
+    }
+
+    /** The fasting window for a day: the band, the week, the streak and passes. */
+    data object Fasting : Screen("fasting/{date}") {
+        const val ARG_DATE = "date"
+        fun buildRoute(date: String): String = "fasting/$date"
+    }
+
+    /** Weight: log today, the trend, every weigh-in. */
+    data object Weight : Screen("weight")
+
+    /** The food limits for a day; [focus] picks which limit's week to show first. */
+    data object Limits : Screen("limits/{date}?focus={focus}") {
+        const val ARG_DATE = "date"
+        const val ARG_FOCUS = "focus"
+        fun buildRoute(date: String, focus: String? = null): String = "limits/$date" + (focus?.let { "?focus=$it" } ?: "")
+    }
+
     /**
      * Calories in vs. out for a period, opened from the Analytics "Calorie balance" card.
      * range = WEEK/MONTH, anchor = the ISO date the period is built around (so it opens on

@@ -20,6 +20,7 @@ import java.util.Locale
 @Composable
 fun WeighInRoute(
     onDone: () -> Unit,
+    onOpenTrend: (() -> Unit)? = null,
     viewModel: WeighInViewModel = hiltViewModel()
 ) {
     val data by viewModel.data.collectAsStateWithLifecycle()
@@ -36,7 +37,8 @@ fun WeighInRoute(
                 }
             },
             onCancel = onDone,
-            modifier = Modifier.padding(horizontal = 24.dp)
+            modifier = Modifier.padding(horizontal = 24.dp),
+            onOpenTrend = onOpenTrend
         )
     }
 }

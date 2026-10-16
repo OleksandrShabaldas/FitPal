@@ -168,6 +168,57 @@ fun TrackerHero(
     }
 }
 
+/**
+ * The hero ring of a tracker page: one [color] arc for [fraction] of the goal over a faint track,
+ * the number ([value]) and a small line ([caption]) in the middle. A small gold dot marks the end
+ * once the goal is reached ([reached]) — a reached goal is something to celebrate, not an alarm.
+ */
+@Composable
+fun TrackerRing(
+    fraction: Float?,
+    color: Color,
+    value: String,
+    caption: String,
+    modifier: Modifier = Modifier,
+    reached: Boolean = false,
+    onClick: (() -> Unit)? = null
+) {
+    val animated by androidx.compose.animation.core.animateFloatAsState(
+        (fraction ?: 0f).coerceIn(0f, 1f), androidx.compose.animation.core.tween(650), label = "trackerRing"
+    )
+    val track = com.fitpal.app.ui.theme.filmColor(0.10f)
+    Box(
+        modifier = modifier.size(112.dp).clip(CircleShape).then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(Modifier.fillMaxSize().padding(6.dp)) {
+            val stroke = 9.dp.toPx()
+            val arcSize = Size(size.width - stroke, size.height - stroke)
+            val topLeft = Offset(stroke / 2f, stroke / 2f)
+            drawArc(track, 0f, 360f, false, topLeft, arcSize, style = Stroke(stroke))
+            if (fraction != null && animated > 0f) {
+                drawArc(color, -90f, 360f * animated, false, topLeft, arcSize, style = Stroke(stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round))
+            }
+            if (reached) {
+                // A gold dot at the top of a full ring.
+                drawCircle(GoldLight, stroke * 0.42f, Offset(size.width / 2f, stroke / 2f))
+            }
+        }
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                value,
+                style = androidx.compose.ui.text.TextStyle(
+                    fontFamily = com.fitpal.app.ui.theme.InterFamily, fontWeight = FontWeight.ExtraBold,
+                    fontSize = androidx.compose.ui.unit.TextUnit(22f, androidx.compose.ui.unit.TextUnitType.Sp),
+                    fontFeatureSettings = "tnum"
+                ),
+                color = Cream, maxLines = 1
+            )
+            Text(caption, style = MaterialTheme.typography.labelSmall, color = CreamMuted, maxLines = 1)
+        }
+    }
+}
+
 /** One short sentence with a state colour — the tracker's verdict on right now. */
 @Composable
 fun StatusPill(status: TrackerStatus, modifier: Modifier = Modifier) {
@@ -326,6 +377,57 @@ fun TrackerSheet(title: String, onDismiss: () -> Unit, content: @Composable Colu
             Text(title, style = MaterialTheme.typography.headlineSmall, color = Cream)
             content()
         }
+    }
+}
+
+/**
+ * A tracker in its smallest form: a mini ring (its identity [color], the [icon] inside) over the
+ * number and a label. The border turns amber when close and red when over. Used for the food-limit
+ * picker now, and by Home's strip later (docs/redesign/05-home-tracker-layout.md).
+ */
+@Composable
+fun TrackerChip(
+    icon: ImageVector,
+    color: Color,
+    value: String,
+    label: String,
+    fraction: Float?,
+    status: StatusKind?,
+    modifier: Modifier = Modifier,
+    selected: Boolean = false,
+    onClick: (() -> Unit)? = null
+) {
+    val shape = RoundedCornerShape(16.dp)
+    val ringColor = if (status == StatusKind.OVER) MacroOver else color
+    val border = when {
+        selected -> Modifier.accentGlass(color, shape)
+        status == StatusKind.OVER -> Modifier.accentGlass(MacroOver, shape)
+        status == StatusKind.CLOSE -> Modifier.accentGlass(Gold, shape)
+        else -> Modifier.glassSoft(shape)
+    }
+    val track = com.fitpal.app.ui.theme.filmColor(0.10f)
+    Column(
+        modifier = modifier
+            .then(border)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(horizontal = 8.dp, vertical = 10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+            Canvas(Modifier.fillMaxSize()) {
+                val stroke = 4.dp.toPx()
+                val arcSize = Size(size.width - stroke, size.height - stroke)
+                val topLeft = Offset(stroke / 2f, stroke / 2f)
+                drawArc(track, 0f, 360f, false, topLeft, arcSize, style = Stroke(stroke))
+                if (fraction != null && fraction > 0f) {
+                    drawArc(ringColor, -90f, 360f * fraction.coerceIn(0f, 1f), false, topLeft, arcSize, style = Stroke(stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round))
+                }
+            }
+            Icon(icon, contentDescription = null, tint = ringColor, modifier = Modifier.size(18.dp))
+        }
+        Text(value, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = Cream, maxLines = 1)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = CreamFaint, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 

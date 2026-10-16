@@ -76,6 +76,24 @@ data class DailyWaterSplit(
     val foodWater: Float
 )
 
+/** One day's calories in a food limit's category. */
+data class DailyTaggedRow(val date: String, val kcal: Float)
+
+/** One meal on a day, for the Fasting page: when it was eaten, what it was, and whether only drinks. */
+data class DayMealRow(
+    val mealLogId: Long,
+    val mealType: String,
+    val timestamp: Long,
+    val loggedDuringFast: Boolean,
+    val mealName: String?,
+    val itemNames: String?,
+    val drinkOnly: Boolean,
+    val kcal: Float
+) {
+    val fastingIntake: com.fitpal.app.domain.model.FastingIntake
+        get() = com.fitpal.app.domain.model.FastingIntake(drinkOnly, kcal)
+}
+
 /** One item that added water on a day, with when it was eaten — the Water page's timeline. */
 data class WaterTimelineRow(
     val itemId: Long,
@@ -197,6 +215,18 @@ interface MealLogDao {
     )
     fun getMealTimesInRange(from: String, to: String): Flow<List<MealTimeRow>>
 
+    /** The day's meals (not plain water), oldest first, with their eaten times and what was in them. */
+    @Query(
+        """SELECT m.id AS mealLogId, m.mealType AS mealType, m.timestamp AS timestamp,
+           m.loggedDuringFast AS loggedDuringFast, m.name AS mealName,
+           (SELECT GROUP_CONCAT(i.name, ', ') FROM meal_log_items i WHERE i.mealLogId = m.id) AS itemNames,
+           (EXISTS (SELECT 1 FROM meal_log_items i WHERE i.mealLogId = m.id)
+             AND NOT EXISTS (SELECT 1 FROM meal_log_items i2 WHERE i2.mealLogId = m.id AND i2.isDrink = 0)) AS drinkOnly,
+           COALESCE((SELECT SUM(i3.calories) FROM meal_log_items i3 WHERE i3.mealLogId = m.id), 0) AS kcal
+           FROM meal_logs m WHERE m.date = :date AND m.mealType != 'water' ORDER BY m.timestamp ASC"""
+    )
+    fun getMealsForDay(date: String): Flow<List<DayMealRow>>
+
     /** Move a whole meal to a new eaten time (same day) — the post-log time editor. */
     @Query("UPDATE meal_logs SET timestamp = :timestamp, timeSource = :timeSource WHERE id = :mealLogId")
     suspend fun updateMealTime(mealLogId: Long, timestamp: Long, timeSource: String?)
@@ -259,6 +289,15 @@ interface MealLogDao {
           AND ruleTags LIKE :tagPattern
     """)
     fun getTaggedCaloriesForDate(date: String, tagPattern: String): Flow<Float>
+
+    /** The same tally per day over a range — the food-limits page's week. */
+    @Query("""
+        SELECT m.date AS date, COALESCE(SUM(i.calories), 0) AS kcal
+        FROM meal_log_items i JOIN meal_logs m ON i.mealLogId = m.id
+        WHERE m.date BETWEEN :from AND :to AND i.ruleTags LIKE :tagPattern
+        GROUP BY m.date
+    """)
+    fun getTaggedCaloriesByDay(from: String, to: String, tagPattern: String): Flow<List<DailyTaggedRow>>
 
     /**
      * The most recently logged real food per distinct name (newest first) — drives the

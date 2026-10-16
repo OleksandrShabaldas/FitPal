@@ -1,6 +1,7 @@
 package com.fitpal.app.domain
 
 import kotlin.math.exp
+import kotlin.math.roundToInt
 import kotlin.math.ln
 
 /**
@@ -121,6 +122,75 @@ object Caffeine {
         if (peak <= thresholdMg) return SleepVerdict.NeverAffects
         return clearTime(doses, from, halfLifeHours, thresholdMg)?.let { SleepVerdict.ClearAt(it) }
             ?: SleepVerdict.NotWithin36h
+    }
+
+    /** The next time it's [bedMinute] (minute of the day) after [afterMillis]. */
+    fun nextBedtime(afterMillis: Long, bedMinute: Int, zone: java.time.ZoneId = java.time.ZoneId.systemDefault()): Long {
+        val after = java.time.Instant.ofEpochMilli(afterMillis).atZone(zone)
+        var bed = after.toLocalDate().atTime(bedMinute / 60, bedMinute % 60).atZone(zone)
+        if (!bed.isAfter(after)) bed = bed.plusDays(1)
+        return bed.toInstant().toEpochMilli()
+    }
+
+    /**
+     * The verdict a person actually wants — will tonight's sleep be fine? — judged at [bedMillis]
+     * against the sleep-friendly line (50 mg): low enough already; under the line by a time before
+     * bed; or roughly how much will still be in them at bedtime.
+     */
+    fun bedtimeStatus(doses: List<CaffeineDose>, nowMillis: Long, bedMillis: Long, halfLifeHours: Float): TrackerStatus {
+        val line = CaffeineSettings.SLEEP_FRIENDLY_MG
+        // Nothing now and nothing still being absorbed over the next few hours.
+        val ahead = curve(doses, nowMillis, nowMillis + 4 * HOUR_MS.toLong(), 25, halfLifeHours).maxOrNull() ?: 0f
+        if (doses.isEmpty() || ahead < 1f) return TrackerStatus(StatusKind.OK, "Nothing in you")
+        val atBed = amountAt(doses, bedMillis, halfLifeHours)
+        val clear = clearTime(doses, nowMillis, halfLifeHours, line)
+        return when {
+            atBed <= line && clear == null -> TrackerStatus(StatusKind.OK, "Low enough for sleep")
+            atBed <= line && clear != null -> TrackerStatus(StatusKind.OK, "Under $line mg by ${clockLabel(clear)}, ${gapBeforeBed(bedMillis - clear)}")
+            atBed <= 80f -> TrackerStatus(StatusKind.CLOSE, "About ${atBed.roundToInt()} mg left at bedtime")
+            else -> TrackerStatus(StatusKind.OVER, "About ${atBed.roundToInt()} mg left at bedtime, it may keep you up")
+        }
+    }
+
+    /**
+     * "Planning another one?": what [extra] (called [what], e.g. "A coffee now") would do to tonight,
+     * on top of what's already in the body. Bedtime is the next one after the drink.
+     */
+    fun planSentence(
+        existing: List<CaffeineDose>,
+        extra: CaffeineDose,
+        what: String,
+        nowMillis: Long,
+        bedMinute: Int,
+        halfLifeHours: Float
+    ): String {
+        val line = CaffeineSettings.SLEEP_FRIENDLY_MG
+        val doses = existing + extra
+        val from = maxOf(nowMillis, extra.atMillis)
+        val bed = nextBedtime(from, bedMinute)
+        val atBed = amountAt(doses, bed, halfLifeHours)
+        return when (val v = sleepVerdict(existing, extra, nowMillis, halfLifeHours, line)) {
+            SleepVerdict.NeverAffects -> "$what stays under $line mg, no problem for sleep."
+            is SleepVerdict.ClearAt ->
+                if (v.atMillis <= bed) "$what: under $line mg by ${clockLabel(v.atMillis)}, still before bed."
+                else "$what leaves about ${atBed.roundToInt()} mg at bedtime" + (if (atBed > 80f) ", enough to keep you up." else ".")
+            SleepVerdict.NotWithin36h -> "$what leaves about ${atBed.roundToInt()} mg at bedtime, enough to keep you up."
+        }
+    }
+
+    private fun gapBeforeBed(gapMillis: Long): String {
+        val minutes = gapMillis / 60_000L
+        return when {
+            minutes < 45 -> "just before bed"
+            minutes < 90 -> "an hour before bed"
+            else -> "${(minutes / 60.0).roundToInt()} hours before bed"
+        }
+    }
+
+    /** "11:20 PM". */
+    private fun clockLabel(epochMillis: Long): String {
+        val t = java.time.Instant.ofEpochMilli(epochMillis).atZone(java.time.ZoneId.systemDefault()).toLocalTime()
+        return WaterPace.clockLabel(t.hour * 60 + t.minute)
     }
 
     /** Typical caffeine per serving — what the sleep calculator's chips fill in. Rough, well-known figures. */

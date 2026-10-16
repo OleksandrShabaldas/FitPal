@@ -81,6 +81,55 @@ class HealthConnectManager @Inject constructor(
     }
 
     /**
+     * The day's steps hour by hour (24 values, local time), from the **single most complete source**
+     * — the same rule as [readSteps], since sources are overlapping views of the same steps. A record
+     * that spans an hour boundary is split by how much of it falls in each hour. Null when Health
+     * Connect isn't available or has nothing for the day (the page then shows only the week).
+     */
+    suspend fun readStepsByHour(date: LocalDate): List<Long>? {
+        if (!isAvailable()) return null
+        val (start, end) = dayRange(date)
+        val zone = ZoneId.systemDefault()
+        val records = mutableListOf<StepsRecord>()
+        runCatching {
+            var pageToken: String? = null
+            do {
+                val response = client().readRecords(
+                    ReadRecordsRequest(
+                        recordType = StepsRecord::class,
+                        timeRangeFilter = TimeRangeFilter.between(start, end),
+                        pageToken = pageToken
+                    )
+                )
+                records += response.records
+                pageToken = response.pageToken
+            } while (pageToken != null)
+        }.onFailure { return null }
+        val best = records.groupBy { it.metadata.dataOrigin.packageName }
+            .maxByOrNull { (_, rs) -> rs.sumOf { it.count } }?.value ?: return null
+        val hours = LongArray(24)
+        for (r in best) {
+            val from = maxOf(r.startTime, start)
+            val to = minOf(r.endTime, end)
+            val total = (to.toEpochMilli() - from.toEpochMilli()).coerceAtLeast(0L)
+            if (total == 0L) {
+                hours[from.atZone(zone).hour] += r.count
+                continue
+            }
+            var cursor = from
+            while (cursor.isBefore(to)) {
+                val local = cursor.atZone(zone)
+                val nextHour = local.withMinute(0).withSecond(0).withNano(0).plusHours(1).toInstant()
+                val sliceEnd = minOf(nextHour, to)
+                val share = (sliceEnd.toEpochMilli() - cursor.toEpochMilli()).toDouble() / total
+                hours[local.hour] += Math.round(r.count * share)
+                cursor = sliceEnd
+            }
+        }
+        return hours.toList().takeIf { list -> list.any { it > 0L } }
+    }
+
+    /**
      * Steps for the day grouped by the app that wrote them (package name → total). Used both
      * to pick the most complete source and to show the user where their steps come from.
      */
