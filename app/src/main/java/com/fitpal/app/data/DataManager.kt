@@ -65,6 +65,7 @@ class DataManager @Inject constructor(
             root.put("your_day", JSONObject().put("wake", settings.wakeMinutes.value).put("bed", settings.bedMinutes.value))
             root.put("step_goal", settings.stepGoalManual.value)
             settings.homeStripBigger.value?.let { root.put("home_strip_bigger", it) }
+            root.put("analytics_collapsed", JSONArray(settings.analyticsCollapsed.value.toList()))
             context.contentResolver.openOutputStream(uri)?.use { out ->
                 out.write(root.toString().toByteArray(Charsets.UTF_8))
             } ?: return@withContext false
@@ -117,6 +118,9 @@ class DataManager @Inject constructor(
             root.optJSONObject("widget_layouts")?.let { settings.importWidgetLayoutsJson(it.toString()) }
             root.optJSONObject("nav_config")?.let { settings.setNavConfig(com.fitpal.app.domain.model.NavConfig.fromJson(it.toString())) }
             if (root.has("step_goal")) settings.setStepGoalManual(root.optInt("step_goal", 0))
+            root.optJSONArray("analytics_collapsed")?.let { arr ->
+                settings.setAnalyticsCollapsed((0 until arr.length()).mapNotNull { arr.optString(it).takeIf { s -> s.isNotBlank() } }.toSet())
+            }
             if (root.has("home_strip_bigger")) settings.setHomeStripBigger(root.optString("home_strip_bigger").takeIf { it.isNotBlank() })
             root.optJSONObject("your_day")?.let { day ->
                 if (day.has("wake")) settings.setWakeMinutes(day.optInt("wake", SettingsRepository.DEFAULT_WAKE_MINUTES))

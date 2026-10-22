@@ -279,7 +279,9 @@ fun FitPalNavHost(
                         navController.navigate(Screen.CalorieDetail.buildRoute(range, anchor))
                     },
                     onOpenWeight = { navController.navigate(Screen.Weight.route) },
-                    onOpenFasting = { date -> navController.navigate(Screen.Fasting.buildRoute(date)) }
+                    onOpenFasting = { date -> navController.navigate(Screen.Fasting.buildRoute(date)) },
+                    onOpenCaffeine = { date -> navController.navigate(Screen.Caffeine.buildRoute(date)) },
+                    onOpenLimits = { date, kind -> navController.navigate(Screen.Limits.buildRoute(date, kind)) }
                 )
             }
 

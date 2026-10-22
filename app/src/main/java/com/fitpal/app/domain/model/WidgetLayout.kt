@@ -39,7 +39,9 @@ data class WidgetDef(
     val defaultOn: Boolean = true,
     /** Non-empty for trackers: where on Home it may go (OFF_HOME is always allowed, as hiding). */
     val placements: List<TrackerPlacement> = emptyList(),
-    val defaultPlacement: TrackerPlacement? = null
+    val defaultPlacement: TrackerPlacement? = null,
+    /** Analytics: the section the card lives in (null = above or below the sections). */
+    val section: String? = null
 ) {
     val isTracker: Boolean get() = placements.isNotEmpty()
     val defaultSize: CardSize get() = sizes.first()
@@ -137,6 +139,35 @@ object ScreenWidgets {
     /** The customizable screens, in the order shown in Settings. */
     val screens: List<String> = listOf(HOME, ANALYTICS, ADD_FOOD)
 
+    const val SECTION_ENERGY = "energy"
+    const val SECTION_NUTRITION = "nutrition"
+    const val SECTION_BODY = "body"
+    const val SECTION_HABITS = "habits"
+
+    /** Analytics' sections, in their fixed order, with their titles. */
+    val analyticsSections: List<Pair<String, String>> = listOf(
+        SECTION_ENERGY to "Energy",
+        SECTION_NUTRITION to "Nutrition",
+        SECTION_BODY to "Body & activity",
+        SECTION_HABITS to "Habits"
+    )
+
+    /**
+     * Cards in display order for a screen with sections: unsectioned cards that come first in the
+     * registry (the tiles), then each section's cards in the user's order, then the rest (the AI
+     * reviews). Screens without sections keep the saved order.
+     */
+    fun bySection(cards: List<ResolvedCard>): List<ResolvedCard> {
+        if (cards.none { it.def.section != null }) return cards
+        val head = cards.filter { it.def.section == null && it.key == "tiles" }
+        val tail = cards.filter { it.def.section == null && it.key != "tiles" }
+        return head + analyticsSections.flatMap { (id, _) -> cards.filter { it.def.section == id } } + tail
+    }
+
+    /** Analytics before sections had the summary tiles on; the user wanted them off by default (07). */
+    fun migrateAnalyticsTilesOff(saved: List<WidgetSetting>): List<WidgetSetting> =
+        saved.map { if (it.key == "tiles") it.copy(enabled = false) else it }
+
     /** The Home card that holds every tracker placed in the strip. */
     const val STRIP = "strip"
 
@@ -178,20 +209,24 @@ object ScreenWidgets {
                 variants = listOf(CardVariant("rings", "Rings"), CardVariant("bars", "Bars")), defaultOn = false
             )
         ),
+        // Analytics (docs/redesign/07): the summary tiles (off unless picked) above four fixed
+        // sections; cards reorder within their section. The AI reviews stay last until the Coach tab.
         ANALYTICS to listOf(
-            WidgetDef("tiles", "Summary tiles"),
-            WidgetDef("balance", "Balance score ring"),
-            WidgetDef("heatmap", "Logged days"),
-            WidgetDef("score", "Balance score chart", sizes = ML),
-            WidgetDef("calories", "Calories", sizes = ML),
-            WidgetDef("macros", "Macro balance"),
-            WidgetDef("micros", "Vitamins & minerals"),
-            WidgetDef("activity", "Activity", sizes = ML),
-            WidgetDef("water", "Water", sizes = ML),
-            WidgetDef("weight", "Weight", sizes = ML),
-            WidgetDef("fasting", "Fasting"),
-            WidgetDef("maintenance", "Maintenance estimate"),
-            WidgetDef("averages", "Averages"),
+            WidgetDef("tiles", "Summary tiles", defaultOn = false),
+            WidgetDef("balance", "Calorie balance", section = SECTION_ENERGY),
+            WidgetDef("calories", "Calories", sizes = ML, section = SECTION_ENERGY),
+            WidgetDef("maintenance", "Maintenance estimate", section = SECTION_ENERGY),
+            WidgetDef("score", "Balance score chart", sizes = ML, section = SECTION_NUTRITION),
+            WidgetDef("macros", "Macro balance", section = SECTION_NUTRITION),
+            WidgetDef("micros", "Vitamins & minerals", section = SECTION_NUTRITION),
+            WidgetDef("averages", "Averages", section = SECTION_NUTRITION),
+            WidgetDef("weight", "Weight", sizes = ML, section = SECTION_BODY),
+            WidgetDef("activity", "Activity", sizes = ML, section = SECTION_BODY),
+            WidgetDef("water", "Water", sizes = ML, section = SECTION_BODY),
+            WidgetDef("heatmap", "Logged days", section = SECTION_HABITS),
+            WidgetDef("fasting", "Fasting", section = SECTION_HABITS),
+            WidgetDef("caffeine", "Caffeine", section = SECTION_HABITS),
+            WidgetDef("limits", "Food limits", section = SECTION_HABITS),
             WidgetDef("ai", "AI reviews")
         ),
         ADD_FOOD to listOf(

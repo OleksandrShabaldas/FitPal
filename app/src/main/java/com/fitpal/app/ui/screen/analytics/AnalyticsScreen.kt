@@ -128,6 +128,10 @@ fun AnalyticsScreen(
     onOpenWeight: () -> Unit = {},
     /** Open the Fasting page for a day. */
     onOpenFasting: (String) -> Unit = {},
+    /** Open the Caffeine page for a day. */
+    onOpenCaffeine: (String) -> Unit = {},
+    /** Open the Food limits page for a day (and a limit's id, or null for the first). */
+    onOpenLimits: (String, String?) -> Unit = { _, _ -> },
     viewModel: AnalyticsViewModel = hiltViewModel()
 ) {
     val range by viewModel.range.collectAsStateWithLifecycle()
@@ -170,6 +174,13 @@ fun AnalyticsScreen(
     val fastingMealMinutes by viewModel.fastingMealMinutesByDate.collectAsStateWithLifecycle()
     val fastingGrace by viewModel.fastingGrace.collectAsStateWithLifecycle()
     val fastingLoggedDuringFastDays by viewModel.fastingLoggedDuringFastDays.collectAsStateWithLifecycle()
+    val collapsed by viewModel.collapsed.collectAsStateWithLifecycle()
+    val caffeineSettings by viewModel.caffeineSettings.collectAsStateWithLifecycle()
+    val caffeineByDay by viewModel.caffeineByDay.collectAsStateWithLifecycle()
+    val enabledLimits by viewModel.enabledLimits.collectAsStateWithLifecycle()
+    val limitKcalByDay by viewModel.limitKcalByDay.collectAsStateWithLifecycle()
+    val waterGoal by viewModel.waterGoal.collectAsStateWithLifecycle()
+    val stepGoal by viewModel.stepGoal.collectAsStateWithLifecycle()
     // The maintenance-estimate card taps open a "how is this calculated?" explainer; its two rows
     // drill further into the day-by-day intake list and the full weigh-in list ("intake"/"weight").
     var showMaintenanceInfo by remember { mutableStateOf(false) }
@@ -270,28 +281,122 @@ fun AnalyticsScreen(
     val loggedKeys = (rows + lifetimeRows).filter { it.calories > 0f || it.protein > 0f }.map { it.date }.toSet()
     val openDayIfLogged: (LocalDate) -> Unit = { d -> if (d.format(iso) in loggedKeys) openDay(d) }
 
+    // ---- Takeaways and section summaries (docs/redesign/07): rules over the period, no AI ----
+    val isCurrent = !periodEnd.isBefore(today)
+    // Early in a period (every Monday) the card speaks about the one before, so it isn't empty.
+    val fallback = isCurrent &&
+        rows.count { it.date in elapsedKeys && it.calories > 0f } <= 1 &&
+        rows.any { it.date in prevKeys && it.calories > 0f }
+    fun takeawayDay(d: LocalDate): com.fitpal.app.domain.TakeawayDay {
+        val k = d.format(iso)
+        val r = rows.find { it.date == k }
+        return com.fitpal.app.domain.TakeawayDay(
+            date = d,
+            kcal = r?.calories ?: 0f, protein = r?.protein ?: 0f, fat = r?.fat ?: 0f, carbs = r?.carbs ?: 0f, fiber = r?.fiber ?: 0f,
+            burned = totalBurnMap[k] ?: 0f,
+            waterMl = waterMap[k],
+            steps = stepMap[k]?.toInt(),
+            fastKept = if (!fastingSchedule.enabled) null else when (fastingAdherence[k]) {
+                com.fitpal.app.domain.model.FastingDayResult.HELD -> true
+                com.fitpal.app.domain.model.FastingDayResult.BROKE -> false
+                null -> null
+            },
+            caffeineMg = if (!caffeineSettings.enabled) null else caffeineByDay[k] ?: if ((r?.calories ?: 0f) > 0f) 0f else null,
+            limitKcal = enabledLimits.associate { com.fitpal.app.ui.component.ruleShortName(it.kind) to (limitKcalByDay[it.kind]?.get(k) ?: 0f) }
+        )
+    }
+    val weekWord = range == AnalyticsRange.WEEK
+    val viewedChange = com.fitpal.app.domain.WeightTrend.changeOver(weights, elapsedStart, elapsedEnd)
+    val viewedInput = com.fitpal.app.domain.TakeawayInput(
+        days = elapsedDates.map(::takeawayDay),
+        previous = prevDates.map(::takeawayDay),
+        periodPhrase = when {
+            isCurrent -> if (weekWord) "this week" else "these 30 days"
+            else -> if (weekWord) "that week" else "those 30 days"
+        },
+        previousLabel = previousLabel,
+        calorieGoal = calGoal, proteinTarget = pT, fatTarget = fT, carbTarget = cT, fiberTarget = fibT,
+        goal = fitnessGoal,
+        waterGoalMl = waterGoal,
+        stepGoal = stepGoal,
+        caffeineLimitMg = if (caffeineSettings.enabled) caffeineSettings.dailyLimitMg else null,
+        limits = enabledLimits.associate { com.fitpal.app.ui.component.ruleShortName(it.kind) to it.dailyLimitKcal },
+        fastingOn = fastingSchedule.enabled,
+        fastingStreak = fastingStreak,
+        weightChangeKg = viewedChange,
+        weightOnTrack = viewedChange?.let { com.fitpal.app.domain.WeightTrend.changeIsOnTrack(it, fitnessGoal) },
+        lowNutrients = lowMicros(microsTotals, weekRows.count { it.calories > 0f })
+    )
+    val takeawayInput = if (!fallback) viewedInput else {
+        val prevChange = com.fitpal.app.domain.WeightTrend.changeOver(weights, previousStart, previousEnd)
+        viewedInput.copy(
+            days = prevDates.map(::takeawayDay), previous = emptyList(),
+            periodPhrase = if (weekWord) "last week" else "the 30 days before",
+            weightChangeKg = prevChange,
+            weightOnTrack = prevChange?.let { com.fitpal.app.domain.WeightTrend.changeIsOnTrack(it, fitnessGoal) },
+            lowNutrients = emptyList()
+        )
+    }
+    val highlights = remember(takeawayInput) { com.fitpal.app.domain.Takeaways.compute(takeawayInput) }
+    val highlightsTitle = when {
+        fallback -> if (weekWord) "Last week" else "The 30 days before"
+        isCurrent -> if (weekWord) "This week" else "These 30 days"
+        else -> if (weekWord) "Week of ${periodStart.format(dayMonth)}" else "30 days to ${periodEnd.format(dayMonth)}"
+    }
+    val summaries = remember(viewedInput) { com.fitpal.app.domain.Takeaways.sections(viewedInput) }
+    fun sectionSummary(id: String): String = when (id) {
+        com.fitpal.app.domain.model.ScreenWidgets.SECTION_ENERGY -> summaries.energy
+        com.fitpal.app.domain.model.ScreenWidgets.SECTION_NUTRITION -> summaries.nutrition
+        com.fitpal.app.domain.model.ScreenWidgets.SECTION_BODY -> summaries.body
+        else -> summaries.habits
+    }
+
+    // Cards that only show with data, or with their feature on (off = invisible).
+    fun cardShown(key: String): Boolean = when (key) {
+        "balance" -> weekRows.isNotEmpty() && calGoal > 0
+        "maintenance" -> lifetimeMaintenance != null
+        "averages" -> weekRows.isNotEmpty()
+        "fasting" -> fastingSchedule.enabled
+        "caffeine" -> caffeineSettings.enabled
+        "limits" -> enabledLimits.isNotEmpty()
+        else -> true
+    }
+    val sectionCards: List<Pair<Pair<String, String>, List<com.fitpal.app.domain.model.ResolvedCard>>> =
+        com.fitpal.app.domain.model.ScreenWidgets.analyticsSections.map { sec ->
+            sec to widgetLayout.filter { it.def.section == sec.first && it.enabled && cardShown(it.key) }
+        }.filter { it.second.isNotEmpty() }
+    val tilesCard = widgetLayout.firstOrNull { it.key == "tiles" && it.enabled }
+    val tailCards = widgetLayout.filter { it.def.section == null && it.key != "tiles" && it.enabled }
+
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     var highlight by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(highlight) { if (highlight != null) { delay(1300); highlight = null } }
-    // The positional order of rendered LazyColumn items — header + pills are fixed, then the
-    // widgets in the user's chosen order (skipping hidden ones and data-gated cards). Drives the
-    // jump-to-card scrolling from the summary tiles.
+    // The positional order of rendered LazyColumn items — header, pills and takeaways, then the
+    // tiles, each section's header and (when open) its cards, then the AI reviews. Must mirror the
+    // LazyColumn below; drives the jump-to-card scrolling from the takeaways and tiles.
     val itemKeys = buildList {
         add("header"); add("pills")
-        widgetLayout.forEach forEachKey@{ w ->
-            if (!w.enabled) return@forEachKey
-            when (w.key) {
-                "balance" -> if (weekRows.isNotEmpty() && calGoal > 0) add("balance")
-                "maintenance" -> if (lifetimeMaintenance != null) add("maintenance")
-                "averages" -> if (weekRows.isNotEmpty()) add("averages")
-                "ai" -> { add("aihdr"); add("aiToday"); add("aiWeek"); add("aiMonth") }
-                else -> add(w.key)
-            }
+        if (highlights.isNotEmpty()) add("highlights")
+        if (tilesCard != null) add("tiles")
+        sectionCards.forEach { (sec, cards) ->
+            add("sec_${sec.first}")
+            if (sec.first !in collapsed) cards.forEach { add(it.key) }
+        }
+        tailCards.forEach { w ->
+            if (w.key == "ai") { add("aihdr"); add("aiToday"); add("aiWeek"); add("aiMonth") } else add(w.key)
         }
     }
+    val latestItemKeys by androidx.compose.runtime.rememberUpdatedState(itemKeys)
     fun jumpTo(key: String) {
-        scope.launch { listState.animateScrollToItem(itemKeys.indexOf(key).coerceAtLeast(0)) }
+        // A card in a folded section opens its section first, then scrolls once that's drawn.
+        widgetLayout.firstOrNull { it.key == key }?.def?.section?.let { viewModel.expandSection(it) }
+        scope.launch {
+            androidx.compose.runtime.withFrameNanos { }
+            androidx.compose.runtime.withFrameNanos { }
+            val i = latestItemKeys.indexOf(key)
+            if (i >= 0) listState.animateScrollToItem(i)
+        }
         highlight = key
     }
 
@@ -357,10 +462,13 @@ fun AnalyticsScreen(
                 )
             }
 
-            // Cards render in the user's chosen order, skipping hidden ones (Settings → Customize
-            // screens → Analytics). The header + range pills above stay fixed. Default = original.
-            widgetLayout.forEach forEachWidget@{ widget ->
-                if (!widget.enabled) return@forEachWidget
+            if (highlights.isNotEmpty()) item {
+                HighlightsCard(highlightsTitle, highlights, onOpen = ::jumpTo)
+            }
+
+            // One card, if it's on and has something to show. Where it goes is decided below.
+            val renderCard: androidx.compose.foundation.lazy.LazyListScope.(com.fitpal.app.domain.model.ResolvedCard) -> Unit = renderCard@{ widget ->
+                if (!widget.enabled || !cardShown(widget.key)) return@renderCard
                 when (widget.key) {
                     // ---- Summary tiles ----
                     "tiles" -> item {
@@ -419,6 +527,7 @@ fun AnalyticsScreen(
                         Column(
                             modifier = Modifier.fillMaxWidth()
                                 .cardSurface("balance" in spotlight)
+                                .then(highlightBorder(highlight == "balance"))
                                 .combinedClickable(
                                     onClick = { onOpenCalorieDetail(range.name, anchor.format(iso)) },
                                     onLongClick = { viewModel.toggleSpotlight("balance") }
@@ -426,10 +535,15 @@ fun AnalyticsScreen(
                                 .padding(16.dp)
                         ) {
                             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                Text("Calorie balance", style = MaterialTheme.typography.titleMedium, color = Cream, modifier = Modifier.weight(1f))
+                                Text("Calorie balance", style = MaterialTheme.typography.titleMedium, color = Cream)
+                                com.fitpal.app.ui.component.InfoButton(
+                                    title = "Calorie balance",
+                                    text = "What you ate minus your goal, across the days you logged. Steps and workouts add to " +
+                                        "each day's budget, the same as on Home."
+                                )
+                                Spacer(Modifier.weight(1f))
                                 Text("›", style = MaterialTheme.typography.titleLarge, color = CreamMuted)
                             }
-                            Text("After steps & exercise", style = MaterialTheme.typography.bodySmall, color = CreamMuted)
                             Spacer(Modifier.height(10.dp))
                             Text(
                                 text = (if (over) "+" else "") + "$net kcal",
@@ -462,7 +576,7 @@ fun AnalyticsScreen(
 
                     // ---- Logged-days heatmap ----
                     "heatmap" -> item {
-                        SwitchableChartCard("Logged days", listOf("Calendar", "Legend"), viewState = analyticsViews, onSetView = viewModel::setView, spotlight = spotlight, onToggleSpotlight = viewModel::toggleSpotlight) { v ->
+                        SwitchableChartCard("Logged days", listOf("Calendar", "Legend"), viewState = analyticsViews, onSetView = viewModel::setView, highlight = highlight == "heatmap", spotlight = spotlight, onToggleSpotlight = viewModel::toggleSpotlight) { v ->
                             if (v == 0) {
                                 Text("${weekRows.size} of ${weekDates.size} logged", style = MaterialTheme.typography.bodySmall, color = CreamMuted)
                                 Spacer(Modifier.height(10.dp))
@@ -488,9 +602,15 @@ fun AnalyticsScreen(
 
                     // ---- Fasting: which days the eating window was kept, + a streak ----
                     "fasting" -> item {
+                        val judged = weekDates.mapNotNull { fastingAdherence[it.format(iso)] }
+                        val kept = judged.count { it == com.fitpal.app.domain.model.FastingDayResult.HELD }
                         ChartCard(
                             "Fasting",
-                            if (fastingSchedule.enabled) "Days you stayed inside your eating window" else "Set an eating window in Settings",
+                            if (judged.isEmpty()) "No days to judge yet"
+                            else "$kept of ${judged.size} days kept" + (if (fastingStreak > 0) " · $fastingStreak-day streak" else ""),
+                            highlight = highlight == "fasting",
+                            info = "A day is kept when everything you ate fell inside your eating window. Drinks your " +
+                                "drink rule allows don't break it, and an \u201cI ate earlier\u201d pass keeps the day.",
                             spotlight = spotlight,
                             onToggleSpotlight = viewModel::toggleSpotlight,
                             onClick = { if (fastingSchedule.enabled) onOpenFasting(today.toString()) }
@@ -537,7 +657,15 @@ fun AnalyticsScreen(
                     // ---- Balance score ----
                     "score" -> item {
                         androidx.compose.runtime.CompositionLocalProvider(com.fitpal.app.ui.component.LocalChartScale provides widget.chartScale) {
-                        SwitchableChartCard("Balance score", listOf("Trend", "Breakdown"), viewState = analyticsViews, onSetView = viewModel::setView, highlight = highlight == "score", spotlight = spotlight, onToggleSpotlight = viewModel::toggleSpotlight) { v ->
+                        val scored = weekDates.mapNotNull { d -> scoreByDate[d.format(iso)]?.let { d to it } }
+                        val scoreLine = if (scored.isEmpty()) "" else
+                            "Avg ${scored.sumOf { it.second } / scored.size} · best ${scored.maxBy { it.second }.first.dayOfWeek.getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.getDefault())}"
+                        SwitchableChartCard(
+                            "Balance score", listOf("Trend", "Breakdown"), viewState = analyticsViews, onSetView = viewModel::setView,
+                            highlight = highlight == "score", spotlight = spotlight, onToggleSpotlight = viewModel::toggleSpotlight,
+                            subtitle = scoreLine,
+                            info = "Each day scored out of 100 on how close calories, protein, fat, carbs and fibre came to your targets."
+                        ) { v ->
                             val present = scoreSeries.filterNotNull().map { it.toInt() }
                             when {
                                 present.size < 2 -> NotEnough()
@@ -562,7 +690,20 @@ fun AnalyticsScreen(
                     // ---- Calories (net of what you burned from steps + workouts) ----
                     "calories" -> item {
                         androidx.compose.runtime.CompositionLocalProvider(com.fitpal.app.ui.component.LocalChartScale provides widget.chartScale) {
-                        SwitchableChartCard("Calories", listOf("Trend", "Vs goal"), viewState = analyticsViews, onSetView = viewModel::setView, highlight = highlight == "calories", spotlight = spotlight, onToggleSpotlight = viewModel::toggleSpotlight) { v ->
+                        val netDays = netCalSeries.filterNotNull()
+                        val calLine = if (netDays.isEmpty()) "" else buildString {
+                            append("Avg ${"%,d".format((netDays.sum() / netDays.size).roundToInt())} kcal")
+                            if (calGoal > 0) {
+                                val over = netDays.count { it > calGoal }
+                                append(" · ${if (over == 0) "no days" else if (over == 1) "1 day" else "$over days"} over goal")
+                            }
+                        }
+                        SwitchableChartCard(
+                            "Calories", listOf("Trend", "Vs goal"), viewState = analyticsViews, onSetView = viewModel::setView,
+                            highlight = highlight == "calories", spotlight = spotlight, onToggleSpotlight = viewModel::toggleSpotlight,
+                            subtitle = calLine,
+                            info = "What you ate each day, net of the calories your steps and workouts burned, against your goal."
+                        ) { v ->
                             when {
                                 !enough(netCalSeries) -> NotEnough()
                                 v == 0 -> TrendChart(
@@ -581,8 +722,6 @@ fun AnalyticsScreen(
                                     onBarClick = { i -> weekDates.getOrNull(i)?.let(openDayIfLogged) }
                                 )
                             }
-                            Spacer(Modifier.height(6.dp))
-                            Text("Net of steps and workouts", style = MaterialTheme.typography.labelSmall, color = CreamFaint)
                         }
                     }
                     }
@@ -593,9 +732,19 @@ fun AnalyticsScreen(
                         val allTime = "macros" in lifetime
                         val macroRows = if (allTime) lifetimeRows else weekRows
                         val macroDates = if (allTime) lifetimeDates else weekDates
+                        val macroLine = run {
+                            val p = macroRows.sumOf { it.protein.toDouble() } * 4
+                            val f = macroRows.sumOf { it.fat.toDouble() } * 9
+                            val c = macroRows.sumOf { it.carbs.toDouble() } * 4
+                            val total = p + f + c
+                            if (total <= 0.0) "" else
+                                "Protein ${(p / total * 100).roundToInt()}% · fat ${(f / total * 100).roundToInt()}% · carbs ${(c / total * 100).roundToInt()}% of calories"
+                        }
                         SwitchableChartCard(
                             "Macro balance", listOf("Average", "Over time"),
                             viewState = analyticsViews, onSetView = viewModel::setView,
+                            highlight = highlight == "macros",
+                            subtitle = macroLine,
                             spotlight = spotlight, onToggleSpotlight = viewModel::toggleSpotlight,
                             trailing = { LifetimePill(allTime) { viewModel.toggleLifetime("macros") } }
                         ) { v ->
@@ -638,9 +787,18 @@ fun AnalyticsScreen(
                     // ---- Vitamins & minerals (deficiency / proficiency) ----
                     "micros" -> item {
                         val allTime = "micros" in lifetime
+                        val low = if (allTime) lowMicros(lifetimeMicros, lifetimeRows.size) else lowMicros(microsTotals, weekRows.size)
+                        val hasMicros = if (allTime) lifetimeMicros != null && lifetimeRows.isNotEmpty() else microsTotals != null && weekRows.isNotEmpty()
                         ChartCard(
                             "Vitamins & minerals",
-                            if (allTime) "All-time daily average" else "Daily average vs target",
+                            when {
+                                !hasMicros -> ""
+                                low.isEmpty() -> "Most essentials covered"
+                                else -> "Low on " + low.take(2).joinToString(" and ") { it.replaceFirstChar { c -> c.lowercase() }.replace(Regex("^vitamin (.*)")) { m -> "vitamin " + m.groupValues[1].uppercase() } }
+                            },
+                            highlight = highlight == "micros",
+                            info = if (allTime) "Your all-time daily average of each vitamin and mineral, against an adult's daily target."
+                            else "Your daily average of each vitamin and mineral over the days you logged, against an adult's daily target.",
                             spotlight = spotlight, onToggleSpotlight = viewModel::toggleSpotlight,
                             trailing = { LifetimePill(allTime) { viewModel.toggleLifetime("micros") } }
                         ) {
@@ -652,7 +810,14 @@ fun AnalyticsScreen(
                     // ---- Activity (steps + total burned) ----
                     "activity" -> item {
                         androidx.compose.runtime.CompositionLocalProvider(com.fitpal.app.ui.component.LocalChartScale provides widget.chartScale) {
-                        ChartCard("Activity", "Steps and total calories burned", highlight = highlight == "activity", spotlight = spotlight, onToggleSpotlight = viewModel::toggleSpotlight) {
+                        val walked = weekDates.mapNotNull { d -> stepMap[d.format(iso)]?.takeIf { it > 0f }?.let { d to it } }
+                        val activityLine = if (walked.isEmpty()) "" else
+                            "Avg ${"%,d".format((walked.sumOf { it.second.toDouble() } / walked.size).roundToInt())} steps · most on " +
+                                walked.maxBy { it.second }.first.dayOfWeek.getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.getDefault())
+                        ChartCard(
+                            "Activity", activityLine, highlight = highlight == "activity", spotlight = spotlight, onToggleSpotlight = viewModel::toggleSpotlight,
+                            info = "Your steps each day, and everything you burned on top of resting: steps plus logged workouts."
+                        ) {
                             Text("Steps", style = MaterialTheme.typography.labelMedium, color = CreamMuted)
                             Spacer(Modifier.height(4.dp))
                             if (enough(stepSeries)) {
@@ -671,7 +836,18 @@ fun AnalyticsScreen(
                     // ---- Water ----
                     "water" -> item {
                         androidx.compose.runtime.CompositionLocalProvider(com.fitpal.app.ui.component.LocalChartScale provides widget.chartScale) {
-                        SwitchableChartCard("Water", listOf("Total", "By source"), viewState = analyticsViews, onSetView = viewModel::setView, spotlight = spotlight, onToggleSpotlight = viewModel::toggleSpotlight) { v ->
+                        val waterDays = elapsedKeys.mapNotNull { waterMap[it]?.takeIf { ml -> ml > 0f } }
+                        val waterLine = if (waterDays.isEmpty() || waterGoal <= 0) "" else {
+                            val pct = (waterDays.average() / waterGoal * 100).roundToInt()
+                            val short = waterDays.count { it < waterGoal }
+                            "$pct% of your goal on average · ${if (short == 0) "no days" else if (short == 1) "1 day" else "$short days"} short"
+                        }
+                        SwitchableChartCard(
+                            "Water", listOf("Total", "By source"), viewState = analyticsViews, onSetView = viewModel::setView,
+                            highlight = highlight == "water", spotlight = spotlight, onToggleSpotlight = viewModel::toggleSpotlight,
+                            subtitle = waterLine,
+                            info = "Water from drinks and from the food you ate, against your daily water goal."
+                        ) { v ->
                             if (v == 0) {
                                 if (enough(waterSeries)) {
                                     TrendChart(values = waterSeries, accent = AccentTrends, startLabel = startLbl, endLabel = endLbl)
@@ -734,7 +910,16 @@ fun AnalyticsScreen(
                                 Column {
                                     Text("Weight", style = MaterialTheme.typography.titleMedium, color = Cream)
                                     Text(
-                                        text = latestWeight?.let { w -> "Last logged ${runCatching { LocalDate.parse(w.date).format(dayMonth) }.getOrDefault(w.date)}" } ?: "No weigh-ins yet",
+                                        text = when {
+                                            latestWeight == null -> "No weigh-ins yet"
+                                            weightDelta != null && "weight" !in lifetime -> {
+                                                val track = com.fitpal.app.domain.WeightTrend.changeIsOnTrack(weightDelta, fitnessGoal)
+                                                (if (weightDelta > 0) "+" else if (weightDelta < 0) "−" else "") +
+                                                    "%.1f kg this ${if (weekWord) "week" else "30 days"}".format(kotlin.math.abs(weightDelta)) +
+                                                    when (track) { true -> " · on pace for your goal"; false -> " · off pace for your goal"; null -> "" }
+                                            }
+                                            else -> "Last logged ${runCatching { LocalDate.parse(latestWeight!!.date).format(dayMonth) }.getOrDefault(latestWeight!!.date)}"
+                                        },
                                         style = MaterialTheme.typography.bodySmall, color = CreamMuted
                                     )
                                 }
@@ -858,6 +1043,65 @@ fun AnalyticsScreen(
                         }
                     }
 
+                    // ---- Caffeine (Habits): each day against the daily limit ----
+                    "caffeine" -> item {
+                        val limit = caffeineSettings.dailyLimitMg.takeIf { it > 0 }
+                        val values = weekDates.map { d -> if (d.isAfter(today)) null else caffeineByDay[d.format(iso)] ?: 0f }
+                        val had = elapsedKeys.mapNotNull { caffeineByDay[it] }
+                        val over = if (limit == null) 0 else had.count { it > limit }
+                        ChartCard(
+                            "Caffeine",
+                            if (had.isEmpty()) "None logged" else buildString {
+                                append("Avg ${(had.sum() / elapsedDates.size.coerceAtLeast(1)).roundToInt()} mg a day")
+                                if (limit != null) append(" · ${if (over == 0) "never" else if (over == 1) "1 day" else "$over days"} over your limit")
+                            },
+                            highlight = highlight == "caffeine",
+                            info = "Caffeine from everything you logged each day, against your daily limit (Settings → Caffeine).",
+                            spotlight = spotlight, onToggleSpotlight = viewModel::toggleSpotlight,
+                            onClick = { onOpenCaffeine((if (periodEnd.isAfter(today)) today else periodEnd).toString()) }
+                        ) {
+                            LimitBars(
+                                dates = weekDates, values = values, limit = limit?.toFloat(),
+                                color = com.fitpal.app.ui.theme.CaffeineColor, unit = "mg", height = 130.dp,
+                                onDay = { d -> onOpenCaffeine(d.toString()) }
+                            )
+                        }
+                    }
+
+                    // ---- Food limits (Habits): each limit that's on, its days against its cap ----
+                    "limits" -> item {
+                        val overall = enabledLimits.sumOf { rule ->
+                            elapsedKeys.count { (limitKcalByDay[rule.kind]?.get(it) ?: 0f) > rule.dailyLimitKcal }
+                        }
+                        ChartCard(
+                            "Food limits",
+                            if (overall == 0) "Within every cap" else "Over a cap ${if (overall == 1) "once" else "$overall times"}",
+                            highlight = highlight == "limits",
+                            info = "The kcal from each food limit's foods per day — only the part of a dish that counts — against its cap.",
+                            spotlight = spotlight, onToggleSpotlight = viewModel::toggleSpotlight,
+                            onClick = { onOpenLimits((if (periodEnd.isAfter(today)) today else periodEnd).toString(), null) }
+                        ) {
+                            enabledLimits.forEach { rule ->
+                                val byDay = limitKcalByDay[rule.kind].orEmpty()
+                                LimitRow(
+                                    icon = com.fitpal.app.ui.component.ruleIcon(rule.kind),
+                                    name = com.fitpal.app.ui.component.ruleShortName(rule.kind),
+                                    color = com.fitpal.app.ui.component.ruleColor(rule.kind),
+                                    overDays = elapsedKeys.count { (byDay[it] ?: 0f) > rule.dailyLimitKcal },
+                                    onOpen = { onOpenLimits((if (periodEnd.isAfter(today)) today else periodEnd).toString(), rule.kind.id) }
+                                ) {
+                                    LimitBars(
+                                        dates = weekDates,
+                                        values = weekDates.map { d -> if (d.isAfter(today)) null else byDay[d.format(iso)] ?: 0f },
+                                        limit = rule.dailyLimitKcal.toFloat().takeIf { it > 0f },
+                                        color = com.fitpal.app.ui.component.ruleColor(rule.kind), unit = "kcal", height = 90.dp,
+                                        onDay = { d -> onOpenLimits(d.toString(), rule.kind.id) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     // ---- AI reviews ----
                     "ai" -> {
                         item {
@@ -869,6 +1113,18 @@ fun AnalyticsScreen(
                     }
                 }
             }
+
+            // The tiles (off unless picked), then the four sections in their fixed order — each with
+            // its cards in the user's order, folded away when collapsed — then the AI reviews.
+            tilesCard?.let { renderCard(it) }
+            sectionCards.forEach { (sec, cards) ->
+                val (id, title) = sec
+                item {
+                    AnalyticsSectionHeader(title, sectionSummary(id), collapsed = id in collapsed) { viewModel.toggleSection(id) }
+                }
+                if (id !in collapsed) cards.forEach { renderCard(it) }
+            }
+            tailCards.forEach { renderCard(it) }
         }
     }
 
@@ -927,1139 +1183,4 @@ fun AnalyticsScreen(
             onDismiss = { selectedFastingDay = null }
         )
     }
-}
-
-// ======================== PIECES ========================
-
-/** A fading accent border used to flag a widget after the user jumps to it. */
-@Composable
-private fun highlightBorder(active: Boolean): Modifier {
-    val alpha = remember { Animatable(0f) }
-    LaunchedEffect(active) {
-        if (active) {
-            alpha.snapTo(1f)
-            alpha.animateTo(0f, animationSpec = tween(1200))
-        }
-    }
-    return if (alpha.value > 0f) Modifier.border(2.dp, AccentTrends.copy(alpha = alpha.value), RoundedCornerShape(26.dp)) else Modifier
-}
-
-/**
- * The card's base surface. When [spotlit] (the user long-pressed it) it switches to the
- * warm gold palette from the home screen — a gold gradient fill and bright gold ring —
- * so the widgets you care about clearly stand out against the blue analytics backdrop.
- */
-@Composable
-private fun Modifier.cardSurface(spotlit: Boolean, shape: RoundedCornerShape = RoundedCornerShape(26.dp)): Modifier =
-    if (spotlit) this
-        .clip(shape)
-        .background(Brush.verticalGradient(listOf(Gold.copy(alpha = 0.30f), Gold.copy(alpha = 0.10f))))
-        .border(1.5.dp, GoldLight.copy(alpha = 0.9f), shape)
-    else this.glass(shape)
-
-@Composable
-private fun ChartCard(
-    title: String,
-    subtitle: String,
-    highlight: Boolean = false,
-    spotlight: Set<String> = emptySet(),
-    onToggleSpotlight: (String) -> Unit = {},
-    /** Tap action (e.g. open an explainer popup); defaults to nothing. Long-press still spotlights. */
-    onClick: () -> Unit = {},
-    /** Optional control parked at the end of the header row (e.g. the Lifetime pill). */
-    trailing: (@Composable () -> Unit)? = null,
-    content: @Composable () -> Unit
-) {
-    Column(
-        modifier = Modifier.fillMaxWidth()
-            .cardSurface(title in spotlight)
-            .then(highlightBorder(highlight))
-            .combinedClickable(onClick = onClick, onLongClick = { onToggleSpotlight(title) })
-            .padding(16.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Bottom
-        ) {
-            // The title takes priority and never wraps; the subtitle yields and ellipsises if space is tight.
-            Text(
-                title, style = MaterialTheme.typography.titleMedium, color = Cream,
-                maxLines = 1, overflow = TextOverflow.Ellipsis
-            )
-            if (subtitle.isNotEmpty()) {
-                Text(
-                    subtitle, style = MaterialTheme.typography.bodySmall, color = CreamMuted,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.End,
-                    modifier = Modifier.weight(1f).padding(start = 12.dp)
-                )
-            }
-            if (trailing != null) {
-                Spacer(Modifier.width(10.dp))
-                trailing()
-            }
-        }
-        Spacer(Modifier.height(10.dp))
-        content()
-    }
-}
-
-/**
- * The "Lifetime" switch on the weight / macro / micronutrient cards: off = the period you're
- * viewing, on = everything since your very first entry. It swallows the tap so it doesn't also
- * flip the card's view or trigger the card's own click.
- */
-@Composable
-private fun LifetimePill(active: Boolean, onToggle: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(50))
-            .background(if (active) AccentTrends.copy(alpha = 0.22f) else com.fitpal.app.ui.theme.filmColor(0.07f))
-            .clickable(onClick = onToggle)
-            .padding(horizontal = 10.dp, vertical = 5.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        Icon(
-            Icons.Default.AllInclusive,
-            contentDescription = if (active) "Show the viewed period" else "Show all time",
-            tint = if (active) AccentTrends else CreamMuted,
-            modifier = Modifier.size(13.dp)
-        )
-        Text(
-            "Lifetime",
-            style = MaterialTheme.typography.labelSmall,
-            color = if (active) AccentTrends else CreamMuted
-        )
-    }
-}
-
-/** A chart card whose content switches between perspectives when tapped. */
-@Composable
-private fun SwitchableChartCard(
-    title: String,
-    views: List<String>,
-    viewState: Map<String, Int> = emptyMap(),
-    onSetView: (String, Int) -> Unit = { _, _ -> },
-    highlight: Boolean = false,
-    spotlight: Set<String> = emptySet(),
-    onToggleSpotlight: (String) -> Unit = {},
-    /** Optional control parked before the view switcher (e.g. the Lifetime pill). */
-    trailing: (@Composable () -> Unit)? = null,
-    content: @Composable (Int) -> Unit
-) {
-    val view = (viewState[title] ?: 0).coerceIn(0, views.size - 1)
-    Column(
-        modifier = Modifier.fillMaxWidth()
-            .cardSurface(title in spotlight)
-            .then(highlightBorder(highlight))
-            .combinedClickable(
-                onClick = { onSetView(title, (view + 1) % views.size) },
-                onLongClick = { onToggleSpotlight(title) }
-            )
-            .padding(16.dp)
-    ) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text(title, style = MaterialTheme.typography.titleMedium, color = Cream, modifier = Modifier.weight(1f, fill = false))
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                trailing?.invoke()
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(views[view], style = MaterialTheme.typography.labelMedium, color = AccentTrends)
-                    Icon(Icons.Default.SwapHoriz, contentDescription = "Switch view", tint = AccentTrends, modifier = Modifier.size(16.dp))
-                }
-            }
-        }
-        Spacer(Modifier.height(10.dp))
-        content(view)
-    }
-}
-
-/** Per-day stacked macro composition (protein/fat/net-carbs/fiber by share of grams). */
-@Composable
-private fun MacroCompositionChart(
-    rows: List<DailyNutritionRow>,
-    dates: List<LocalDate>,
-    labels: List<String> = emptyList(),
-    highlightIndex: Int? = null,
-    onBarClick: ((Int) -> Unit)? = null
-) {
-    val fmt = DateTimeFormatter.ISO_LOCAL_DATE
-    val byDate = rows.associateBy { it.date }
-    val emptyC = com.fitpal.app.ui.theme.filmColor(0.06f)
-    val labelArgb = CreamFaint.toArgb()
-    val highlightArgb = Cream.toArgb()
-    val tapModifier = if (onBarClick != null && dates.isNotEmpty()) {
-        Modifier.pointerInput(dates.size) {
-            detectTapGestures { offset ->
-                val idx = (offset.x / (size.width.toFloat() / dates.size)).toInt().coerceIn(0, dates.size - 1)
-                onBarClick(idx)
-            }
-        }
-    } else Modifier
-    Canvas(modifier = Modifier.fillMaxWidth().height(150.dp).then(tapModifier)) {
-        val chartH = size.height * 0.82f
-        val slot = size.width / dates.size
-        val barW = slot * 0.6f
-        val radius = androidx.compose.ui.geometry.CornerRadius(barW / 2.5f, barW / 2.5f)
-        dates.forEachIndexed { i, d ->
-            val row = byDate[d.format(fmt)]
-            val protein = row?.protein ?: 0f
-            val fat = row?.fat ?: 0f
-            val netCarbs = ((row?.carbs ?: 0f) - (row?.fiber ?: 0f)).coerceAtLeast(0f)
-            val fiber = row?.fiber ?: 0f
-            val total = protein + fat + netCarbs + fiber
-            val x = i * slot + (slot - barW) / 2
-            if (total <= 0f) {
-                drawRoundRect(emptyC, Offset(x, chartH * 0.6f), Size(barW, chartH * 0.4f), cornerRadius = radius)
-            } else {
-                // Clip each day's column to a rounded rect so the whole stacked bar reads as one rounded bar.
-                val path = Path().apply {
-                    addRoundRect(androidx.compose.ui.geometry.RoundRect(x, 0f, x + barW, chartH, radius))
-                }
-                clipPath(path) {
-                    var y = chartH
-                    listOf(protein to ProteinColor, fat to FatColor, netCarbs to CarbColor, fiber to FiberColor).forEach { (g, c) ->
-                        val segH = (g / total) * chartH
-                        drawRect(c, Offset(x, y - segH), Size(barW, segH))
-                        y -= segH
-                    }
-                }
-            }
-            if (i == highlightIndex) {
-                drawCircle(Cream, radius = barW * 0.16f, center = Offset(x + barW / 2f, chartH + 8f))
-            }
-        }
-        // Per-bar day labels when there's room.
-        if (labels.size == dates.size && dates.size <= 16) {
-            val paint = android.graphics.Paint().apply {
-                color = labelArgb; textSize = 22f; isAntiAlias = true
-                textAlign = android.graphics.Paint.Align.CENTER
-            }
-            labels.forEachIndexed { i, lbl ->
-                paint.color = if (i == highlightIndex) highlightArgb else labelArgb
-                drawContext.canvas.nativeCanvas.drawText(lbl, i * slot + slot / 2f, size.height - 2f, paint)
-            }
-        }
-    }
-}
-
-/** RDA reference + averaged daily intake for one micronutrient. */
-private data class MicroStat(val label: String, val avg: Float, val rda: Float, val unit: String)
-
-/**
- * Daily-average intake of each goal micronutrient versus its target, surfaced as the
- * three you're lowest on (to supplement) and the three you're best on. Sodium is a
- * limit, not a goal, so it's called out separately only when it runs high.
- */
-@Composable
-private fun MicronutrientAnalysis(totals: DailyMicros?, loggedDays: Int) {
-    if (totals == null || loggedDays <= 0) {
-        NotEnough()
-        return
-    }
-    val d = loggedDays.toFloat()
-    val goals = listOf(
-        MicroStat("Vitamin A", totals.vitaminA / d, 700f, "mcg"),
-        MicroStat("Vitamin C", totals.vitaminC / d, 75f, "mg"),
-        MicroStat("Vitamin D", totals.vitaminD / d, 15f, "mcg"),
-        MicroStat("Vitamin E", totals.vitaminE / d, 15f, "mg"),
-        MicroStat("Vitamin B6", totals.vitaminB6 / d, 1.3f, "mg"),
-        MicroStat("Vitamin B12", totals.vitaminB12 / d, 2.4f, "mcg"),
-        MicroStat("Folate", totals.folate / d, 400f, "mcg"),
-        MicroStat("Calcium", totals.calcium / d, 1000f, "mg"),
-        MicroStat("Iron", totals.iron / d, 12f, "mg"),
-        MicroStat("Magnesium", totals.magnesium / d, 400f, "mg"),
-        MicroStat("Zinc", totals.zinc / d, 11f, "mg"),
-        MicroStat("Potassium", totals.potassium / d, 3400f, "mg")
-    )
-    val ranked = goals.sortedBy { it.avg / it.rda }
-    val deficient = ranked.take(3)
-    val proficient = ranked.reversed().take(3)
-
-    Text("Lowest — consider topping up", style = MaterialTheme.typography.labelMedium, color = CreamMuted)
-    Spacer(Modifier.height(8.dp))
-    deficient.forEach { MicroRow(it) }
-
-    Spacer(Modifier.height(14.dp))
-    Text("Best covered", style = MaterialTheme.typography.labelMedium, color = CreamMuted)
-    Spacer(Modifier.height(8.dp))
-    proficient.forEach { MicroRow(it) }
-
-    val sodiumAvg = totals.sodium / d
-    if (sodiumAvg > 2300f) {
-        Spacer(Modifier.height(14.dp))
-        Text(
-            "Sodium averaging ${sodiumAvg.toInt()} mg/day — over the 2300 mg limit. Worth cutting back.",
-            style = MaterialTheme.typography.bodySmall,
-            color = ScorePoor
-        )
-    }
-}
-
-@Composable
-private fun MicroRow(stat: MicroStat) {
-    val coverage = if (stat.rda > 0f) stat.avg / stat.rda else 0f
-    val pct = (coverage * 100f).toInt()
-    val color = when {
-        coverage < 0.5f -> ScorePoor
-        coverage < 0.8f -> Gold
-        else -> ScoreFair
-    }
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(stat.label, style = MaterialTheme.typography.bodyMedium, color = Cream, modifier = Modifier.width(86.dp))
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .height(6.dp)
-                .clip(RoundedCornerShape(6.dp))
-                .background(com.fitpal.app.ui.theme.filmColor(0.08f))
-        ) {
-            Box(
-                Modifier
-                    .fillMaxWidth(coverage.coerceIn(0f, 1f))
-                    .height(6.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(color)
-            )
-        }
-        Spacer(Modifier.width(10.dp))
-        Text("$pct%", style = MaterialTheme.typography.bodyMedium, color = color, modifier = Modifier.width(46.dp), textAlign = TextAlign.End)
-    }
-}
-
-@Composable
-private fun LegendDot(color: Color, label: String) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        Box(Modifier.size(9.dp).clip(RoundedCornerShape(3.dp)).background(color))
-        Text(label, style = MaterialTheme.typography.labelSmall, color = CreamMuted)
-    }
-}
-
-@Composable
-private fun TierRow(color: Color, label: String, count: Int) {
-    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(10.dp).clip(RoundedCornerShape(3.dp)).background(color))
-        Spacer(Modifier.width(10.dp))
-        Text(label, style = MaterialTheme.typography.bodyMedium, color = Cream, modifier = Modifier.weight(1f))
-        Text("$count", style = MaterialTheme.typography.bodyMedium, color = Cream)
-    }
-}
-
-@Composable
-private fun LegendRow(color: Color, label: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(14.dp).clip(RoundedCornerShape(4.dp)).background(color))
-        Spacer(Modifier.width(10.dp))
-        Text(label, style = MaterialTheme.typography.bodyMedium, color = Cream)
-    }
-}
-
-@Composable
-private fun StatTile(
-    modifier: Modifier,
-    label: String,
-    value: String,
-    unit: String,
-    accent: Color,
-    spotKey: String,
-    spotlight: Set<String>,
-    onToggleSpotlight: (String) -> Unit,
-    change: PeriodChange? = null,
-    onClick: () -> Unit
-) {
-    Column(
-        modifier = modifier
-            .cardSurface(spotKey in spotlight)
-            .combinedClickable(onClick = onClick, onLongClick = { onToggleSpotlight(spotKey) })
-            .padding(14.dp)
-    ) {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = CreamMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Spacer(Modifier.height(6.dp))
-        Text(value, style = MaterialTheme.typography.titleLarge, color = accent, maxLines = 1)
-        Text(unit, style = MaterialTheme.typography.labelSmall, color = CreamFaint, maxLines = 1)
-        change?.let {
-            Spacer(Modifier.height(4.dp))
-            PeriodChangeText(it)
-        }
-    }
-}
-
-/** How a number moved against the previous period, as one short line ("↑ 8% vs last week"). */
-private data class PeriodChange(val text: String, val color: Color)
-
-/**
- * [current] vs [previous] as a percentage change, or null when there's nothing fair to compare.
- * [higherIsBetter] colours an improvement green; null (or a move the wrong way) stays quiet — a change
- * line informs, it doesn't scold.
- */
-private fun percentChange(current: Float?, previous: Float?, previousLabel: String, higherIsBetter: Boolean?): PeriodChange? {
-    if (current == null || previous == null || previous <= 0f) return null
-    val pct = ((current - previous) / previous * 100f).roundToInt()
-    if (pct == 0) return PeriodChange("Same as $previousLabel", CreamFaint)
-    val improved = higherIsBetter != null && (pct > 0) == higherIsBetter
-    return PeriodChange(
-        "${if (pct > 0) "↑" else "↓"} ${kotlin.math.abs(pct)}% vs $previousLabel",
-        if (improved) ScoreFair else CreamFaint
-    )
-}
-
-@Composable
-private fun PeriodChangeText(change: PeriodChange) {
-    Text(change.text, style = MaterialTheme.typography.labelSmall, color = change.color, maxLines = 1, overflow = TextOverflow.Ellipsis)
-}
-
-/** Water that came from food: the water colour, lighter — still water, not a different feature. */
-private val WaterFromFood: Color get() = AccentTrends.copy(alpha = 0.55f)
-
-/**
- * A compact tile merging the average balance score with a mini logged-days heatmap — sits in the
- * summary grid where "Avg score" used to. Each tiny square is a day, tappable to open its details.
- */
-@Composable
-private fun LoggedScoreTile(
-    modifier: Modifier,
-    dates: List<LocalDate>,
-    colorFor: (LocalDate) -> Color?,
-    avgScore: Int?,
-    spotlight: Set<String>,
-    onToggleSpotlight: (String) -> Unit,
-    selected: LocalDate? = null,
-    onDayClick: (LocalDate) -> Unit
-) {
-    Column(
-        modifier = modifier
-            .cardSurface("tile_score" in spotlight)
-            .combinedClickable(onClick = {}, onLongClick = { onToggleSpotlight("tile_score") })
-            .padding(14.dp)
-    ) {
-        // Header row: title on the left, the average score parked in the free space on the right.
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Logged days", style = MaterialTheme.typography.labelMedium, color = CreamMuted, modifier = Modifier.weight(1f))
-            Text(avgScore?.toString() ?: "—", style = MaterialTheme.typography.titleMedium, color = AccentTrends)
-            Spacer(Modifier.width(3.dp))
-            Text("avg", style = MaterialTheme.typography.labelSmall, color = CreamFaint)
-        }
-        Spacer(Modifier.height(8.dp))
-        // Fixed-height mini heatmap that auto-packs however many days into the same box, so the tile
-        // stays the same height as the other summary tiles whether it's a 7-day week or a 30-day month.
-        MiniHeatmap(
-            modifier = Modifier.fillMaxWidth().height(32.dp),
-            dates = dates,
-            colorFor = colorFor,
-            selected = selected,
-            onDayClick = onDayClick
-        )
-    }
-}
-
-/** The packed grid: columns, square cell size (px) and the centring offset within the [w]×[h] box. */
-private data class HeatGrid(val cols: Int, val cell: Float, val offsetX: Float, val offsetY: Float)
-
-/** Finds the largest square cell (with [gap]) that packs [n] cells into the box, then centres it. */
-private fun heatGrid(w: Float, h: Float, n: Int, gap: Float): HeatGrid {
-    if (n <= 0 || w <= 0f || h <= 0f) return HeatGrid(1, 0f, 0f, 0f)
-    var bestCols = 1
-    var bestCell = 0f
-    for (cols in 1..n) {
-        val rows = (n + cols - 1) / cols
-        val cell = minOf((w - (cols - 1) * gap) / cols, (h - (rows - 1) * gap) / rows)
-        if (cell > bestCell) { bestCell = cell; bestCols = cols }
-    }
-    val rows = (n + bestCols - 1) / bestCols
-    val gridW = bestCols * bestCell + (bestCols - 1) * gap
-    val gridH = rows * bestCell + (rows - 1) * gap
-    return HeatGrid(bestCols, bestCell, ((w - gridW) / 2f).coerceAtLeast(0f), ((h - gridH) / 2f).coerceAtLeast(0f))
-}
-
-/** A Canvas mini-heatmap that fills a fixed box, auto-sizing + centring the day squares; tappable. */
-@Composable
-private fun MiniHeatmap(
-    modifier: Modifier,
-    dates: List<LocalDate>,
-    colorFor: (LocalDate) -> Color?,
-    selected: LocalDate? = null,
-    onDayClick: (LocalDate) -> Unit
-) {
-    val empty = com.fitpal.app.ui.theme.filmColor(0.06f)
-    val gap = 4f
-    // The tapped square gets a ring that springs open, matching the big heatmap's pop.
-    val selectedIndex = dates.indexOfFirst { it == selected }.takeIf { it >= 0 }
-    val ring = remember { Animatable(0f) }
-    LaunchedEffect(selectedIndex) {
-        if (selectedIndex != null) {
-            ring.snapTo(0f)
-            ring.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium))
-        } else {
-            ring.animateTo(0f, tween(200))
-        }
-    }
-    Canvas(
-        modifier = modifier.pointerInput(dates.size) {
-            detectTapGestures { offset ->
-                val g = heatGrid(size.width.toFloat(), size.height.toFloat(), dates.size, gap)
-                if (g.cell <= 0f) return@detectTapGestures
-                val col = ((offset.x - g.offsetX) / (g.cell + gap)).toInt()
-                val row = ((offset.y - g.offsetY) / (g.cell + gap)).toInt()
-                val idx = row * g.cols + col
-                if (col in 0 until g.cols && idx in dates.indices) onDayClick(dates[idx])
-            }
-        }
-    ) {
-        val g = heatGrid(size.width, size.height, dates.size, gap)
-        if (g.cell <= 0f) return@Canvas
-        val r = androidx.compose.ui.geometry.CornerRadius(g.cell / 4f, g.cell / 4f)
-        dates.forEachIndexed { i, d ->
-            val x = g.offsetX + (i % g.cols) * (g.cell + gap)
-            val y = g.offsetY + (i / g.cols) * (g.cell + gap)
-            drawRoundRect(colorFor(d) ?: empty, topLeft = Offset(x, y), size = Size(g.cell, g.cell), cornerRadius = r)
-        }
-        val lift = ring.value
-        if (selectedIndex != null && lift > 0.01f) {
-            val x = g.offsetX + (selectedIndex % g.cols) * (g.cell + gap)
-            val y = g.offsetY + (selectedIndex / g.cols) * (g.cell + gap)
-            val grow = g.cell * 0.35f * lift
-            val side = g.cell + grow
-            drawRoundRect(
-                color = Cream.copy(alpha = lift.coerceIn(0f, 1f)),
-                topLeft = Offset(x - grow / 2f, y - grow / 2f),
-                size = Size(side, side),
-                cornerRadius = androidx.compose.ui.geometry.CornerRadius(side / 4f, side / 4f),
-                style = Stroke(width = 2.5f)
-            )
-        }
-    }
-}
-
-/** Calendar heatmap of the range, each day coloured by its balance-score tier (faint if not logged). */
-@Composable
-private fun LoggedHeatmap(
-    dates: List<LocalDate>,
-    colorFor: (LocalDate) -> Color?,
-    selected: LocalDate? = null,
-    onDayClick: (LocalDate) -> Unit
-) {
-    if (dates.isEmpty()) return
-    if (dates.size <= 7) {
-        // Short range: one straight row, oldest → newest, newest on the right.
-        val cell = 26.dp
-        val scroll = rememberScrollState()
-        LaunchedEffect(dates.size) { scroll.scrollTo(scroll.maxValue) }
-        Row(
-            modifier = Modifier.fillMaxWidth().horizontalScroll(scroll),
-            horizontalArrangement = Arrangement.spacedBy(5.dp)
-        ) {
-            dates.forEach { d ->
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    HeatCell(cell, colorFor(d), selected = d == selected) { onDayClick(d) }
-                    Spacer(Modifier.height(3.dp))
-                    Text(
-                        d.dayOfMonth.toString(),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (d == selected) Cream else CreamFaint
-                    )
-                }
-            }
-        }
-    } else {
-        // Longer range: a compact month-style grid, weekday-aligned (Mon first), small squares.
-        val cell = 20.dp
-        val startOffset = dates.first().dayOfWeek.value - 1
-        val cells: List<LocalDate?> = List(startOffset) { null } + dates
-        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                listOf("M", "T", "W", "T", "F", "S", "S").forEach {
-                    Text(it, style = MaterialTheme.typography.labelSmall, color = CreamFaint, textAlign = TextAlign.Center, modifier = Modifier.width(cell))
-                }
-            }
-            cells.chunked(7).forEach { week ->
-                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    week.forEach { d ->
-                        if (d == null) Box(Modifier.size(cell))
-                        else HeatCell(cell, colorFor(d), selected = d == selected) { onDayClick(d) }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/**
- * One day square. When it's the day you just tapped it springs out and takes a bright ring —
- * so the details that pop up are visibly tied to the square you actually touched.
- */
-@Composable
-private fun HeatCell(
-    size: androidx.compose.ui.unit.Dp,
-    color: Color?,
-    selected: Boolean = false,
-    onClick: () -> Unit
-) {
-    val pop = remember { Animatable(0f) }
-    LaunchedEffect(selected) {
-        if (selected) {
-            pop.snapTo(0f)
-            pop.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium))
-        } else {
-            pop.animateTo(0f, tween(200))
-        }
-    }
-    val shape = RoundedCornerShape(8.dp)
-    val lift = pop.value
-    Box(
-        Modifier
-            .size(size)
-            .scale(1f + 0.18f * lift)
-            .clip(shape)
-            .background(color ?: com.fitpal.app.ui.theme.filmColor(0.05f))
-            .then(if (lift > 0.01f) Modifier.border(2.dp, Cream.copy(alpha = lift.coerceIn(0f, 1f)), shape) else Modifier)
-            .clickable(onClick = onClick)
-    )
-}
-
-/**
- * What a fasting-heatmap square means: the day's eating window and fast length, whether you kept or
- * broke the fast, and — if you broke it — when, and how much of the fast was still left. Keeps the
- * same "jump to this day" action as the score popup.
- */
-@Composable
-private fun FastingDayDialog(
-    day: LocalDate,
-    schedule: com.fitpal.app.domain.model.FastingSchedule,
-    mealMinutes: List<Int>?,
-    graceMinute: Int?,
-    /** A meal was logged with "log anyway" during the fast that day (no pass, no photo proof). */
-    loggedDuringFast: Boolean,
-    onJump: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    val breaks = mealMinutes?.filter { !schedule.isEatingAt(it) }.orEmpty()
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(day.format(DateTimeFormatter.ofPattern("EEE, d MMM"))) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    "Eating window ${fastingClockLabel(schedule.eatStartMin)} – ${fastingClockLabel(schedule.eatEndMin)}",
-                    style = MaterialTheme.typography.bodyMedium, color = Cream
-                )
-                Text(
-                    "${fastingCountdownLabel(schedule.fastingLengthMin())} fast · ${fastingCountdownLabel(schedule.eatingLengthMin())} eating window",
-                    style = MaterialTheme.typography.bodySmall, color = CreamMuted
-                )
-                when {
-                    graceMinute != null -> Text(
-                        "You logged this late and marked it eaten at ${fastingClockLabel(graceMinute)}, inside your window — so it still counts as kept.",
-                        style = MaterialTheme.typography.bodyMedium, color = AccentGarden
-                    )
-                    mealMinutes.isNullOrEmpty() -> Text(
-                        "No food logged this day, so there's nothing to check.",
-                        style = MaterialTheme.typography.bodyMedium, color = CreamMuted
-                    )
-                    // Logged during the fast with "log anyway" — broken for good, even if that meal's
-                    // time was moved into the window afterwards (only a pass or a photo can save it).
-                    loggedDuringFast && breaks.isEmpty() -> Text(
-                        "A meal was logged during your fast without using a pass, so this day counts as broken — " +
-                            "even though its time was later moved into your window.",
-                        style = MaterialTheme.typography.bodyMedium, color = ScorePoor
-                    )
-                    breaks.isEmpty() -> Text(
-                        "You kept your fast — every meal was inside your eating window.",
-                        style = MaterialTheme.typography.bodyMedium, color = AccentGarden
-                    )
-                    else -> {
-                        val first = breaks.min()
-                        val s = schedule.stateAt(first)
-                        // Frame the slip against whichever window edge is nearer: just after the
-                        // window closed reads as a small overrun ("1h after it closed"), while a
-                        // pre-dawn meal reads as time before it reopens ("4h before it opened").
-                        val day = com.fitpal.app.domain.model.FastingSchedule.DAY
-                        val sinceClose = ((first - schedule.eatEndMin) % day + day) % day
-                        val untilOpen = s.minutesLeftInPhase
-                        Text(
-                            "You broke your fast at ${fastingClockLabel(first)}.",
-                            style = MaterialTheme.typography.bodyMedium, color = ScorePoor
-                        )
-                        Text(
-                            text = if (sinceClose <= untilOpen)
-                                "That was ${fastingCountdownLabel(sinceClose)} after your window closed at ${fastingClockLabel(schedule.eatEndMin)}."
-                            else
-                                "That was ${fastingCountdownLabel(untilOpen)} before your window opened at ${fastingClockLabel(s.nextChangeMin)}.",
-                            style = MaterialTheme.typography.bodySmall, color = CreamMuted
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onJump) { Text("Jump to this day") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } }
-    )
-}
-
-/** What shaped a single day's score: its macros/calories vs targets, opened by tapping a day. */
-@Composable
-private fun DayScoreDialog(
-    day: LocalDate,
-    row: DailyNutritionRow?,
-    score: Int?,
-    calGoal: Int,
-    proteinTarget: Float,
-    fatTarget: Float,
-    carbTarget: Float,
-    fiberTarget: Float,
-    onJump: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    val dateLabel = day.format(DateTimeFormatter.ofPattern("EEEE, d MMM"))
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onJump) { Text("Jump to this day") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
-        title = { Text(dateLabel) },
-        text = {
-            if (row == null || (row.calories <= 0f && row.protein <= 0f)) {
-                Text("Nothing logged this day.", color = CreamMuted)
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (score != null) {
-                        val tier = DayScore.tierOf(score)
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("$score", style = MaterialTheme.typography.headlineMedium, color = scoreColor(tier))
-                            Spacer(Modifier.width(8.dp))
-                            Text("/ 100 · ${tier.label}", style = MaterialTheme.typography.bodyMedium, color = CreamMuted)
-                        }
-                    }
-                    Text("What shaped the score:", style = MaterialTheme.typography.labelMedium, color = CreamMuted)
-                    DayFactorRow("Calories", row.calories, calGoal.toFloat(), "kcal", overIsBad = true)
-                    DayFactorRow("Protein", row.protein, proteinTarget, "g", overIsBad = false)
-                    DayFactorRow("Fat", row.fat, fatTarget, "g", overIsBad = true)
-                    DayFactorRow("Carbs", row.carbs, carbTarget, "g", overIsBad = true)
-                    DayFactorRow("Fiber", row.fiber, fiberTarget, "g", overIsBad = false)
-                }
-            }
-        }
-    )
-}
-
-@Composable
-private fun DayFactorRow(label: String, actual: Float, target: Float, unit: String, overIsBad: Boolean) {
-    val over = target > 0f && actual > target
-    val color = when {
-        target <= 0f -> Cream
-        overIsBad && over -> ScorePoor
-        !overIsBad && actual >= target -> ScoreFair
-        else -> Cream
-    }
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, style = MaterialTheme.typography.bodyMedium, color = CreamMuted)
-        Text(
-            text = "${actual.toInt()}${if (target > 0f) " / ${target.toInt()}" else ""} $unit",
-            style = MaterialTheme.typography.bodyMedium, color = color
-        )
-    }
-}
-
-@Composable
-private fun WaterChip(color: Color, label: String, value: String) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        Box(Modifier.size(10.dp).clip(RoundedCornerShape(3.dp)).background(color))
-        Column {
-            Text(label, style = MaterialTheme.typography.labelSmall, color = CreamMuted)
-            Text(value, style = MaterialTheme.typography.bodySmall, color = Cream)
-        }
-    }
-}
-
-@Composable
-private fun NotEnough() {
-    Text(
-        "Not enough data yet",
-        style = MaterialTheme.typography.bodySmall,
-        color = CreamFaint,
-        modifier = Modifier.padding(vertical = 6.dp)
-    )
-}
-
-@Composable
-private fun AiReviewCard(
-    title: String,
-    subtitle: String,
-    spotKey: String,
-    spotlight: Set<String>,
-    onToggleSpotlight: (String) -> Unit,
-    highlight: Boolean = false,
-    onOpen: () -> Unit
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth()
-            .cardSurface(spotKey in spotlight)
-            .then(highlightBorder(highlight))
-            .combinedClickable(onClick = onOpen, onLongClick = { onToggleSpotlight(spotKey) })
-            .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, color = Cream)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = CreamMuted)
-        }
-        Text("›", style = MaterialTheme.typography.headlineSmall, color = CreamMuted)
-    }
-}
-
-/**
- * "How is the maintenance estimate worked out?" — shows the same numbers the estimate is built from
- * (average intake, the measured weight trend, and the 7,700-kcal-per-kg conversion) so the headline
- * figure isn't a black box. The two source rows drill into the full day-by-day lists, and the
- * reconciliation block explains why this (weight-based) number can differ from the Calorie-balance
- * screen's formula-based burn — the "why didn't the deficit show on the scale?" question.
- */
-@Composable
-private fun MaintenanceDialog(
-    estimate: com.fitpal.app.domain.WeightTrend.MaintenanceEstimate,
-    calGoal: Int,
-    theoreticalBurnPerDay: Float,
-    onShowIntake: () -> Unit,
-    onShowWeight: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    val rate = estimate.ratePerWeekKg
-    val steady = kotlin.math.abs(rate) < 0.05f
-    val losing = rate < 0f
-    val adjust = kotlin.math.abs(estimate.dailyEnergyBalanceKcal)
-    val formulaBurn = Math.round(theoreticalBurnPerDay)
-    // How much the Calorie-balance screen's burn estimate exceeds what the scale implies, per day —
-    // and the phantom "deficit" that difference invents over all the eaten days.
-    val gap = formulaBurn - estimate.maintenanceKcal
-    val phantomKcal = gap * estimate.loggedDays
-    val phantomKg = kotlin.math.abs(phantomKcal) / 7700f
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Got it") } },
-        title = { Text("How this is worked out") },
-        text = {
-            Column(
-                modifier = Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    "≈ ${"%,d".format(estimate.maintenanceKcal)} kcal/day",
-                    style = MaterialTheme.typography.headlineSmall, color = GoldLight
-                )
-                Text(
-                    "What your logged food and your weight change together imply you burn on an average " +
-                        "day. It's an insight only — it never changes your calorie target. Tap a row to see " +
-                        "every day behind it.",
-                    style = MaterialTheme.typography.bodySmall, color = CreamMuted
-                )
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    MaintenanceRow(
-                        "Average intake",
-                        "${"%,d".format(estimate.avgIntakeKcal)} kcal",
-                        "over ${estimate.loggedDays} eaten days",
-                        onClick = onShowIntake
-                    )
-                    MaintenanceRow(
-                        "Weight trend",
-                        if (steady) "holding steady" else "${"%.1f".format(kotlin.math.abs(rate))} kg/week ${if (losing) "down" else "up"}",
-                        "tap for every weigh-in",
-                        onClick = onShowWeight
-                    )
-                    if (!steady) {
-                        MaintenanceRow(
-                            if (losing) "You're eating under" else "You're eating over",
-                            "≈ ${"%,d".format(adjust)} kcal/day",
-                            if (losing) "so real burn is higher than intake" else "so real burn is lower than intake"
-                        )
-                    }
-                }
-                Text(
-                    buildString {
-                        append("Maintenance ≈ ${"%,d".format(estimate.avgIntakeKcal)}")
-                        if (!steady) append(if (losing) " + ${"%,d".format(adjust)}" else " − ${"%,d".format(adjust)}")
-                        append(" ≈ ${"%,d".format(estimate.maintenanceKcal)} kcal/day")
-                    },
-                    style = MaterialTheme.typography.bodyMedium, color = Cream
-                )
-                if (calGoal > 0) {
-                    Text(
-                        "For comparison, your current target is ${"%,d".format(calGoal)} kcal/day.",
-                        style = MaterialTheme.typography.bodySmall, color = CreamMuted
-                    )
-                }
-
-                // ---- Reconciliation: why the scale can disagree with the Calorie-balance deficit ----
-                if (formulaBurn > 0) {
-                    Box(Modifier.fillMaxWidth().height(1.dp).background(com.fitpal.app.ui.theme.filmColor(0.08f)))
-                    Text("Why a deficit can lag the scale", style = MaterialTheme.typography.titleSmall, color = Cream)
-                    Text(
-                        buildString {
-                            append("The Calorie-balance screen weighs your food against a formula estimate of your ")
-                            append("burn (~${"%,d".format(formulaBurn)} kcal/day: resting + steps + workouts). This number ")
-                            append("uses your real weight instead, putting your true burn near ${"%,d".format(estimate.maintenanceKcal)}. ")
-                            when {
-                                gap >= 40 -> append(
-                                    "The formula runs about ${"%,d".format(gap)} kcal/day HIGH for you — so across your " +
-                                    "${estimate.loggedDays} eaten days it invents roughly ${"%,d".format(phantomKcal)} kcal of " +
-                                    "\"deficit\" (~${"%.1f".format(phantomKg)} kg) that was never really there. That's why the " +
-                                    "scale didn't drop what the balance screen implied. "
-                                )
-                                gap <= -40 -> append(
-                                    "The formula runs about ${"%,d".format(-gap)} kcal/day LOW for you, so the scale may be " +
-                                    "moving a little faster than the balance screen suggests. "
-                                )
-                                else -> append("The two line up closely for you. ")
-                            }
-                            append("Food logging usually undercounts a little, the formula is a population average, and " +
-                                "short-term water — plus some muscle when you're barely training — blur week-to-week weight. " +
-                                "Judged over weeks, this weight-based number is the one to trust.")
-                        },
-                        style = MaterialTheme.typography.bodySmall, color = CreamMuted
-                    )
-                }
-
-                Text(
-                    "1 kg of body-weight change is about 7,700 kcal, spread across the week. It's a rough " +
-                        "estimate — it can read high while you're losing quickly, and settles as your weight steadies.",
-                    style = MaterialTheme.typography.labelSmall, color = CreamFaint
-                )
-            }
-        }
-    )
-}
-
-@Composable
-private fun MaintenanceRow(label: String, value: String, note: String?, onClick: (() -> Unit)? = null) {
-    Row(
-        modifier = Modifier.fillMaxWidth()
-            .then(if (onClick != null) Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onClick) else Modifier)
-            .padding(vertical = 2.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(label, style = MaterialTheme.typography.bodyMedium, color = CreamMuted)
-            if (note != null) {
-                Text(note, style = MaterialTheme.typography.labelSmall, color = CreamFaint)
-            }
-        }
-        Spacer(Modifier.width(12.dp))
-        Text(value, style = MaterialTheme.typography.bodyMedium, color = Cream, textAlign = TextAlign.End)
-        if (onClick != null) {
-            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = CreamMuted, modifier = Modifier.size(18.dp))
-        }
-    }
-}
-
-/** A "label … value" line for the detail popups' stat blocks. */
-@Composable
-private fun StatLine(label: String, value: String, valueColor: Color = Cream) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, style = MaterialTheme.typography.bodyMedium, color = CreamMuted)
-        Spacer(Modifier.width(12.dp))
-        Text(value, style = MaterialTheme.typography.bodyMedium, color = valueColor, textAlign = TextAlign.End)
-    }
-}
-
-/**
- * Drill-down from the maintenance popup's "Average intake" row: the full per-day intake behind the
- * average, plus min / max / median / total — so the average is auditable, not a bare number.
- * (Water-only days are excluded — same rule as the average itself.)
- */
-@Composable
-private fun IntakeDetailDialog(
-    days: List<DailyNutritionRow>,
-    average: Int,
-    onBack: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    val fmt = DateTimeFormatter.ofPattern("EEE d MMM ''yy")
-    fun label(isoDate: String) = runCatching { LocalDate.parse(isoDate).format(fmt) }.getOrDefault(isoDate)
-    val kcals = days.map { it.calories }.sorted()
-    val total = kcals.sumOf { it.toDouble() }.toInt()
-    val median = when {
-        kcals.isEmpty() -> 0
-        kcals.size % 2 == 1 -> kcals[kcals.size / 2].toInt()
-        else -> ((kcals[kcals.size / 2 - 1] + kcals[kcals.size / 2]) / 2f).toInt()
-    }
-    val minDay = days.minByOrNull { it.calories }
-    val maxDay = days.maxByOrNull { it.calories }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onBack) { Text("Back") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
-        title = { Text("Average intake") },
-        text = {
-            Column(
-                modifier = Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Text(
-                    "${"%,d".format(average)} kcal/day",
-                    style = MaterialTheme.typography.headlineSmall, color = GoldLight
-                )
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    StatLine("Eaten days", "${days.size}")
-                    StatLine("Total logged", "${"%,d".format(total)} kcal")
-                    StatLine("Average", "${"%,d".format(average)} kcal")
-                    StatLine("Median", "${"%,d".format(median)} kcal")
-                    minDay?.let { StatLine("Lowest", "${"%,d".format(it.calories.toInt())} kcal · ${label(it.date)}", ScoreFair) }
-                    maxDay?.let { StatLine("Highest", "${"%,d".format(it.calories.toInt())} kcal · ${label(it.date)}", ScorePoor) }
-                }
-                Box(Modifier.fillMaxWidth().height(1.dp).background(com.fitpal.app.ui.theme.filmColor(0.08f)))
-                Text("Every eaten day", style = MaterialTheme.typography.labelMedium, color = CreamMuted)
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    days.sortedByDescending { it.date }.forEach { row ->
-                        val color = when (row.date) {
-                            maxDay?.date -> ScorePoor
-                            minDay?.date -> ScoreFair
-                            else -> Cream
-                        }
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(label(row.date), style = MaterialTheme.typography.bodySmall, color = CreamMuted)
-                            Text("${"%,d".format(row.calories.toInt())} kcal", style = MaterialTheme.typography.bodySmall, color = color)
-                        }
-                    }
-                }
-            }
-        }
-    )
-}
-
-/**
- * Drill-down from the maintenance popup's "Weight trend" row: every weigh-in plus start / current /
- * net / min / max, and a plain-language note on how the weekly rate is fit (a line through ALL
- * weigh-ins, so a single water-heavy morning can't swing it) — the reasoning the user asked to see.
- */
-@Composable
-private fun WeightTrendDetailDialog(
-    weights: List<WeightEntryEntity>,
-    ratePerWeekKg: Float,
-    onBack: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    val fmt = DateTimeFormatter.ofPattern("EEE d MMM ''yy")
-    fun label(isoDate: String) = runCatching { LocalDate.parse(isoDate).format(fmt) }.getOrDefault(isoDate)
-    val sorted = weights.sortedBy { it.date }
-    val start = sorted.firstOrNull()
-    val current = sorted.lastOrNull()
-    val minW = sorted.minByOrNull { it.weightKg }
-    val maxW = sorted.maxByOrNull { it.weightKg }
-    val net = (current?.weightKg ?: 0f) - (start?.weightKg ?: 0f)
-    val steady = kotlin.math.abs(ratePerWeekKg) < 0.05f
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onBack) { Text("Back") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
-        title = { Text("Weight trend") },
-        text = {
-            Column(
-                modifier = Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Text(
-                    if (steady) "Holding steady"
-                    else "${"%.2f".format(kotlin.math.abs(ratePerWeekKg))} kg/week ${if (ratePerWeekKg < 0f) "down" else "up"}",
-                    style = MaterialTheme.typography.headlineSmall, color = GoldLight
-                )
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    StatLine("Weigh-ins", "${sorted.size}")
-                    start?.let { StatLine("First", "${"%.1f".format(it.weightKg)} kg · ${label(it.date)}") }
-                    current?.let { StatLine("Latest", "${"%.1f".format(it.weightKg)} kg · ${label(it.date)}") }
-                    StatLine(
-                        "Net change",
-                        "${if (net >= 0f) "+" else "−"}${"%.1f".format(kotlin.math.abs(net))} kg",
-                        if (net > 0.1f) ScorePoor else if (net < -0.1f) ScoreFair else Cream
-                    )
-                    minW?.let { StatLine("Lowest", "${"%.1f".format(it.weightKg)} kg · ${label(it.date)}", ScoreFair) }
-                    maxW?.let { StatLine("Highest", "${"%.1f".format(it.weightKg)} kg · ${label(it.date)}", ScorePoor) }
-                }
-                Text(
-                    "The weekly rate is the slope of a line fit through ALL your weigh-ins, not just the " +
-                        "first and last — so one water-heavy morning can't swing it. Net change is the raw " +
-                        "first-to-latest difference for comparison; the two differ when your weight zig-zagged. " +
-                        "Day-to-day water and glycogen can move the scale ±0.5–1 kg on their own, which is why " +
-                        "the estimate leans on the long trend.",
-                    style = MaterialTheme.typography.bodySmall, color = CreamMuted
-                )
-                Box(Modifier.fillMaxWidth().height(1.dp).background(com.fitpal.app.ui.theme.filmColor(0.08f)))
-                Text("Every weigh-in", style = MaterialTheme.typography.labelMedium, color = CreamMuted)
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    sorted.reversed().forEach { w ->
-                        val color = when (w.date) {
-                            maxW?.date -> ScorePoor
-                            minW?.date -> ScoreFair
-                            else -> Cream
-                        }
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(label(w.date), style = MaterialTheme.typography.bodySmall, color = CreamMuted)
-                            Text("${"%.1f".format(w.weightKg)} kg", style = MaterialTheme.typography.bodySmall, color = color)
-                        }
-                    }
-                }
-            }
-        }
-    )
-}
-
-/**
- * The weight card's change chip: how much weight moved over the period you're viewing (or since your
- * first weigh-in, in Lifetime) — an arrow and the kilos, green when it's heading the way your goal
- * wants, amber when it isn't, muted when it's steady.
- */
-@Composable
-private fun WeightChangeChip(deltaKg: Float, goal: com.fitpal.app.domain.model.FitnessGoal) {
-    val steady = kotlin.math.abs(deltaKg) < 0.05f
-    val color = when (com.fitpal.app.domain.WeightTrend.changeIsOnTrack(deltaKg, goal)) {
-        true -> ScoreFair
-        false -> Gold
-        null -> CreamMuted
-    }
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(50))
-            .background(color.copy(alpha = 0.14f))
-            .padding(horizontal = 8.dp, vertical = 3.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(3.dp)
-    ) {
-        Icon(
-            imageVector = when {
-                steady -> Icons.AutoMirrored.Filled.TrendingFlat
-                deltaKg < 0f -> Icons.AutoMirrored.Filled.TrendingDown
-                else -> Icons.AutoMirrored.Filled.TrendingUp
-            },
-            contentDescription = null,
-            tint = color,
-            modifier = Modifier.size(14.dp)
-        )
-        Text(
-            text = if (steady) "0.0 kg" else (if (deltaKg > 0f) "+" else "−") + "%.1f kg".format(kotlin.math.abs(deltaKg)),
-            style = MaterialTheme.typography.labelMedium,
-            color = color
-        )
-    }
-}
-
-private fun enough(s: List<Float?>): Boolean = s.count { it != null } >= 2
-
-/**
- * The 5-band best→worst colour used *only* by the logged-days widgets (heatmap card + summary tile):
- * blue (best) → green → yellow → orange → red (worst). Kept local so the Home ring and the other
- * score-tier colours keep their gold-based scheme.
- */
-private fun loggedDayColor(score: Int): Color = when {
-    score >= 80 -> LoggedBest
-    score >= 65 -> LoggedGood
-    score >= 50 -> LoggedMid
-    score >= 35 -> LoggedLow
-    else -> LoggedWorst
-}
-
-private fun avgLabel(series: List<Float?>, unit: String): String {
-    val present = series.filterNotNull()
-    if (present.isEmpty()) return ""
-    val avg = present.sum() / present.size
-    return "avg ${avg.toInt()}${if (unit.isEmpty()) "" else " $unit"}/day"
 }

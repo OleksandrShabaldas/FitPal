@@ -63,7 +63,10 @@ fun CustomizeWidgetsScreen(
     val reorderState = rememberReorderableLazyListState(listState) { from, to ->
         val f = from.key as? String
         val t = to.key as? String
-        if (f != null && t != null && cards.any { it.key == f } && cards.any { it.key == t }) viewModel.move(f, t)
+        val from = cards.firstOrNull { it.key == f }
+        val into = cards.firstOrNull { it.key == t }
+        // Analytics' sections are fixed: a card moves only within its own section.
+        if (f != null && t != null && from != null && into != null && from.def.section == into.def.section) viewModel.move(f, t)
     }
 
     GradientBackdrop(theme = BackdropTheme.TODAY) {
@@ -82,7 +85,19 @@ fun CustomizeWidgetsScreen(
                         style = MaterialTheme.typography.bodyMedium, color = CreamMuted
                     )
                 }
-                items(cards, key = { it.key }) { card ->
+                val shown = com.fitpal.app.domain.model.ScreenWidgets.bySection(cards)
+                val titles = com.fitpal.app.domain.model.ScreenWidgets.analyticsSections.toMap()
+                shown.forEachIndexed { i, card ->
+                    val section = card.def.section
+                    if (section != null && shown.getOrNull(i - 1)?.def?.section != section) {
+                        item(key = "section_$section") {
+                            Text(
+                                titles[section] ?: section, style = MaterialTheme.typography.titleMedium, color = Cream,
+                                modifier = Modifier.padding(top = 10.dp)
+                            )
+                        }
+                    }
+                    item(key = card.key) {
                     ReorderableItem(reorderState, key = card.key) { dragging ->
                         CardRow(
                             card = card,
@@ -93,6 +108,7 @@ fun CustomizeWidgetsScreen(
                             onVariant = { viewModel.setVariant(card.key, it) },
                             onPlacement = { viewModel.setPlacement(card.key, it) }
                         )
+                    }
                     }
                 }
                 item(key = "reset") {

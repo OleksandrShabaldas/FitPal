@@ -978,6 +978,31 @@ class SettingsRepository @Inject constructor(
         return obj.toString()
     }
 
+    /**
+     * Once per install: the Analytics summary tiles go off (docs/redesign/07 — the takeaways card
+     * replaced them at the top). They can be switched back on in the layout editor.
+     */
+    fun migrateAnalyticsTilesOff() {
+        if (prefs.getBoolean(KEY_ANALYTICS_TILES_MIGRATED, false)) return
+        val id = com.fitpal.app.domain.model.ScreenWidgets.ANALYTICS
+        _widgetLayouts.value[id]?.takeIf { it.isNotEmpty() }?.let {
+            setWidgetLayout(id, com.fitpal.app.domain.model.ScreenWidgets.migrateAnalyticsTilesOff(it))
+        }
+        prefs.edit().putBoolean(KEY_ANALYTICS_TILES_MIGRATED, true).apply()
+    }
+
+    // --- Analytics sections the user folded away (default: all open) ---
+
+    private val _analyticsCollapsed = MutableStateFlow(
+        prefs.getStringSet(KEY_ANALYTICS_COLLAPSED, emptySet())?.toSet() ?: emptySet()
+    )
+    val analyticsCollapsed: StateFlow<Set<String>> = _analyticsCollapsed
+
+    fun setAnalyticsCollapsed(sections: Set<String>) {
+        prefs.edit().putStringSet(KEY_ANALYTICS_COLLAPSED, sections).apply()
+        _analyticsCollapsed.value = sections
+    }
+
     // --- Analytics: spotlighted widgets + switchable-card view choices ---
     // Persisted so a long-press highlight and the last-picked card mode survive a restart.
 
@@ -1094,6 +1119,8 @@ class SettingsRepository @Inject constructor(
         private const val KEY_HOME_STRIP_BIGGER = "home_strip_bigger"
         private const val KEY_HOME_STRIP_TIP = "home_strip_tip"
         private const val KEY_HOME_STRIP_MIGRATED = "home_strip_migrated"
+        private const val KEY_ANALYTICS_TILES_MIGRATED = "analytics_tiles_off_migrated"
+        private const val KEY_ANALYTICS_COLLAPSED = "analytics_collapsed"
         private const val KEY_APPEARANCE = "appearance"
         private const val KEY_NAV_CONFIG = "nav_config"
 

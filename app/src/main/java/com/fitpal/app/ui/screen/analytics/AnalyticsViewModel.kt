@@ -437,6 +437,54 @@ class AnalyticsViewModel @Inject constructor(
         .map { it?.maintenanceKcal }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
+    // ---- Sections (docs/redesign/07): all open unless the user folded one away ----
+    val collapsed: StateFlow<Set<String>> = settingsRepository.analyticsCollapsed
+
+    fun toggleSection(id: String) {
+        val now = collapsed.value
+        settingsRepository.setAnalyticsCollapsed(if (id in now) now - id else now + id)
+    }
+
+    fun expandSection(id: String) {
+        if (id in collapsed.value) settingsRepository.setAnalyticsCollapsed(collapsed.value - id)
+    }
+
+    // ---- Habits: caffeine and food limits per day (fetched over the union, like the rest) ----
+    val caffeineSettings: StateFlow<com.fitpal.app.domain.CaffeineSettings> = settingsRepository.caffeineSettings
+
+    /** Caffeine (mg) per logged day — the same per-drink amounts the Caffeine page uses. */
+    val caffeineByDay: StateFlow<Map<String, Float>> = rangeDriven { from, to -> mealRepository.caffeineRowsInRange(from, to) }
+        .let { rows ->
+            rows.map { list ->
+                list.mapNotNull { r -> com.fitpal.app.domain.Caffeine.dose(r.timestamp, r.name, r.grams, r.caffeineMg)?.let { r.date to it.mg } }
+                    .groupBy({ it.first }, { it.second })
+                    .mapValues { (_, mgs) -> mgs.sum() }
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
+    /** The food limits that are on. */
+    val enabledLimits: StateFlow<List<com.fitpal.app.domain.model.DietaryRule>> = settingsRepository.dietaryRules
+        .map { rules -> rules.filter { it.enabled } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), settingsRepository.dietaryRules.value.filter { it.enabled })
+
+    /** Kcal counted toward each food limit, per day (`DietaryTally`, like Home and the Limits page). */
+    val limitKcalByDay: StateFlow<Map<com.fitpal.app.domain.model.DietaryRuleKind, Map<String, Float>>> = run {
+        val kinds = com.fitpal.app.domain.model.DietaryRuleKind.entries
+        val perKind = kinds.map { kind ->
+            rangeDriven { from, to -> mealRepository.dietaryConsumedByDay(from, to, kind) }
+        }
+        combine(perKind) { lists -> kinds.zip(lists.toList()).associate { (k, rows) -> k to rows.associate { it.date to it.kcal } } }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+    }
+
+    /** Daily water goal (ml): the hand-set one, else ~35 ml/kg — the same rule as Home. */
+    val waterGoal: StateFlow<Int> = combine(settingsRepository.waterGoalOverrideMl, weightRepository.getLatest()) { override, w ->
+        if (override > 0) override else SettingsRepository.autoWaterGoal(w?.weightKg ?: 70f)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 2000)
+
+    val stepGoal: StateFlow<Int> = settingsRepository.stepGoal
+
     private companion object {
         // Dates are stored as ISO text and compared as text, so these bracket every real date.
         const val LIFETIME_FROM = "0000-01-01"

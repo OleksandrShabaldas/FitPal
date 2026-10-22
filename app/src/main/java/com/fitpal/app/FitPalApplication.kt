@@ -43,6 +43,8 @@ class FitPalApplication : Application() {
         }
         // Home's layout from before the strip (2.8 and earlier) gets its placements, once.
         runCatching { entryPoint.settingsRepository().migrateHomeLayoutToStrip() }
+        // Analytics' summary tiles went off by default in 2.10 (the takeaways replaced them), once.
+        runCatching { entryPoint.settingsRepository().migrateAnalyticsTilesOff() }
         // Re-arm the daily reminder (alarms are cleared on reboot / app update).
         runCatching { entryPoint.reminderManager().reschedule() }
 
