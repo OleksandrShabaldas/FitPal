@@ -1,6 +1,7 @@
 package com.fitpal.app.ml
 
 import com.fitpal.app.data.local.dao.DailyNutritionRow
+import com.fitpal.app.data.local.dao.LoggedFoodRow
 import com.fitpal.app.data.repository.AiReviewRepository
 import com.fitpal.app.data.repository.ContextNoteRepository
 import com.fitpal.app.data.repository.ExerciseRepository
@@ -11,6 +12,10 @@ import com.fitpal.app.data.repository.StepRepository
 import com.fitpal.app.data.repository.WeightRepository
 import com.fitpal.app.domain.BmrCalculator
 import com.fitpal.app.domain.DailyTargets
+import com.fitpal.app.domain.model.FastingDayResult
+import com.fitpal.app.domain.model.FastingIntake
+import com.fitpal.app.domain.model.FastingSchedule
+import com.fitpal.app.domain.model.adherenceByDay
 import kotlinx.coroutines.flow.first
 import java.time.LocalDate
 import java.time.LocalTime
@@ -67,20 +72,20 @@ class ReviewGenerator @Inject constructor(
             onProgress("Gathering your meals and totals…")
             val (from, to, totalDays) = rangeFor(period, key)
             val rows = mealRepository.getDailyNutritionRange(from, to).first()
-            // Group items back into their meals so each line carries the meal category and the
-            // user's situation tag ([Restaurant]/[Family meal]/…) — context the coach reasons from.
-            val foodLog = mealRepository.getLoggedFoodsInRange(from, to)
-                .filter { it.mealType != "water" }
-                .groupBy { it.date }
-                .entries.joinToString("\n") { (date, dayItems) ->
-                    val meals = dayItems.groupBy { it.mealLogId }.values.joinToString("; ") { meal ->
-                        val head = meal.first()
-                        val ctx = head.context?.takeIf { it.isNotBlank() }?.let { " [$it]" } ?: ""
-                        val type = head.mealType.replaceFirstChar { it.uppercase() }
-                        "$type$ctx: " + meal.joinToString(", ") { "${it.name} (${it.calories.toInt()} kcal)" }
-                    }
-                    "$date — $meals"
+            // Items grouped back into their meals, so each line carries when it was eaten, the meal
+            // category, the user's situation tag ([Restaurant]/[Family meal]/…) and whether it fell in
+            // their fast — the context the coach reasons from.
+            val meals = coachMeals(mealRepository.getLoggedFoodsInRange(from, to))
+            val schedule = settingsRepository.fastingSchedule.value
+            val grace = settingsRepository.fastingGrace.value.keys
+            val foodLog = meals.groupBy { it.date }.entries.joinToString("\n") { (date, dayMeals) ->
+                "$date — " + dayMeals.joinToString("; ") { m ->
+                    val ctx = m.context?.let { " [$it]" } ?: ""
+                    val fast = if (breaksFast(m, schedule, grace)) " [eaten during their fast]" else ""
+                    "${clock(m.minute)} ${m.typeLabel}$ctx, ${m.kcal.roundToInt()} kcal$fast: " +
+                        m.items.joinToString(", ") { "${it.name} (${it.calories.toInt()} kcal)" }
                 }
+            }
             val profile = settingsRepository.userProfile.value
             val manualGoal = settingsRepository.dailyCalorieGoal.value
             val weight = weightRepository.getLatest().first()
@@ -91,7 +96,7 @@ class ReviewGenerator @Inject constructor(
             val isDaily = period.equals("daily", ignoreCase = true) || totalDays <= 1
             val reviewLabel = reviewLabelFor(period, from, to, isDaily)
             onProgress("Looking back at your earlier overviews…")
-            val extraContext = buildExtraContext(period, key, from, to, isDaily, reviewLabel, rows, targets)
+            val extraContext = buildExtraContext(period, key, from, to, isDaily, reviewLabel, rows, targets, meals)
 
             val (rawReview, source) = pipeline.generateNutritionReviewWithSource(
                 period, rows, totalDays, profile, targets, weights, foodLog, extraContext
@@ -165,8 +170,11 @@ class ReviewGenerator @Inject constructor(
         isDaily: Boolean,
         reviewLabel: String,
         rows: List<DailyNutritionRow>,
-        targets: DailyTargets?
+        targets: DailyTargets?,
+        meals: List<CoachMeal>
     ): String {
+        val schedule = settingsRepository.fastingSchedule.value
+        val grace = settingsRepository.fastingGrace.value.keys
         val activity = activityByDate(from, to)
         val activityLines = activity.entries.joinToString("\n") { (d, a) ->
             // The raw step COUNT is the strongest "unusual day" signal — a huge count almost always
@@ -184,7 +192,9 @@ class ReviewGenerator @Inject constructor(
             appendLine("REVIEWING: $reviewLabel. Refer to the day/period by this weekday/date. Do NOT say " +
                 "\"today\"/\"yesterday\"/\"tomorrow\" — this overview is cached and may be read days later; use " +
                 "the date, \"that day\", \"going forward\", or \"next time\" instead.")
-            inProgressNote(period, from, to, isDaily)?.let { appendLine(it) }
+            inProgressNote(period, from, to, isDaily, schedule)?.let { appendLine(it) }
+            appendLine()
+            appendLine(dayAndFastingBlock(meals, schedule, grace, from, to))
             appendLine()
             if (activityLines.isNotBlank()) {
                 appendLine("ACTIVITY & CALORIES BURNED (per day — judge intake NET of this; a big step count is a real signal, not a footnote):")
@@ -198,6 +208,13 @@ class ReviewGenerator @Inject constructor(
                     appendLine()
                     appendLine(it)
                 }
+
+            runCatching {
+                notableMoments(meals, rows, targets, activity.mapValues { it.value.totalKcal }, schedule, grace, period, from, to, isDaily)
+            }.getOrNull()?.let {
+                appendLine()
+                appendLine(it)
+            }
 
             settingsRepository.personalContext.value.trim().takeIf { it.isNotBlank() }?.let {
                 appendLine()
@@ -236,8 +253,9 @@ class ReviewGenerator @Inject constructor(
                     "AFTER the FOCUS, WATCH, QUESTION and ANSWERS lines, as the very last line of all, on a new line " +
                         "starting exactly with \"HABITS:\", output an updated, " +
                         "concise (<=200 words) running profile of this user. Cover, in plain sentences: " +
-                        "eating PATTERNS (meal timing, frequency, consistency); common TRIGGERS (stress, " +
-                        "weekends, social/family meals, boredom); STRENGTHS they show consistently; recurring " +
+                        "eating PATTERNS (meal timing, frequency, consistency, how they keep their fast); common " +
+                        "TRIGGERS — emotional and situational (stress, boredom, tiredness, weekends, social/family " +
+                        "meals) — and which tools have helped with them; STRENGTHS they show consistently; recurring " +
                         "PROBLEM AREAS (nutrients chronically low, portion control); typical meal CONTEXTS " +
                         "(home vs restaurant vs on-the-go, from the tags); what they've said in answer to your " +
                         "questions, and which of your advice they've taken up. Merge the existing notes above with " +
@@ -253,21 +271,268 @@ class ReviewGenerator @Inject constructor(
      * When the reviewed period isn't over yet, say so — otherwise a midday overview reads protein
      * "missed" when dinner simply hasn't been logged (and that's then cached as the day's verdict).
      */
-    private fun inProgressNote(period: String, from: String, to: String, isDaily: Boolean): String? = runCatching {
+    private fun inProgressNote(
+        period: String,
+        from: String,
+        to: String,
+        isDaily: Boolean,
+        schedule: FastingSchedule
+    ): String? = runCatching {
         val today = LocalDate.now()
         val start = LocalDate.parse(from)
         val end = LocalDate.parse(to)
         if (today.isBefore(start) || today.isAfter(end)) return@runCatching null
         if (isDaily) {
-            val now = LocalTime.now().format(DateTimeFormatter.ofPattern("h:mm a"))
-            "IN PROGRESS: this day isn't over — it's $now and more food may still be logged. For the reach " +
-                "goals (protein, fibre) talk about what's left to reach them; never call them missed yet."
+            val nowMin = LocalTime.now().let { it.hour * 60 + it.minute }
+            val now = clock(nowMin)
+            val bed = settingsRepository.bedMinutes.value
+            val windowClosed = schedule.enabled && !schedule.isEatingAt(nowMin) &&
+                schedule.eatEndMin > schedule.eatStartMin && nowMin >= schedule.eatEndMin
+            // Bedtime is close (or just passed): whatever the clock says, the day's eating is done.
+            val late = minutesBetween(nowMin, bed) <= LATE_BEFORE_BED_MIN || minutesBetween(bed, nowMin) <= AFTER_BED_MIN
+            when {
+                windowClosed ->
+                    "THE DAY'S EATING IS DONE: it's $now and their eating window closed at ${clock(schedule.eatEndMin)} — " +
+                        "they won't eat again until it opens tomorrow. Treat every total as final for this day: a protein " +
+                        "or fibre shortfall is something to plan for next time (inside the window), NEVER something to " +
+                        "fix with food tonight."
+                late ->
+                    "THE DAY'S EATING IS ESSENTIALLY DONE: it's $now and they go to bed around ${clock(bed)}. Don't " +
+                        "suggest another meal or snack tonight to reach a target — talk about next time instead."
+                else -> {
+                    val window = if (schedule.enabled) {
+                        if (schedule.isEatingAt(nowMin)) " Their eating window is open until ${clock(schedule.eatEndMin)} — anything you suggest adding has to fit before then."
+                        else " Their eating window opens at ${clock(schedule.eatStartMin)}."
+                    } else ""
+                    "IN PROGRESS: this day isn't over — it's $now and more food may still be logged. For the reach " +
+                        "goals (protein, fibre) talk about what's left to reach them; never call them missed yet.$window"
+                }
+            }
         } else {
             val elapsed = ChronoUnit.DAYS.between(start, today) + 1
             val total = ChronoUnit.DAYS.between(start, end) + 1
             "IN PROGRESS: this $period isn't over — it's day $elapsed of $total. Judge the trend so far, not a final verdict."
         }
     }.getOrNull()
+
+    /** One logged meal (not plain water) as the coach reads it: when, what, how much, and whether it was only drinks. */
+    private class CoachMeal(
+        val date: String,
+        val type: String,
+        val context: String?,
+        val timestamp: Long,
+        val kcal: Float,
+        val items: List<LoggedFoodRow>,
+        val drinkOnly: Boolean,
+        val loggedDuringFast: Boolean
+    ) {
+        val minute: Int get() = minuteOfDay(timestamp)
+        val typeLabel: String get() = type.replaceFirstChar { it.uppercase() }
+    }
+
+    private fun coachMeals(rows: List<LoggedFoodRow>): List<CoachMeal> =
+        rows.filter { it.mealType != "water" }
+            .groupBy { it.mealLogId }.values
+            .map { items ->
+                val head = items.first()
+                CoachMeal(
+                    date = head.date,
+                    type = head.mealType,
+                    context = head.context?.takeIf { it.isNotBlank() },
+                    timestamp = head.timestamp,
+                    kcal = items.sumOf { it.calories.toDouble() }.toFloat(),
+                    items = items,
+                    drinkOnly = items.all { it.isDrink },
+                    loggedDuringFast = items.any { it.loggedDuringFast }
+                )
+            }
+            .sortedWith(compareBy({ it.date }, { it.timestamp }))
+
+    /**
+     * Whether [meal] broke the fast — the same rules as Analytics and the Fasting page: a drink log the
+     * drink rule allows never does, an "I ate earlier" day never does, a "log anyway" meal always does.
+     */
+    private fun breaksFast(meal: CoachMeal, schedule: FastingSchedule, grace: Set<String>): Boolean =
+        schedule.enabled && meal.date !in grace &&
+            !schedule.allowsDuringFast(FastingIntake(meal.drinkOnly, meal.kcal)) &&
+            (meal.loggedDuringFast || !schedule.isEatingAt(meal.minute))
+
+    /**
+     * When this person eats: their day (Profile wake-up / bedtime) and, when fasting is on, the eating
+     * window, the drink rule and how each reviewed day's fast went — plus the rule that follows from it.
+     * The coach once suggested a protein meal at 11 PM, mid-fast, to reach the protein target.
+     */
+    private fun dayAndFastingBlock(
+        meals: List<CoachMeal>,
+        schedule: FastingSchedule,
+        grace: Set<String>,
+        from: String,
+        to: String
+    ): String = buildString {
+        val wake = settingsRepository.wakeMinutes.value
+        val bed = settingsRepository.bedMinutes.value
+        appendLine("YOUR DAY & FASTING:")
+        appendLine("- Their day: up around ${clock(wake)}, in bed around ${clock(bed)} (from their profile).")
+        if (schedule.enabled) {
+            val fastHours = schedule.fastingLengthMin() / 60f
+            val hoursText = if (fastHours % 1f == 0f) fastHours.toInt().toString() else "%.1f".format(fastHours)
+            appendLine("- They do intermittent fasting: they eat only between ${clock(schedule.eatStartMin)} and " +
+                "${clock(schedule.eatEndMin)} (a $hoursText-hour fast). Drinks during the fast: ${schedule.drinkRule.blurb}")
+            val breaking = meals.filter { breaksFast(it, schedule, grace) }
+            val results = schedule.adherenceByDay(
+                meals.filterNot { schedule.allowsDuringFast(FastingIntake(it.drinkOnly, it.kcal)) }.map { it.date to it.minute },
+                grace,
+                meals.filter { it.loggedDuringFast }.map { it.date }.toSet()
+            )
+            if (results.isNotEmpty()) {
+                val kept = results.count { it.value == FastingDayResult.HELD }
+                appendLine("- This period the fast was kept on $kept of ${results.size} day(s) with food logged.")
+                results.filterValues { it == FastingDayResult.BROKE }.keys.sorted().take(MAX_LISTED_DAYS).forEach { d ->
+                    val what = breaking.filter { it.date == d }.joinToString(", ") { m ->
+                        "${m.typeLabel} at ${clock(m.minute)} (${m.kcal.roundToInt()} kcal)" +
+                            if (m.loggedDuringFast && schedule.isEatingAt(m.minute)) ", logged during the fast" else ""
+                    }.ifBlank { "a meal logged during the fast" }
+                    appendLine("  · ${dayLabel(d)}: broken — $what")
+                }
+                grace.filter { it in from..to && it in results }.sorted().forEach { d ->
+                    appendLine("  · ${dayLabel(d)}: kept with an \"I ate earlier\" pass")
+                }
+            }
+        } else {
+            appendLine("- No fasting schedule.")
+        }
+        append("RULE: never suggest eating ")
+        if (schedule.enabled) append("outside the eating window or ")
+        append("within about 2 hours of bedtime just to reach a target. Anything you'd add (protein, fibre) goes into ")
+        append(if (schedule.enabled) "meals inside the window" else "meals they already eat")
+        append(", or the shortfall is simply let go for that day — a missed target does far less harm than a late meal")
+        append(if (schedule.enabled) " or a broken fast." else ".")
+    }
+
+    /**
+     * What stood out in the period, computed from the log and ranked by impact on their goal — the
+     * oversized meal, the over-budget day, eating after the budget was used up, late or fast-breaking
+     * meals, food limits passed. The coach is told to lead with these and to ask about the top one:
+     * it used to circle protein for days while saying nothing about an 1,800 kcal dinner.
+     */
+    private suspend fun notableMoments(
+        meals: List<CoachMeal>,
+        rows: List<DailyNutritionRow>,
+        targets: DailyTargets?,
+        burnByDate: Map<String, Int>,
+        schedule: FastingSchedule,
+        grace: Set<String>,
+        period: String,
+        from: String,
+        to: String,
+        isDaily: Boolean
+    ): String {
+        val base = targets?.calories ?: 0
+        val bed = settingsRepository.bedMinutes.value
+        val typical = typicalMealKcal(to)
+
+        class Moment(val weight: Float, val text: String)
+        val moments = mutableListOf<Moment>()
+
+        // Meals: one line each, with everything notable about it.
+        meals.groupBy { it.date }.forEach { (date, dayMeals) ->
+            val budget = base + (burnByDate[date] ?: 0)
+            var before = 0f
+            dayMeals.forEach { m ->
+                if (m.drinkOnly || m.kcal < MIN_MEAL_KCAL) {
+                    before += m.kcal
+                    return@forEach
+                }
+                val flags = mutableListOf<String>()
+                var weight = 0f
+                if (base > 0) {
+                    val share = m.kcal / base
+                    val bigVsUsual = typical > 0f && m.kcal >= typical * BIG_VS_TYPICAL
+                    if (share >= BIG_SHARE || (share >= BIG_SHARE_IF_UNUSUAL && bigVsUsual)) {
+                        flags += "${(share * 100).roundToInt()}% of the day's base target in one meal" +
+                            if (bigVsUsual) " (about ${"%.1f".format(m.kcal / typical)}× their usual meal)" else ""
+                        weight += m.kcal
+                    }
+                    if (before >= budget && budget > 0) {
+                        flags += "eaten after the day's ${budget} kcal budget was already used up"
+                        weight += m.kcal * 0.8f
+                    }
+                } else if (m.kcal >= BIG_MEAL_NO_TARGET) {
+                    flags += "a very large meal"
+                    weight += m.kcal
+                }
+                if (minutesBetween(m.minute, bed) <= LATE_BEFORE_BED_MIN || minutesBetween(bed, m.minute) <= AFTER_BED_MIN) {
+                    flags += "late — bedtime is around ${clock(bed)}"
+                    weight += m.kcal * 0.4f
+                }
+                if (breaksFast(m, schedule, grace)) {
+                    flags += "broke their fast"
+                    weight += m.kcal * 0.5f + 100f
+                }
+                before += m.kcal
+                if (flags.isNotEmpty()) {
+                    val ctx = m.context?.let { " [$it]" } ?: ""
+                    val foods = m.items.sortedByDescending { it.calories }.take(3).joinToString(", ") { it.name }
+                    moments += Moment(
+                        weight,
+                        "${dayLabel(date)}, ${m.typeLabel.lowercase()} at ${clock(m.minute)}$ctx: ${m.kcal.roundToInt()} kcal " +
+                            "($foods) — ${flags.joinToString("; ")}"
+                    )
+                }
+            }
+        }
+
+        // Days over the calorie budget (base + that day's activity, as on Home).
+        if (base > 0) rows.filter { it.calories > 0f }.forEach { r ->
+            val budget = base + (burnByDate[r.date] ?: 0)
+            val over = r.calories - budget
+            if (over > budget * OVER_BUDGET_SHARE) {
+                moments += Moment(over, "${dayLabel(r.date)}: ${over.roundToInt()} kcal over the ${budget} kcal budget for the day")
+            }
+        }
+
+        // Food limits passed (the exact tally, partly-counted dishes included).
+        settingsRepository.dietaryRules.value.filter { it.enabled && it.dailyLimitKcal > 0 }.forEach { rule ->
+            mealRepository.dietaryConsumedByDay(from, to, rule.kind).first()
+                .filter { it.kcal > rule.dailyLimitKcal }
+                .forEach {
+                    moments += Moment(
+                        (it.kcal - rule.dailyLimitKcal) * 0.5f,
+                        "${dayLabel(it.date)}: ${rule.kind.title.lowercase()} came to ${it.kcal.roundToInt()} kcal against their own ${rule.dailyLimitKcal} kcal limit"
+                    )
+                }
+        }
+
+        val scope = if (isDaily) "day" else period
+        if (moments.isEmpty()) {
+            return "WHAT STOOD OUT: nothing unusual — no oversized or late meals, no eating past the budget, no " +
+                "broken fast or food limit. A steady $scope: don't invent a problem; use the QUESTION to learn what " +
+                "made it work or what would make the next one easier."
+        }
+        return buildString {
+            appendLine("WHAT STOOD OUT (computed from the log, biggest impact on their goal first — this is where the " +
+                "coaching and your QUESTION start, unless their notes already explain it):")
+            moments.sortedByDescending { it.weight }.take(if (isDaily) 5 else 8).forEach { appendLine("- ${it.text}") }
+            append("A meal much bigger than usual, eating after the budget was used up, or eating late are often about " +
+                "more than hunger (stress, boredom, tiredness, a social setting, or simply not eating enough earlier) — " +
+                "be curious about the WHY, not only the food.")
+        }
+    }
+
+    /** The median kcal of a real meal over the 30 days up to [to] — what "bigger than usual" is measured against. */
+    private suspend fun typicalMealKcal(to: String): Float = runCatching {
+        val from = LocalDate.parse(to).minusDays(30).toString()
+        val sizes = coachMeals(mealRepository.getLoggedFoodsInRange(from, to))
+            .filter { !it.drinkOnly && it.kcal >= MIN_MEAL_KCAL }.map { it.kcal }.sorted()
+        if (sizes.size < 5) 0f else sizes[sizes.size / 2]
+    }.getOrDefault(0f)
+
+    private fun clock(minute: Int): String =
+        LocalTime.of((minute / 60).mod(24), minute.mod(60)).format(DateTimeFormatter.ofPattern("h:mm a"))
+
+    private fun dayLabel(date: String): String = runCatching {
+        LocalDate.parse(date).format(DateTimeFormatter.ofPattern("EEE d MMM"))
+    }.getOrDefault(date)
 
     /**
      * The exact verdict on every target, computed from the same totals the Home rings show (the calorie
@@ -366,12 +631,25 @@ class ReviewGenerator @Inject constructor(
         // A refresh rewrites this period's overview — but the answer they gave to its question stays.
         val ownAnswer = contextNoteRepository.getFollowUp(period, key)
         if (chosen.isEmpty() && ownAnswer == null) return ""
+        // Every recent question, whatever the overview kind — so the coach can see itself circling one theme.
+        val asked = past.sortedByDescending { it.generatedAt }.take(RECENT_QUESTIONS).mapNotNull { p ->
+            val answer = contextNoteRepository.getFollowUp(p.period, p.periodKey)
+            when {
+                answer != null -> "\"${answer.question}\" → \"${answer.answer}\""
+                else -> ReviewText.parse(p.text).question?.let { "\"$it\" (not answered)" }
+            }
+        }
 
         return buildString {
             appendLine("PREVIOUS COACHING (your own earlier overviews for this user, newest first — this is your memory):")
             chosen.forEach { p -> appendLine("- " + describePast(p)) }
             if (ownAnswer != null) {
                 appendLine("- An earlier version of THIS overview asked \"${ownAnswer.question}\" → they answered \"${ownAnswer.answer}\".")
+            }
+            if (asked.isNotEmpty()) {
+                appendLine("QUESTIONS YOU ASKED RECENTLY (newest first): ${asked.joinToString("; ")}")
+                appendLine("- Your next QUESTION must open a NEW topic, not rephrase one of these. If several of them circle " +
+                    "one theme (protein, say), leave that theme out of the question unless it is the top item in WHAT STOOD OUT.")
             }
             appendLine("HOW TO USE THIS MEMORY:")
             appendLine("- Before any new advice, check this period's data against what you advised last time and say " +
@@ -380,7 +658,10 @@ class ReviewGenerator @Inject constructor(
             appendLine("- Don't repeat earlier advice or observations in the same words. If a point still applies, say " +
                 "it has come up before and change the angle (a smaller first step, a different example, or what's " +
                 "getting in the way); otherwise move on to what's new.")
-            append("- Treat their answers as their own context — build on them, never contradict them.")
+            appendLine("- Treat their answers as their own context — build on them, never contradict them.")
+            append("- An answer is context for ALL your coaching, not a thread to keep pulling: \"I don't like plain protein " +
+                "foods\" means respect it in what you suggest — not ask about protein again next time. Follow what's happening " +
+                "in THIS period instead.")
         }
     }
 
@@ -466,5 +747,31 @@ class ReviewGenerator @Inject constructor(
     private companion object {
         /** How many recent overviews to look through when picking the coach's memory. */
         const val RECENT_POOL = 12
+        /** How many of the coach's recent questions it's shown, so it stops asking about one theme. */
+        const val RECENT_QUESTIONS = 6
+
+        // ---- What stood out ----
+        /** Smaller than this isn't a meal worth flagging (a coffee, a piece of fruit). */
+        const val MIN_MEAL_KCAL = 150f
+        /** One meal this share of the base calorie target is notable on its own… */
+        const val BIG_SHARE = 0.6f
+        /** …and from this share when it's also well above their usual meal. */
+        const val BIG_SHARE_IF_UNUSUAL = 0.4f
+        const val BIG_VS_TYPICAL = 1.5f
+        /** With no calorie target set, a meal this big is flagged. */
+        const val BIG_MEAL_NO_TARGET = 1200f
+        /** A day this far over its budget (share of the budget) is flagged. */
+        const val OVER_BUDGET_SHARE = 0.05f
+        /** "Late": within this long before bedtime… */
+        const val LATE_BEFORE_BED_MIN = 120
+        /** …or up to this long after it. */
+        const val AFTER_BED_MIN = 240
+        const val MAX_LISTED_DAYS = 6
     }
 }
+
+private fun minuteOfDay(epochMillis: Long): Int =
+    java.time.Instant.ofEpochMilli(epochMillis).atZone(java.time.ZoneId.systemDefault()).let { it.hour * 60 + it.minute }
+
+/** Minutes forward from [fromMin] to [toMin] on the clock (0–1439), wrapping past midnight. */
+private fun minutesBetween(fromMin: Int, toMin: Int): Int = (toMin - fromMin).mod(24 * 60)

@@ -56,7 +56,7 @@ import com.fitpal.app.data.local.entity.WeightEntryEntity
         UsdaFoodEntity::class,
         WeightEntryEntity::class
     ],
-    version = 32,
+    version = 33,
     exportSchema = true
 )
 abstract class FitPalDatabase : RoomDatabase() {
@@ -538,6 +538,17 @@ abstract class FitPalDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE usda_foods ADD COLUMN isDrink INTEGER NOT NULL DEFAULT 0")
                 db.execSQL("UPDATE usda_foods SET isDrink = 1 WHERE foodCategory = 'Drinks'")
+            }
+        }
+
+        /**
+         * v33: `meal_log_items.ruleParts` — which ingredients of a dish count toward each food limit, so
+         * a dish with a little fried food in it counts only that part (see `DietaryTally`). NULL = the
+         * whole item counts, which is what every older row did.
+         */
+        val MIGRATION_32_33 = object : Migration(32, 33) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE meal_log_items ADD COLUMN ruleParts TEXT")
             }
         }
     }

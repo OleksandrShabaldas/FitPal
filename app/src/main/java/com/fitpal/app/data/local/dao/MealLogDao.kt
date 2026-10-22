@@ -27,7 +27,12 @@ data class LoggedFoodRow(
     /** The parent meal-log id, so callers can regroup items back into their meal. */
     val mealLogId: Long = 0,
     /** The situation tag the user set on that meal ("Restaurant"/…), or null if untagged. */
-    val context: String? = null
+    val context: String? = null,
+    /** When the meal was eaten (epoch millis) — so the coach sees timing, late meals and the fast. */
+    val timestamp: Long = 0L,
+    val isDrink: Boolean = false,
+    /** The meal was logged with "log anyway" during a fast. */
+    val loggedDuringFast: Boolean = false
 )
 
 /** One representative logged food per distinct name (its latest version) + the day last logged. */
@@ -78,6 +83,12 @@ data class DailyWaterSplit(
 
 /** One day's calories in a food limit's category. */
 data class DailyTaggedRow(val date: String, val kcal: Float)
+
+/** A logged item tagged with a food limit, with the day it was logged on. */
+data class TaggedItemRow(
+    @Embedded val item: MealLogItemEntity,
+    val date: String
+)
 
 /** One meal on a day, for the Fasting page: when it was eaten, what it was, and whether only drinks. */
 data class DayMealRow(
@@ -278,26 +289,22 @@ interface MealLogDao {
     @Query("SELECT * FROM meal_log_items WHERE mealLogId IN (SELECT id FROM meal_logs WHERE date = :date)")
     suspend fun getItemsForDateOnce(date: String): List<MealLogItemEntity>
 
+    /** Rewrite an item's dietary-rule tags and which of its ingredients count (the background AI refinement). */
+    @Query("UPDATE meal_log_items SET ruleTags = :ruleTags, ruleParts = :ruleParts WHERE id = :id")
+    suspend fun updateItemRuleTagging(id: Long, ruleTags: String?, ruleParts: String?)
+
     /**
-     * Total calories on [date] from items carrying a given dietary-rule tag. [tagPattern] is the
+     * Items on [from]..[to] carrying a given dietary-rule tag, with their day. [tagPattern] is the
      * comma-wrapped `LIKE` pattern for one kind, e.g. `"%,dessert,%"` — see
-     * [com.fitpal.app.domain.model.DietaryRuleKind.likePattern]. Live, for the Home strip.
+     * [com.fitpal.app.domain.model.DietaryRuleKind.likePattern]. The calories that count are worked
+     * out from these by `DietaryTally` (a dish may count only in part), not summed here. Live.
      */
     @Query("""
-        SELECT COALESCE(SUM(calories), 0) FROM meal_log_items
-        WHERE mealLogId IN (SELECT id FROM meal_logs WHERE date = :date)
-          AND ruleTags LIKE :tagPattern
-    """)
-    fun getTaggedCaloriesForDate(date: String, tagPattern: String): Flow<Float>
-
-    /** The same tally per day over a range — the food-limits page's week. */
-    @Query("""
-        SELECT m.date AS date, COALESCE(SUM(i.calories), 0) AS kcal
+        SELECT i.*, m.date AS date
         FROM meal_log_items i JOIN meal_logs m ON i.mealLogId = m.id
         WHERE m.date BETWEEN :from AND :to AND i.ruleTags LIKE :tagPattern
-        GROUP BY m.date
     """)
-    fun getTaggedCaloriesByDay(from: String, to: String, tagPattern: String): Flow<List<DailyTaggedRow>>
+    fun getTaggedItemsInRange(from: String, to: String, tagPattern: String): Flow<List<TaggedItemRow>>
 
     /**
      * The most recently logged real food per distinct name (newest first) — drives the
@@ -563,10 +570,11 @@ interface MealLogDao {
     /** Every logged food in a date range (so the AI review can see WHAT was eaten, not just totals). */
     @Query("""
         SELECT m.date AS date, i.name AS name, i.calories AS calories, m.mealType AS mealType,
-               m.id AS mealLogId, m.context AS context
+               m.id AS mealLogId, m.context AS context, m.timestamp AS timestamp,
+               i.isDrink AS isDrink, m.loggedDuringFast AS loggedDuringFast
         FROM meal_log_items i JOIN meal_logs m ON i.mealLogId = m.id
         WHERE m.date BETWEEN :from AND :to
-        ORDER BY m.date ASC, m.id ASC
+        ORDER BY m.date ASC, m.timestamp ASC, m.id ASC
     """)
     suspend fun getLoggedFoodsInRange(from: String, to: String): List<LoggedFoodRow>
 

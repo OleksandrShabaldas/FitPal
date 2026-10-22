@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fitpal.app.data.local.entity.MealLogItemEntity
+import com.fitpal.app.domain.DietaryTally
 import com.fitpal.app.domain.GoalKind
 import com.fitpal.app.domain.StatusKind
 import com.fitpal.app.domain.TrackerStatus
@@ -174,7 +175,14 @@ fun LimitsScreen(
                     Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
                         Row(Modifier.fillMaxWidth().clickable { onOpenEntry(item.id) }, verticalAlignment = Alignment.CenterVertically) {
                             Text(item.name, style = MaterialTheme.typography.bodyMedium, color = Cream, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                            Text("${item.calories.roundToInt()} kcal", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = Cream)
+                            // A dish may count only in part (the fried bit of a bigger plate) — say how much.
+                            val counted = DietaryRuleKind.tagsFromDb(item.ruleTags).filter { it in enabledKinds }
+                                .maxOfOrNull { DietaryTally.countedKcal(item, it) } ?: item.calories
+                            Text(
+                                if (counted < item.calories - 0.5f) "${counted.roundToInt()} of ${item.calories.roundToInt()} kcal"
+                                else "${item.calories.roundToInt()} kcal",
+                                style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = Cream
+                            )
                         }
                         Spacer(Modifier.height(4.dp))
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {

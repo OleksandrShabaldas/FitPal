@@ -16,8 +16,8 @@ android {
         targetSdk = 35
         // versionCode MUST increase every release — Android refuses to install an APK whose
         // versionCode isn't higher than the installed one, which would silently break updating.
-        versionCode = 32
-        versionName = "2.7.0"
+        versionCode = 33
+        versionName = "2.8.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

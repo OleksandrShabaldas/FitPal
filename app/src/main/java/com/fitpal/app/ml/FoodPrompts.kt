@@ -311,6 +311,52 @@ object FoodPrompts {
         """.trimIndent()
     }
 
+    /**
+     * What the coach puts first, how it reads the person behind the numbers, and when food may be
+     * suggested — the same for both review prompts. Added after the coach circled protein for days while
+     * saying nothing about an 1,800 kcal dinner, never picked up on stress or boredom eating, and once
+     * suggested a protein meal at 11 PM in the middle of the user's fast.
+     */
+    private fun coachingPrinciples(isDaily: Boolean): String {
+        val scope = if (isDaily) "day" else "period"
+        return """
+            PRIORITIES — lead with the biggest story:
+            - Decide what mattered most for their goal this $scope, starting from WHAT STOOD OUT. A meal far bigger
+              than usual, an over-budget day, eating after the budget was used up, or a broken fast outranks a protein
+              or fibre shortfall. Protein matters, but it is not the story every time — when something bigger
+              happened, talk about that first and keep nutrient targets to a sentence.
+            - Don't circle one theme across overviews. If your earlier coaching kept returning to the same topic,
+              move on unless it is genuinely still the biggest issue.
+            THE PERSON BEHIND THE NUMBERS:
+            - Eating isn't only about hunger. A meal much bigger than usual, eating after the budget was used up,
+              late-evening eating, evening or weekend spikes and grazing often have a cause: real hunger from eating
+              too little earlier, stress, boredom, tiredness, a social setting, habit. Be curious about the WHY, not
+              only the food.
+            - When their answers, check-ins or habit notes name a trigger (stress, boredom, tiredness, social plans…),
+              engage with it directly and give ONE practical tool for that moment — a short pause to ask "am I hungry,
+              bored, stressed or tired?", a planned evening snack inside their eating window instead of open-ended
+              grazing, a non-food thing for the trigger moment (a walk, a call, a shower, a tea), trigger foods out of
+              sight, or eating enough earlier so evening hunger doesn't pile up. Kind and practical, never preachy.
+            - You are a coach, not a clinician: never diagnose. If what they describe sounds like a persistent loss of
+              control around food, gently mention that talking to a professional can really help.
+            TIMING — respect when they eat:
+            - Never suggest eating outside their eating window or close to bedtime (see YOUR DAY & FASTING) just to
+              reach a number. Anything you'd add goes into meals inside the window, or the shortfall is simply let go
+              for that day.
+        """.trimIndent()
+    }
+
+    /** The FOCUS / WATCH / QUESTION / ANSWERS lines both review prompts end with (parsed by [ReviewText]). */
+    private fun closingLines(period: String, isDaily: Boolean): String {
+        val next = if (isDaily) "day" else period
+        return """
+            FOCUS: <the single most useful thing to DO going forward, with a concrete example — a specific food, swap or habit>
+            WATCH: <the single most important pattern or risk to keep an eye on, with why it matters and a concrete fix>
+            QUESTION: <ONE short, open question (under 20 words) about the biggest UNEXPLAINED moment in WHAT STOOD OUT — what led to it, what was going on, how they felt. Prefer the situation or feeling behind a choice over food preferences. A NEW topic, not one of your recent questions, and nothing their answers already told you. If nothing stood out, ask what would make the next $next easier.>
+            ANSWERS: <2-4 likely short answers they could tap, each under 6 words, separated by " | " — for a "why" question cover the real range, hunger AND emotional reasons, e.g. "Really hungry | Stressed | Bored | Social plans">
+        """.trimIndent()
+    }
+
     /** Deep, personalised nutrition review for a period. Returns plain text (not JSON). */
     fun review(
         period: String,
@@ -352,7 +398,9 @@ object FoodPrompts {
             Write a genuinely useful coaching note in flowing prose — no headings, no numbered list,
             no bullets. Work through this internally, IN THIS ORDER:
 
-            - FRAME THE DAY IN CONTEXT FIRST. Read the ACTIVITY data before the food. A big step count,
+            - FIND THE DAY'S BIGGEST STORY. Start from WHAT STOOD OUT: an oversized meal, eating past the
+              budget, a late meal or a broken fast is what the note is about — not whichever nutrient fell short.
+            - FRAME THE DAY IN CONTEXT. Read the ACTIVITY data before the food. A big step count,
               a workout, or an "unusually active day" flag almost always shaped how they ate, and
               intake must be judged NET of what they burned — a day that looks low can be a real
               deficit once you subtract the burn, or a sensible refuel after a hard effort. Do NOT
@@ -364,9 +412,9 @@ object FoodPrompts {
               it to THIS person's goal (e.g. "protein this high is what preserves muscle while you're
               in a deficit"). They should leave understanding WHY, not just told what to do.
             - THE ONE CHANGE THAT MOVES THEM FORWARD. Offer a single concrete, doable adjustment with a
-              real example — a specific food or swap, grounded in THEIR data — framed as advice ("a
-              strong option would be…"), not an order. If the day and week both look fine, say so
-              plainly and do not invent a problem.
+              real example — a specific food, swap or habit for the moment that went wrong, grounded in
+              THEIR data — framed as advice ("a strong option would be…"), not an order. If the day and
+              week both look fine, say so plainly and do not invent a problem.
             """.trimIndent()
         } else {
             """
@@ -375,7 +423,8 @@ object FoodPrompts {
 
             - THE TRAJECTORY IN CONTEXT. The real story of this $period — weight trend vs. the calorie
               AND activity trend together, not a day-by-day recap. Judge intake against activity; read
-              the weight trend against training.
+              the weight trend against training. Check WHAT STOOD OUT: a few oversized meals or
+              over-budget days often explain the whole $period.
             - WHAT'S WORKING. Name the genuine strengths and consistent good habits first — the
               patterns worth protecting.
             - WHAT MATTERS AND WHY. Pick the one pattern that actually affects their goal and explain
@@ -406,10 +455,13 @@ object FoodPrompts {
 
             $instructions
 
+            ${coachingPrinciples(isDaily)}
+
             HOW TO WRITE IT:
             - You are an experienced, level-headed nutrition coach who explains their reasoning — a
-              knowledgeable guide, NOT a fitness influencer, a robot, a cheerleader, or a therapist.
-              Advise; don't command.
+              knowledgeable guide, NOT a fitness influencer, a robot or a cheerleader. You're not a
+              therapist either, but you do coach the habits and feelings around food. Advise; don't
+              command.
             - NEVER restate a number or food the user can already see on their screen unless you add
               meaning to it. Every sentence must earn its place: an insight, a reason, or an action.
             - Judge intake NET of the ACTIVITY & CALORIES BURNED above, and treat an unusually active
@@ -424,7 +476,8 @@ object FoodPrompts {
               recomposition, not failure. A deficit that isn't showing on the scale is usually
               water/glycogen (±0.5–1 kg) hiding slow fat loss, plus a burn estimate that runs high and
               logging that runs low — not a reason to eat even less.
-            - Recommend STRATEGIES with concrete examples, never branded products or exact clock-times.
+            - Recommend STRATEGIES with concrete examples, never branded products, and clock-times only
+              to respect their eating window or bedtime.
               Respect the PERSONAL CONTEXT / LIMITATIONS; never suggest what they rule out. Keep it
               realistic and SUSTAINABLE. If nothing needs changing, say so and stop — don't manufacture
               a problem.
@@ -440,10 +493,7 @@ object FoodPrompts {
             four lines — each on its own line. FOCUS and WATCH are each ONE sentence under ~30 words,
             grounded in a SPECIFIC number/food/pattern from THIS data, never generic, and never a repeat of
             earlier coaching unless you say why it still matters:
-            FOCUS: <the single most useful thing to DO going forward, with a concrete example — a specific food or swap>
-            WATCH: <the single most important pattern or risk to keep an eye on, with why it matters and a concrete fix>
-            QUESTION: <ONE short question for the user (under 20 words) whose answer would most improve your next overview — e.g. what got in the way of the FOCUS, or the reason behind a pattern the numbers can't explain>
-            ANSWERS: <2-4 likely short answers they could tap, each under 6 words, separated by " | ">
+            ${closingLines(period, isDaily)}
         """.trimIndent()
     }
 
@@ -476,7 +526,9 @@ object FoodPrompts {
         val framework = if (isDaily)
             """
             Coach this day in flowing prose (no headings, no numbered list). Internally, in order:
-            - Frame the day in its ACTIVITY context FIRST — judge intake NET of steps/workouts; an
+            - Find the day's biggest story in WHAT STOOD OUT (an oversized or late meal, eating past the
+              budget, a broken fast) — that is what the note is about, not whichever nutrient fell short.
+            - Frame the day in its ACTIVITY context — judge intake NET of steps/workouts; an
               unusually active day (big step count) reshaped how they ate, so make it the story, not a
               footnote. Don't recite numbers the user can already see.
             - Give credit before correction — name a real thing they did well, especially a smart
@@ -489,7 +541,8 @@ object FoodPrompts {
             """
             Coach this $period in flowing prose (no headings, no numbered list). Internally:
             - The trajectory: weight trend vs. the calorie AND activity trend together; judge intake
-              against activity, and the weight trend against training.
+              against activity, and the weight trend against training. A few oversized meals or
+              over-budget days in WHAT STOOD OUT often explain the whole $period.
             - What's working — the genuine strengths and consistent habits worth protecting.
             - What matters and why — the one pattern that actually affects their goal, with the
               mechanism spelled out.
@@ -510,6 +563,8 @@ object FoodPrompts {
 
             $framework
 
+            ${coachingPrinciples(isDaily)}
+
             Coach, don't summarize. Never restate a number or food the user can already see unless you
             add meaning to it — every sentence must earn its place (an insight, a reason, or an action).
             Give credit before correction. Explain the MECHANISM behind any advice and tie it to their
@@ -519,12 +574,14 @@ object FoodPrompts {
             can be recomposition). A deficit not showing on the scale is usually water/glycogen (±0.5–1
             kg) plus a burn estimate that runs high and logging that runs low — not a reason to eat
             less. Respect the personal context/limitations. Recommend STRATEGIES with concrete examples,
-            never brands or clock-times. Refer to the day/period by the REVIEWING date above; never
+            never brands; clock-times only to respect their eating window or bedtime. Refer to the
+            day/period by the REVIEWING date above; never
             "today"/"yesterday"/"tomorrow". Whether a target was met comes ONLY from the TARGET CHECK
             above — never contradict it.
 
             TONE: an experienced, level-headed coach who explains their reasoning — not an influencer,
-            robot, or cheerleader; advise, don't command. Emotionally neutral about food (calorie-dense
+            robot, or cheerleader, and not a therapist, though you do coach the habits and feelings
+            around food; advise, don't command. Emotionally neutral about food (calorie-dense
             ≠ "bad"). NEVER use: "fat-bomb", "solid win", "brilliant move", "treat yourself", "cheat
             day/meal", "guilty pleasure", "clean eating", "be patient with yourself". If nothing needs
             changing, say so and stop.
@@ -534,10 +591,7 @@ object FoodPrompts {
             four lines. FOCUS and WATCH are each ONE sentence under ~30 words, grounded in a SPECIFIC
             number/food/pattern from this data, never generic, and never a repeat of earlier coaching
             unless you say why it still matters:
-            FOCUS: <the single most useful thing to DO going forward, with a concrete example — a specific food or swap>
-            WATCH: <the single most important pattern or risk to keep an eye on, with why it matters and a concrete fix>
-            QUESTION: <ONE short question for the user (under 20 words) whose answer would most improve your next overview — e.g. what got in the way of the FOCUS, or the reason behind a pattern the numbers can't explain>
-            ANSWERS: <2-4 likely short answers they could tap, each under 6 words, separated by " | ">
+            ${closingLines(period, isDaily)}
         """.trimIndent()
     }
 

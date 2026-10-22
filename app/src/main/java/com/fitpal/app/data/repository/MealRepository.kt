@@ -11,6 +11,7 @@ import com.fitpal.app.data.local.dao.MealLogDao
 import com.fitpal.app.data.local.dao.MealLogItemWithType
 import com.fitpal.app.data.local.entity.MealLogEntity
 import com.fitpal.app.data.local.entity.MealLogItemEntity
+import com.fitpal.app.domain.DietaryTally
 import com.fitpal.app.domain.model.DetectedFood
 import com.fitpal.app.domain.model.DietaryRuleKind
 import com.fitpal.app.domain.model.Ingredient
@@ -25,12 +26,15 @@ import com.fitpal.app.ml.AiSource
 import com.fitpal.app.ml.DietaryClassifier
 import com.fitpal.app.ml.NutrientCheckWorker
 import com.fitpal.app.ml.NutrientFiller
+import com.fitpal.app.ml.RuleFood
+import com.fitpal.app.ml.RuleTagging
 import com.fitpal.app.reminder.DietaryNotifier
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -296,7 +300,7 @@ class MealRepository @Inject constructor(
         val insightsAt = if (insights != null) System.currentTimeMillis() else 0L
         // Tag each item with the dietary-rule categories it counts toward (dessert / fried / drink) —
         // instantly, from what's already known; the AI refines them right after the save.
-        val ruleTags = quickTagsFor(filledFoods.map { it.label })
+        val ruleTags = quickTagsFor(filledFoods.map { food -> RuleFood(food.label, food.ingredients.map { it.name }) })
         val items = filledFoods.mapIndexed { index, food ->
             val micros = food.totalMicros
             MealLogItemEntity(
@@ -331,7 +335,8 @@ class MealRepository @Inject constructor(
                 insightsGeneratedAt = insightsAt,
                 aiSource = source?.storedName,
                 aiModel = source?.model,
-                ruleTags = DietaryRuleKind.tagsToDb(ruleTags.getOrElse(index) { emptySet() }),
+                ruleTags = DietaryRuleKind.tagsToDb(ruleTags[index].kinds),
+                ruleParts = DietaryTally.partsToDb(ruleTags[index].parts),
                 caffeineMg = food.totalCaffeineMg
             )
         }
@@ -356,7 +361,7 @@ class MealRepository @Inject constructor(
         val logDate = date ?: todayString()
         val mealLog = newMealLog(logDate, mealType, meta)
         val filled = nutrientFiller.applyCached(items)
-        val ruleTags = quickTagsFor(filled.map { it.name })
+        val ruleTags = quickTagsFor(filled.map { RuleFood(it.name) })
         val logItems = filled.mapIndexed { index, ingredient ->
             val m = ingredient.micros
             MealLogItemEntity(
@@ -385,7 +390,7 @@ class MealRepository @Inject constructor(
                 vitaminE = m.vitaminEMg,
                 // Store the item itself as its single ingredient so the detail editor works.
                 ingredientsJson = MealJson.encodeIngredients(listOf(ingredient)),
-                ruleTags = DietaryRuleKind.tagsToDb(ruleTags.getOrElse(index) { emptySet() }),
+                ruleTags = DietaryRuleKind.tagsToDb(ruleTags[index].kinds),
                 caffeineMg = ingredient.caffeineMg
             )
         }
@@ -524,18 +529,20 @@ class MealRepository @Inject constructor(
      * network: the AI's remembered answer for a food, else the keyword match. Saving a meal used to
      * wait on an online classify here — on a slow connection that held "Saving…" for up to a minute.
      */
-    private fun quickTagsFor(names: List<String>): List<Set<DietaryRuleKind>> {
+    private fun quickTagsFor(foods: List<RuleFood>): List<RuleTagging> {
         val enabled = enabledRuleKinds()
-        if (enabled.isEmpty() || names.isEmpty()) return names.map { emptySet() }
-        return runCatching { dietaryClassifier.quickTags(names, enabled) }
-            .getOrElse { names.map { emptySet() } }
+        if (enabled.isEmpty() || foods.isEmpty()) return foods.map { RuleTagging(emptySet()) }
+        return runCatching { dietaryClassifier.quickTagging(foods, enabled) }
+            .getOrElse { foods.map { RuleTagging(emptySet()) } }
     }
 
     /**
      * After a log is saved: ask the AI about its foods in the background and rewrite any tag it
-     * disagrees with. The tally is summed from the tags, so the Home rings correct themselves a moment
-     * later; then the over-limit notification gets another look, since the refined tags may cross a
-     * limit the instant ones didn't. Fails quiet — the instant tags simply stay.
+     * disagrees with — and, for a dish, which of its ingredients are the part that counts (a little
+     * fried food in a big dish counts only that part, see [DietaryTally]). The tally is worked out from
+     * the tags, so the Home rings correct themselves a moment later; then the over-limit notification
+     * gets another look, since the refined tags may cross a limit the instant ones didn't. Fails
+     * quiet — the instant tags simply stay.
      */
     private fun refineRuleTagsLater(mealLogId: Long, logDate: String) {
         val enabled = enabledRuleKinds()
@@ -544,12 +551,15 @@ class MealRepository @Inject constructor(
             runCatching {
                 val items = mealLogDao.getItemsForMeal(mealLogId)
                 if (items.isEmpty()) return@runCatching
-                val tags = dietaryClassifier.tagFoods(items.map { it.name }, enabled)
+                val foods = items.map { item -> RuleFood(item.name, ingredientsForItem(item).map { it.name }) }
+                val tagging = dietaryClassifier.tagItems(foods, enabled)
                 var changed = false
                 items.forEachIndexed { i, item ->
-                    val refined = tags.getOrElse(i) { emptySet() }
-                    if (refined != DietaryRuleKind.tagsFromDb(item.ruleTags)) {
-                        mealLogDao.updateItemRuleTags(item.id, DietaryRuleKind.tagsToDb(refined))
+                    val refined = tagging.getOrElse(i) { RuleTagging(emptySet()) }
+                    val tags = DietaryRuleKind.tagsToDb(refined.kinds)
+                    val parts = DietaryTally.partsToDb(refined.parts)
+                    if (tags != item.ruleTags || parts != item.ruleParts) {
+                        mealLogDao.updateItemRuleTagging(item.id, tags, parts)
                         changed = true
                     }
                 }
@@ -565,9 +575,7 @@ class MealRepository @Inject constructor(
         if (rules.isEmpty()) return
         val items = mealLogDao.getItemsForDateOnce(logDate)
         rules.forEach { rule ->
-            val consumed = items
-                .filter { DietaryRuleKind.tagsFromDb(it.ruleTags).contains(rule.kind) }
-                .sumOf { it.calories.toDouble() }.toInt()
+            val consumed = DietaryTally.countedKcal(items, rule.kind).toInt()
             if (rule.dailyLimitKcal in 1..consumed && !settingsRepository.isDietaryNotifiedToday(rule.kind)) {
                 dietaryNotifier.notifyLimitReached(rule.kind, consumed, rule.dailyLimitKcal)
                 settingsRepository.markDietaryNotified(rule.kind)
@@ -575,13 +583,18 @@ class MealRepository @Inject constructor(
         }
     }
 
-    /** Live total calories on [date] counting toward one dietary rule — drives the Home strip. */
+    /** Live total calories on [date] counting toward one dietary rule — drives the Home rings. */
     fun dietaryConsumedForDate(date: String, kind: DietaryRuleKind): Flow<Float> =
-        mealLogDao.getTaggedCaloriesForDate(date, kind.likePattern)
+        mealLogDao.getTaggedItemsInRange(date, date, kind.likePattern)
+            .map { rows -> DietaryTally.countedKcal(rows.map { it.item }, kind) }
 
     /** Calories per day counting toward one dietary rule over [from]..[to] — the food-limits page's week. */
     fun dietaryConsumedByDay(from: String, to: String, kind: DietaryRuleKind): Flow<List<com.fitpal.app.data.local.dao.DailyTaggedRow>> =
-        mealLogDao.getTaggedCaloriesByDay(from, to, kind.likePattern)
+        mealLogDao.getTaggedItemsInRange(from, to, kind.likePattern).map { rows ->
+            rows.groupBy { it.date }.map { (date, dayRows) ->
+                com.fitpal.app.data.local.dao.DailyTaggedRow(date, DietaryTally.countedKcal(dayRows.map { it.item }, kind))
+            }.sortedBy { it.date }
+        }
 
     /**
      * Correct an item's food-limit tags by hand ("this isn't dessert"). The tally is worked out from the
@@ -593,10 +606,7 @@ class MealRepository @Inject constructor(
     /** One-shot per-rule consumed totals for [date] — used by the pre-log gate. */
     suspend fun dietaryConsumedTodayOnce(date: String): Map<DietaryRuleKind, Int> {
         val items = mealLogDao.getItemsForDateOnce(date)
-        return DietaryRuleKind.entries.associateWith { kind ->
-            items.filter { DietaryRuleKind.tagsFromDb(it.ruleTags).contains(kind) }
-                .sumOf { it.calories.toDouble() }.toInt()
-        }
+        return DietaryRuleKind.entries.associateWith { kind -> DietaryTally.countedKcal(items, kind).toInt() }
     }
 
     /** Log plain water (a quick-add). Counts fully toward water intake, never shown among meals. */

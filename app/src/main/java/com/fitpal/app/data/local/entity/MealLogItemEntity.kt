@@ -75,6 +75,12 @@ data class MealLogItemEntity(
      */
     val ruleTags: String? = null,
     /**
+     * Which part of a dish counts toward each tagged rule: JSON of rule id → ingredient names
+     * (`{"fried":["breaded chicken","frying oil"]}`). A tagged rule with no entry counts the whole item.
+     * See [com.fitpal.app.domain.DietaryTally].
+     */
+    val ruleParts: String? = null,
+    /**
      * The +/− "Amount" multiplier last set on the meal-detail screen (how many of this whole item
      * were eaten). Grams/calories/macros are still the source of truth — this is remembered only so
      * reopening the entry shows the count you left it on instead of resetting to 1.
