@@ -519,12 +519,42 @@ class SettingsRepository @Inject constructor(
         _navConfig.value = config
     }
 
-    private val _heroDrawerOpen = MutableStateFlow(prefs.getBoolean(KEY_HERO_DRAWER_OPEN, false))
-    val heroDrawerOpen: StateFlow<Boolean> = _heroDrawerOpen
+    // --- Home's strip (docs/redesign/05; it replaced the hero's drawer) ---
 
-    fun setHeroDrawerOpen(open: Boolean) {
-        prefs.edit().putBoolean(KEY_HERO_DRAWER_OPEN, open).apply()
-        _heroDrawerOpen.value = open
+    private val _homeStripBigger = MutableStateFlow(prefs.getString(KEY_HOME_STRIP_BIGGER, null))
+    /** The tracker drawn bigger in a strip row of three (a card key); null = the row's first. */
+    val homeStripBigger: StateFlow<String?> = _homeStripBigger
+
+    fun setHomeStripBigger(key: String?) {
+        prefs.edit().putString(KEY_HOME_STRIP_BIGGER, key).apply()
+        _homeStripBigger.value = key
+    }
+
+    private val _homeStripTip = MutableStateFlow(prefs.getBoolean(KEY_HOME_STRIP_TIP, false))
+    /** True until a user who had the drawer dismisses the one-time "it moved to the strip" tip. */
+    val homeStripTip: StateFlow<Boolean> = _homeStripTip
+
+    fun dismissHomeStripTip() {
+        prefs.edit().putBoolean(KEY_HOME_STRIP_TIP, false).apply()
+        _homeStripTip.value = false
+    }
+
+    /**
+     * Once per install: a Home layout from before the strip gets placements, with the drawer's
+     * contents in a strip under the hero (`ScreenWidgets.migrateHomeToStrip`). A user who never
+     * customized Home but has used the app gets the old default migrated, so nothing moves around
+     * on them; a brand-new install keeps the new default. Call at app start.
+     */
+    fun migrateHomeLayoutToStrip() {
+        if (prefs.getBoolean(KEY_HOME_STRIP_MIGRATED, false)) return
+        val home = com.fitpal.app.domain.model.ScreenWidgets.HOME
+        val saved = _widgetLayouts.value[home].orEmpty()
+        if (saved.isNotEmpty() || _hasOnboarded.value) {
+            setWidgetLayout(home, com.fitpal.app.domain.model.ScreenWidgets.migrateHomeToStrip(saved))
+            prefs.edit().putBoolean(KEY_HOME_STRIP_TIP, true).apply()
+            _homeStripTip.value = true
+        }
+        prefs.edit().putBoolean(KEY_HOME_STRIP_MIGRATED, true).apply()
     }
 
     // --- Foods the user hid from the database search (fdcId strings; a local-only "don't show" flag,
@@ -895,6 +925,12 @@ class SettingsRepository @Inject constructor(
     fun importWidgetLayoutsJson(json: String) {
         prefs.edit().putString(KEY_WIDGET_LAYOUTS, json).apply()
         _widgetLayouts.value = loadWidgetLayouts()
+        // A backup from before the strip: give its Home the same move every install got.
+        val home = com.fitpal.app.domain.model.ScreenWidgets.HOME
+        _widgetLayouts.value[home]?.takeIf { it.isNotEmpty() }?.let { saved ->
+            val migrated = com.fitpal.app.domain.model.ScreenWidgets.migrateHomeToStrip(saved)
+            if (migrated != saved) setWidgetLayout(home, migrated)
+        }
     }
 
     private fun loadWidgetLayouts(): Map<String, List<com.fitpal.app.domain.model.WidgetSetting>> {
@@ -913,7 +949,8 @@ class SettingsRepository @Inject constructor(
                                 key = key,
                                 enabled = o.optBoolean("on", true),
                                 size = com.fitpal.app.domain.model.CardSize.entries.firstOrNull { it.name == o.optString("size") },
-                                variant = o.optString("variant").takeIf { it.isNotBlank() }
+                                variant = o.optString("variant").takeIf { it.isNotBlank() },
+                                placement = com.fitpal.app.domain.model.TrackerPlacement.entries.firstOrNull { it.name == o.optString("placement") }
                             )
                         )
                     }
@@ -933,6 +970,7 @@ class SettingsRepository @Inject constructor(
                 val o = JSONObject().put("key", s.key).put("on", s.enabled)
                 s.size?.let { o.put("size", it.name) }
                 s.variant?.let { o.put("variant", it) }
+                s.placement?.let { o.put("placement", it.name) }
                 arr.put(o)
             }
             obj.put(screenId, arr)
@@ -1052,7 +1090,10 @@ class SettingsRepository @Inject constructor(
         private const val KEY_CAFFEINE_ENABLED = "caffeine_enabled"
         private const val KEY_CAFFEINE_LIMIT = "caffeine_daily_limit_mg"
         private const val KEY_CAFFEINE_HALF_LIFE = "caffeine_half_life_h"
-        private const val KEY_HERO_DRAWER_OPEN = "hero_drawer_open"
+        // "hero_drawer_open" (the drawer's open/closed state) is no longer read — the strip replaced it.
+        private const val KEY_HOME_STRIP_BIGGER = "home_strip_bigger"
+        private const val KEY_HOME_STRIP_TIP = "home_strip_tip"
+        private const val KEY_HOME_STRIP_MIGRATED = "home_strip_migrated"
         private const val KEY_APPEARANCE = "appearance"
         private const val KEY_NAV_CONFIG = "nav_config"
 

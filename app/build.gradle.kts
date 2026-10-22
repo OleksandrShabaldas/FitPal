@@ -16,8 +16,8 @@ android {
         targetSdk = 35
         // versionCode MUST increase every release — Android refuses to install an APK whose
         // versionCode isn't higher than the installed one, which would silently break updating.
-        versionCode = 33
-        versionName = "2.8.0"
+        versionCode = 34
+        versionName = "2.9.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -71,6 +71,9 @@ ksp {
 }
 
 dependencies {
+    // Unit tests (app/src/test): pure domain rules only, no Android.
+    testImplementation("junit:junit:4.13.2")
+
     // Compose
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)

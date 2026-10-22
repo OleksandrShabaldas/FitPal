@@ -42,5 +42,6 @@ class CustomizeWidgetsViewModel @Inject constructor(
     fun toggle(key: String) = edit { l -> LayoutEdits.update(l, key) { it.copy(enabled = !it.enabled) } }
     fun setSize(key: String, size: CardSize) = edit { l -> LayoutEdits.update(l, key) { it.copy(size = size) } }
     fun setVariant(key: String, variant: String) = edit { l -> LayoutEdits.update(l, key) { it.copy(variant = variant) } }
+    fun setPlacement(key: String, placement: com.fitpal.app.domain.model.TrackerPlacement) = edit { LayoutEdits.place(it, key, placement) }
     fun resetToDefault() = edit { ScreenWidgets.defaultLayout(screenId) }
 }

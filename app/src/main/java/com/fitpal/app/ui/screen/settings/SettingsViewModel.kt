@@ -17,6 +17,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -113,6 +114,35 @@ class SettingsViewModel @Inject constructor(
     // ---- Layout: the bottom bar and presets ----
     val navConfig: StateFlow<com.fitpal.app.domain.model.NavConfig> = settingsRepository.navConfig
     fun setNavConfig(config: com.fitpal.app.domain.model.NavConfig) = settingsRepository.setNavConfig(config)
+
+    // ---- Trackers on Home (docs/redesign/05): where each shows, the strip's style and its "bigger" pick ----
+    val homeLayout: StateFlow<List<com.fitpal.app.domain.model.ResolvedCard>> = settingsRepository.widgetLayouts
+        .map { com.fitpal.app.domain.model.ScreenWidgets.resolveCards(com.fitpal.app.domain.model.ScreenWidgets.HOME, it[com.fitpal.app.domain.model.ScreenWidgets.HOME].orEmpty()) }
+        .stateIn(
+            viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000),
+            com.fitpal.app.domain.model.ScreenWidgets.resolveCards(
+                com.fitpal.app.domain.model.ScreenWidgets.HOME,
+                settingsRepository.widgetLayouts.value[com.fitpal.app.domain.model.ScreenWidgets.HOME].orEmpty()
+            )
+        )
+    val homeStripBigger: StateFlow<String?> = settingsRepository.homeStripBigger
+    fun setHomeStripBigger(key: String?) = settingsRepository.setHomeStripBigger(key)
+
+    private fun editHome(change: (List<com.fitpal.app.domain.model.WidgetSetting>) -> List<com.fitpal.app.domain.model.WidgetSetting>) {
+        val home = com.fitpal.app.domain.model.ScreenWidgets.HOME
+        val current = com.fitpal.app.domain.model.ScreenWidgets.resolve(
+            settingsRepository.widgetLayouts.value[home].orEmpty(), com.fitpal.app.domain.model.ScreenWidgets.defaultsFor(home)
+        )
+        settingsRepository.setWidgetLayout(home, change(current))
+    }
+
+    fun setTrackerPlacement(key: String, placement: com.fitpal.app.domain.model.TrackerPlacement) =
+        editHome { com.fitpal.app.domain.model.LayoutEdits.place(it, key, placement) }
+
+    /** "rings" or "numbers"; also puts the strip back on Home if it was hidden. */
+    fun setStripStyle(variant: String) = editHome { l ->
+        com.fitpal.app.domain.model.LayoutEdits.update(l, com.fitpal.app.domain.model.ScreenWidgets.STRIP) { it.copy(variant = variant, enabled = true) }
+    }
 
     fun applyLayoutPreset(preset: com.fitpal.app.domain.model.LayoutPreset) {
         settingsRepository.setWidgetLayout(com.fitpal.app.domain.model.ScreenWidgets.HOME, preset.home())

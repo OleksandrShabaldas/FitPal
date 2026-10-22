@@ -64,11 +64,7 @@ private const val INFO_TEXT =
         "here to take it out; the totals follow. To change what counts in general, add a note to the " +
         "limit in Settings → Food limits."
 
-private fun iconFor(kind: DietaryRuleKind): ImageVector = when (kind) {
-    DietaryRuleKind.DESSERT -> Icons.Default.Icecream
-    DietaryRuleKind.FRIED -> Icons.Default.Fastfood
-    DietaryRuleKind.SUGARY_DRINK -> Icons.Default.LocalDrink
-}
+private fun iconFor(kind: DietaryRuleKind): ImageVector = com.fitpal.app.ui.component.ruleIcon(kind)
 
 /**
  * The Food limits page (docs/redesign/09-fasting-weight-limits-pages.md): one chip per limit that's

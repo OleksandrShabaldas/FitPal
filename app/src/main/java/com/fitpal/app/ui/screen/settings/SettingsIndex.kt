@@ -129,6 +129,7 @@ val SETTINGS_SEARCH_INDEX = listOf(
     SettingsSearchEntry("App icon", "appearance", "app_icon", "icon launcher apple carrot sprout ring logo home screen icon change"),
     SettingsSearchEntry("Fine-tune the look", "appearance", "look_tuning", "glow grain texture opacity transparency corners rounding compact spacing density reduce motion animation"),
     // Home & screens
+    SettingsSearchEntry("Trackers on Home", "personalize", "trackers", "strip today strip trackers home cards caffeine on home fasting ring fasting bar drawer water steps weight food limits dessert fried drinks placement small card bigger rings numbers"),
     SettingsSearchEntry("Customize screens", "personalize", "customize", "reorder cards show hide home analytics add food layout size small medium large style widgets arrange"),
     SettingsSearchEntry("Bottom bar", "personalize", "nav_bar", "tabs navigation nav bar tab bar labels plus button camera describe docked floating trail"),
     SettingsSearchEntry("Layout presets", "personalize", "layout_presets", "preset minimal quick logger data nerd coach original layout reset"),

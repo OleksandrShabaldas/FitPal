@@ -41,6 +41,8 @@ class FitPalApplication : Application() {
                 systemDark = night == android.content.res.Configuration.UI_MODE_NIGHT_YES
             )
         }
+        // Home's layout from before the strip (2.8 and earlier) gets its placements, once.
+        runCatching { entryPoint.settingsRepository().migrateHomeLayoutToStrip() }
         // Re-arm the daily reminder (alarms are cleared on reboot / app update).
         runCatching { entryPoint.reminderManager().reschedule() }
 

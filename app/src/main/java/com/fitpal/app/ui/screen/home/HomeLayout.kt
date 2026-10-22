@@ -118,6 +118,8 @@ internal fun EditFrame(
     onVariant: (String) -> Unit,
     onHide: () -> Unit,
     modifier: Modifier = Modifier,
+    /** For trackers: where it shows (card, small card, strip, main card) instead of a size. */
+    onPlacement: (com.fitpal.app.domain.model.TrackerPlacement) -> Unit = {},
     content: @Composable () -> Unit
 ) {
     val still = LookState.appearance.reduceMotion
@@ -154,13 +156,18 @@ internal fun EditFrame(
                 modifier = Modifier.size(32.dp).clip(CircleShape).clickable(onClick = onHide).padding(6.dp)
             )
         }
-        if (card.def.sizes.size > 1 || card.def.variants.size > 1) {
+        if (card.def.isTracker || card.def.sizes.size > 1 || card.def.variants.size > 1) {
             FlowRow(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                if (card.def.sizes.size > 1) {
+                if (card.def.isTracker) {
+                    ChipLabel("Show as")
+                    card.def.placements.forEach { p ->
+                        EditChip(p.label, selected = card.placement == p) { onPlacement(p) }
+                    }
+                } else if (card.def.sizes.size > 1) {
                     ChipLabel("Size")
                     card.def.sizes.sortedBy { it.ordinal }.forEach { s ->
                         EditChip(s.label, selected = card.size == s) { onSize(s) }
@@ -276,7 +283,7 @@ internal fun EditModeBanner(onDone: () -> Unit) {
         Column(Modifier.weight(1f)) {
             Text("Arranging Home", style = MaterialTheme.typography.titleSmall, color = Cream)
             Text(
-                "Drag ≡ to move a card, pick its size or style, or hide it.",
+                "Drag ≡ to move a card, pick its size or style, or hide it. Trackers in the strip follow this order.",
                 style = MaterialTheme.typography.bodySmall, color = CreamMuted
             )
         }

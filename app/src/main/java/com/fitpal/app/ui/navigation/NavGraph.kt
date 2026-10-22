@@ -433,6 +433,7 @@ fun FitPalNavHost(
                     onManageModels = { navController.navigate(Screen.ModelSetup.route) },
                     onCustomizeScreen = { screenId -> navController.navigate(Screen.CustomizeWidgets.buildRoute(screenId)) },
                     onReplayIntro = { navController.navigate(Screen.Onboarding.buildRoute(replay = true)) },
+                    onOpenCategory = { cat, focus -> navController.navigate(Screen.SettingsCategory.buildRoute(cat, focus)) },
                     onBack = safeBack
                 )
             }

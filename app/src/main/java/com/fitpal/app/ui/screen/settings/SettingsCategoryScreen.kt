@@ -110,6 +110,8 @@ fun SettingsCategoryScreen(
     /** Open the first-run intro again (it starts from your current settings). */
     onReplayIntro: () -> Unit = {},
     focus: String? = null,
+    /** Open another settings category at a section (category id, section anchor). */
+    onOpenCategory: (String, String?) -> Unit = { _, _ -> },
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     GradientBackdrop(theme = BackdropTheme.TODAY) {
@@ -136,7 +138,7 @@ fun SettingsCategoryScreen(
                     SettingsAnchor("meal_times", focus) { MealTimesSection(viewModel) }
                 }
                 "fasting" -> {
-                    SettingsAnchor("fasting", focus) { FastingSection(viewModel) }
+                    SettingsAnchor("fasting", focus) { FastingSection(viewModel, onWhereOnHome = { onOpenCategory("personalize", "trackers") }) }
                 }
                 "rules" -> {
                     SettingsAnchor("rules", focus) { DietaryRulesSection(viewModel) }
@@ -167,6 +169,7 @@ fun SettingsCategoryScreen(
                     SettingsAnchor("look_tuning", focus) { AppearanceTuningSection(viewModel) }
                 }
                 "personalize" -> {
+                    SettingsAnchor("trackers", focus) { TrackersOnHomeSection(viewModel) }
                     SettingsAnchor("customize", focus) { PersonalizeSection(onCustomizeScreen) }
                     SettingsAnchor("nav_bar", focus) { NavBarSection(viewModel) }
                     SettingsAnchor("layout_presets", focus) { LayoutPresetsSection(viewModel) }
@@ -1304,7 +1307,7 @@ private fun MealTimesSection(viewModel: SettingsViewModel) {
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun FastingSection(viewModel: SettingsViewModel) {
+private fun FastingSection(viewModel: SettingsViewModel, onWhereOnHome: () -> Unit = {}) {
     val schedule by viewModel.fastingSchedule.collectAsStateWithLifecycle()
     Box(modifier = Modifier.fillMaxWidth().glass()) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -1362,20 +1365,21 @@ private fun FastingSection(viewModel: SettingsViewModel) {
                 }
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
-                Text("Timer on Home", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.height(8.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    com.fitpal.app.domain.model.FastingStyle.entries.forEach { style ->
-                        FastingChoiceTile(
-                            selected = schedule.style == style,
-                            title = style.label,
-                            blurb = style.blurb,
-                            onClick = { viewModel.setFastingStyle(style) },
-                            modifier = Modifier.weight(1f)
-                        ) { com.fitpal.app.ui.component.FastingStyleThumbnail(style) }
+                // Where the timer shows (main card ring or bar, a card, the strip) is set with the other
+                // trackers, in Home & screens.
+                Row(
+                    modifier = Modifier.fillMaxWidth().clickable(onClick = onWhereOnHome).padding(vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Timer on Home", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                        Text(
+                            "Ring, bar, a card or the strip — in Home & screens",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
+                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-
                 Spacer(Modifier.height(14.dp))
                 Text("Intensity", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.height(8.dp))
@@ -1471,7 +1475,7 @@ private fun FastingSection(viewModel: SettingsViewModel) {
  * one line on what it does. The chosen one lights up gold, like the feedback screen's topic tiles.
  */
 @Composable
-private fun FastingChoiceTile(
+internal fun FastingChoiceTile(
     selected: Boolean,
     title: String,
     blurb: String,

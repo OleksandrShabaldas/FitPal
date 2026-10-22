@@ -64,6 +64,7 @@ class DataManager @Inject constructor(
             // Your day (Profile): wake-up and bedtime, in minutes of the day.
             root.put("your_day", JSONObject().put("wake", settings.wakeMinutes.value).put("bed", settings.bedMinutes.value))
             root.put("step_goal", settings.stepGoalManual.value)
+            settings.homeStripBigger.value?.let { root.put("home_strip_bigger", it) }
             context.contentResolver.openOutputStream(uri)?.use { out ->
                 out.write(root.toString().toByteArray(Charsets.UTF_8))
             } ?: return@withContext false
@@ -116,6 +117,7 @@ class DataManager @Inject constructor(
             root.optJSONObject("widget_layouts")?.let { settings.importWidgetLayoutsJson(it.toString()) }
             root.optJSONObject("nav_config")?.let { settings.setNavConfig(com.fitpal.app.domain.model.NavConfig.fromJson(it.toString())) }
             if (root.has("step_goal")) settings.setStepGoalManual(root.optInt("step_goal", 0))
+            if (root.has("home_strip_bigger")) settings.setHomeStripBigger(root.optString("home_strip_bigger").takeIf { it.isNotBlank() })
             root.optJSONObject("your_day")?.let { day ->
                 if (day.has("wake")) settings.setWakeMinutes(day.optInt("wake", SettingsRepository.DEFAULT_WAKE_MINUTES))
                 if (day.has("bed")) settings.setBedMinutes(day.optInt("bed", SettingsRepository.DEFAULT_BED_MINUTES))

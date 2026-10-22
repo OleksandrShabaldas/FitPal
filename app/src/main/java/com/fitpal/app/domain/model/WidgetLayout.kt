@@ -3,6 +3,16 @@ package com.fitpal.app.domain.model
 /** How big a card is on its screen: S = half width (two sit side by side), M = full, L = full and roomy. */
 enum class CardSize(val label: String) { S("Small"), M("Medium"), L("Large") }
 
+/**
+ * Where a tracker (water, steps, caffeine, fasting, weight, each food limit) shows on Home
+ * (docs/redesign/05): on the main card (fasting only), as a card, a small card, in the strip, or
+ * not on Home. OFF_HOME is the card being hidden — the placement it had is kept, so switching it
+ * back on returns it there.
+ */
+enum class TrackerPlacement(val label: String) {
+    MAIN("Main card"), CARD_M("Card"), CARD_S("Small"), STRIP("Strip"), OFF_HOME("Off Home")
+}
+
 /** One way a card can be drawn ("ring", "numbers", …) and its human label. */
 data class CardVariant(val id: String, val label: String)
 
@@ -14,7 +24,9 @@ data class WidgetSetting(
     val key: String,
     val enabled: Boolean = true,
     val size: CardSize? = null,
-    val variant: String? = null
+    val variant: String? = null,
+    /** For tracker cards: where it shows (null = from [size], else the card's default). */
+    val placement: TrackerPlacement? = null
 )
 
 /** A card that can appear on a customizable screen: key, label, the sizes and styles it supports. */
@@ -24,8 +36,12 @@ data class WidgetDef(
     val sizes: List<CardSize> = listOf(CardSize.M),
     val variants: List<CardVariant> = emptyList(),
     /** Shown on a fresh install / when it's first added to the app. */
-    val defaultOn: Boolean = true
+    val defaultOn: Boolean = true,
+    /** Non-empty for trackers: where on Home it may go (OFF_HOME is always allowed, as hiding). */
+    val placements: List<TrackerPlacement> = emptyList(),
+    val defaultPlacement: TrackerPlacement? = null
 ) {
+    val isTracker: Boolean get() = placements.isNotEmpty()
     val defaultSize: CardSize get() = sizes.first()
     val defaultVariant: String? get() = variants.firstOrNull()?.id
 }
@@ -34,7 +50,31 @@ data class WidgetDef(
 data class ResolvedCard(val def: WidgetDef, val setting: WidgetSetting) {
     val key: String get() = def.key
     val enabled: Boolean get() = setting.enabled
-    val size: CardSize get() = setting.size?.takeIf { it in def.sizes } ?: def.defaultSize
+    val size: CardSize get() = when (placement) {
+        TrackerPlacement.CARD_S -> CardSize.S
+        TrackerPlacement.CARD_M -> CardSize.M
+        else -> setting.size?.takeIf { it in def.sizes } ?: def.defaultSize
+    }
+
+    /**
+     * Where a tracker shows (null for other cards). A layout saved before placements existed has
+     * only a size, so S → small card, M/L → card.
+     */
+    val placement: TrackerPlacement?
+        get() {
+            if (!def.isTracker) return null
+            if (!setting.enabled) return TrackerPlacement.OFF_HOME
+            setting.placement?.takeIf { it in def.placements }?.let { return it }
+            val fromSize = when (setting.size) {
+                CardSize.S -> TrackerPlacement.CARD_S
+                CardSize.M, CardSize.L -> TrackerPlacement.CARD_M
+                null -> null
+            }
+            return fromSize?.takeIf { it in def.placements } ?: def.defaultPlacement ?: def.placements.first()
+        }
+
+    /** Drawn as a card of its own (not in the strip, not on the main card, not hidden). */
+    val isOwnCard: Boolean get() = enabled && (placement == null || placement == TrackerPlacement.CARD_M || placement == TrackerPlacement.CARD_S)
     val variant: String? get() = setting.variant?.takeIf { v -> def.variants.any { it.id == v } } ?: def.defaultVariant
     /** Chart height multiplier for this card: Large cards get taller charts. */
     val chartScale: Float get() = if (size == CardSize.L) 1.6f else 1f
@@ -54,6 +94,20 @@ object LayoutEdits {
 
     fun update(list: List<WidgetSetting>, key: String, change: (WidgetSetting) -> WidgetSetting): List<WidgetSetting> =
         list.map { if (it.key == key) change(it) else it }
+
+    /**
+     * Put a tracker somewhere: OFF_HOME hides it (keeping its placement for when it comes back);
+     * anything else shows it there, with the matching size for cards.
+     */
+    fun place(list: List<WidgetSetting>, key: String, placement: TrackerPlacement): List<WidgetSetting> =
+        update(list, key) { s ->
+            when (placement) {
+                TrackerPlacement.OFF_HOME -> s.copy(enabled = false)
+                TrackerPlacement.CARD_S -> s.copy(enabled = true, placement = placement, size = CardSize.S)
+                TrackerPlacement.CARD_M -> s.copy(enabled = true, placement = placement, size = CardSize.M)
+                else -> s.copy(enabled = true, placement = placement)
+            }
+        }
 
     /** A hidden card brought back goes to the end, where it's easy to see. */
     fun show(list: List<WidgetSetting>, key: String): List<WidgetSetting> {
@@ -83,28 +137,46 @@ object ScreenWidgets {
     /** The customizable screens, in the order shown in Settings. */
     val screens: List<String> = listOf(HOME, ANALYTICS, ADD_FOOD)
 
+    /** The Home card that holds every tracker placed in the strip. */
+    const val STRIP = "strip"
+
     private val SM = listOf(CardSize.M, CardSize.S)
+    private val CARD_PLACES = listOf(TrackerPlacement.CARD_M, TrackerPlacement.CARD_S, TrackerPlacement.STRIP)
+    private val LIMIT_PLACES = listOf(TrackerPlacement.CARD_S, TrackerPlacement.STRIP)
     private val ML = listOf(CardSize.M, CardSize.L)
 
     private val defaults: Map<String, List<WidgetDef>> = mapOf(
+        // The order is a new user's Home (docs/redesign/05): the strip right under the hero, water and
+        // steps as two small cards, then the overview, meals and exercise. Trackers in the strip or on
+        // the main card take no row of their own; their position is their order in the strip.
         HOME to listOf(
             WidgetDef(
                 "hero", "Calories & macros ring", sizes = listOf(CardSize.L, CardSize.M),
                 variants = listOf(CardVariant("ring", "Ring"), CardVariant("numbers", "Big number"))
             ),
+            WidgetDef(
+                STRIP, "Today strip", sizes = listOf(CardSize.M),
+                variants = listOf(CardVariant("rings", "Rings"), CardVariant("numbers", "Numbers"))
+            ),
+            WidgetDef("water", "Water", sizes = SM, placements = CARD_PLACES, defaultPlacement = TrackerPlacement.CARD_S),
+            WidgetDef("steps", "Steps", sizes = SM, placements = CARD_PLACES, defaultPlacement = TrackerPlacement.CARD_S),
             WidgetDef("ai_review", "AI daily overview", sizes = SM),
             WidgetDef("meals", "Meals", sizes = listOf(CardSize.L)),
-            WidgetDef("water", "Water", sizes = SM),
-            WidgetDef("steps", "Steps", sizes = SM),
             WidgetDef("exercise", "Exercise", sizes = SM),
-            WidgetDef("weight", "Log weight", sizes = SM),
-            // Off until picked: pieces of the hero, on their own.
+            WidgetDef("caffeine", "Caffeine", sizes = SM, placements = CARD_PLACES, defaultPlacement = TrackerPlacement.STRIP),
+            WidgetDef("limit_dessert", "Dessert limit", sizes = listOf(CardSize.S), placements = LIMIT_PLACES, defaultPlacement = TrackerPlacement.STRIP),
+            WidgetDef("limit_fried", "Fried food limit", sizes = listOf(CardSize.S), placements = LIMIT_PLACES, defaultPlacement = TrackerPlacement.STRIP),
+            WidgetDef("limit_drink", "Sugary drinks limit", sizes = listOf(CardSize.S), placements = LIMIT_PLACES, defaultPlacement = TrackerPlacement.STRIP),
+            WidgetDef("weight", "Weight", sizes = SM, placements = CARD_PLACES, defaultPlacement = TrackerPlacement.STRIP),
+            WidgetDef(
+                "fasting", "Fasting", sizes = SM,
+                placements = listOf(TrackerPlacement.MAIN) + CARD_PLACES, defaultPlacement = TrackerPlacement.MAIN
+            ),
+            // Off until picked: a piece of the hero, on its own.
             WidgetDef(
                 "macros", "Macros", sizes = listOf(CardSize.M),
                 variants = listOf(CardVariant("rings", "Rings"), CardVariant("bars", "Bars")), defaultOn = false
-            ),
-            WidgetDef("fasting", "Fasting timer", sizes = SM, defaultOn = false),
-            WidgetDef("caffeine", "Caffeine", sizes = SM, defaultOn = false)
+            )
         ),
         ANALYTICS to listOf(
             WidgetDef("tiles", "Summary tiles"),
@@ -161,6 +233,40 @@ object ScreenWidgets {
         val registry = defaultsFor(screenId)
         val byKey = registry.associateBy { it.key }
         return resolve(saved, registry).mapNotNull { s -> byKey[s.key]?.let { ResolvedCard(it, s) } }
+    }
+
+    /**
+     * Home as every install had it before the strip (2.8 and earlier), for a user who never
+     * changed it — so the move to the strip keeps what they were used to.
+     */
+    private val LEGACY_HOME: List<WidgetSetting> =
+        listOf("hero", "ai_review", "meals", "water", "steps", "exercise", "weight").map { WidgetSetting(it) } +
+            listOf("macros", "fasting", "caffeine").map { WidgetSetting(it, enabled = false) }
+
+    /**
+     * A Home layout saved before the strip (docs/redesign/05) → the same Home with placements: cards
+     * keep their order, visibility and size; what the hero's drawer held (food limits, caffeine)
+     * becomes the strip, right under the hero, where the drawer was; fasting stays on the main card
+     * unless its own card was on. Pass the saved list — empty for a user who never customized.
+     * A layout that already has the strip is returned as it is.
+     */
+    fun migrateHomeToStrip(saved: List<WidgetSetting>): List<WidgetSetting> {
+        if (saved.any { it.key == STRIP }) return saved
+        val asCard: (WidgetSetting) -> TrackerPlacement = { s ->
+            if (s.size == CardSize.S) TrackerPlacement.CARD_S else TrackerPlacement.CARD_M
+        }
+        val moved = saved.ifEmpty { LEGACY_HOME }.map { s ->
+            when (s.key) {
+                "caffeine" -> if (s.enabled) s.copy(placement = asCard(s)) else s.copy(enabled = true, placement = TrackerPlacement.STRIP)
+                "fasting" -> if (s.enabled) s.copy(placement = asCard(s)) else s.copy(enabled = true, placement = TrackerPlacement.MAIN)
+                "water", "steps", "weight" -> s.copy(placement = asCard(s))
+                else -> s
+            }
+        }
+        val strip = listOf(WidgetSetting(STRIP)) +
+            listOf("limit_dessert", "limit_fried", "limit_drink").map { WidgetSetting(it, placement = TrackerPlacement.STRIP) }
+        val at = moved.indexOfFirst { it.key == "hero" } + 1
+        return moved.take(at) + strip + moved.drop(at)
     }
 
     /** The layout a fresh install gets. */

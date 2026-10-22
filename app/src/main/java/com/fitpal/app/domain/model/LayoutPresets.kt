@@ -13,18 +13,31 @@ enum class LayoutPreset(val label: String, val blurb: String) {
 
     fun home(): List<WidgetSetting> {
         fun on(key: String, size: CardSize? = null, variant: String? = null) = WidgetSetting(key, true, size, variant)
+        fun strip(key: String) = WidgetSetting(key, true, placement = TrackerPlacement.STRIP)
+        val fastingMain = WidgetSetting("fasting", true, placement = TrackerPlacement.MAIN)
         val chosen: List<WidgetSetting> = when (this) {
             ORIGINAL -> return ScreenWidgets.defaultLayout(ScreenWidgets.HOME)
-            MINIMAL -> listOf(on("hero", CardSize.M, "ring"), on("meals"))
-            QUICK_LOGGER -> listOf(on("hero", CardSize.M, "numbers"), on("meals"), on("water", CardSize.S), on("weight", CardSize.S))
+            // Fasting stays on the main card in every preset but Data nerd: hiding it would drop the
+            // fasting ring. Trackers given a size are cards; the rest of the strip comes from "strip".
+            MINIMAL -> listOf(on("hero", CardSize.M, "ring"), fastingMain, on("meals"))
+            QUICK_LOGGER -> listOf(
+                on("hero", CardSize.M, "numbers"), fastingMain, on(ScreenWidgets.STRIP),
+                on("meals"), on("water", CardSize.S), on("weight", CardSize.S)
+            )
             DATA_NERD -> listOf(
-                on("hero", CardSize.L, "ring"), on("macros", variant = "bars"),
+                on("hero", CardSize.L, "ring"), on(ScreenWidgets.STRIP),
+                strip("limit_dessert"), strip("limit_fried"), strip("limit_drink"),
+                on("macros", variant = "bars"),
                 on("water", CardSize.S), on("steps", CardSize.S),
                 on("exercise", CardSize.S), on("caffeine", CardSize.S),
                 on("fasting", CardSize.S), on("weight", CardSize.S),
                 on("ai_review", CardSize.M), on("meals")
             )
-            COACH -> listOf(on("ai_review", CardSize.M), on("hero", CardSize.L), on("meals"), on("water", CardSize.S), on("steps", CardSize.S), on("weight", CardSize.M))
+            COACH -> listOf(
+                on("ai_review", CardSize.M), on("hero", CardSize.L), fastingMain, on(ScreenWidgets.STRIP),
+                strip("caffeine"), strip("limit_dessert"), strip("limit_fried"), strip("limit_drink"),
+                on("meals"), on("water", CardSize.S), on("steps", CardSize.S), on("weight", CardSize.M)
+            )
         }
         // Everything not chosen is kept, hidden, so it can be switched back on.
         val keys = chosen.map { it.key }.toSet()

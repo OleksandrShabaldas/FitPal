@@ -78,7 +78,7 @@ fun CustomizeWidgetsScreen(
                 item(key = "hint") {
                     Text(
                         "Drag ≡ to reorder. The switch shows or hides a card; the chips pick its size and style. " +
-                            "Two Small cards sit side by side.",
+                            "Two Small cards sit side by side; trackers in the strip follow this order.",
                         style = MaterialTheme.typography.bodyMedium, color = CreamMuted
                     )
                 }
@@ -90,7 +90,8 @@ fun CustomizeWidgetsScreen(
                             dragHandle = Modifier.draggableHandle(),
                             onToggle = { viewModel.toggle(card.key) },
                             onSize = { viewModel.setSize(card.key, it) },
-                            onVariant = { viewModel.setVariant(card.key, it) }
+                            onVariant = { viewModel.setVariant(card.key, it) },
+                            onPlacement = { viewModel.setPlacement(card.key, it) }
                         )
                     }
                 }
@@ -110,7 +111,8 @@ private fun CardRow(
     dragHandle: Modifier,
     onToggle: () -> Unit,
     onSize: (com.fitpal.app.domain.model.CardSize) -> Unit,
-    onVariant: (String) -> Unit
+    onVariant: (String) -> Unit,
+    onPlacement: (com.fitpal.app.domain.model.TrackerPlacement) -> Unit = {}
 ) {
     Column(Modifier.fillMaxWidth().glass().padding(horizontal = 14.dp, vertical = 10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -126,10 +128,14 @@ private fun CardRow(
             )
             Switch(checked = card.enabled, onCheckedChange = { onToggle() })
         }
-        if (card.enabled && (card.def.sizes.size > 1 || card.def.variants.size > 1)) {
+        if (card.enabled && (card.def.isTracker || card.def.sizes.size > 1 || card.def.variants.size > 1)) {
             Spacer(Modifier.height(6.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (card.def.sizes.size > 1) {
+                if (card.def.isTracker) {
+                    // Trackers pick where they show; the strip's order is their order in this list.
+                    Text("Show as", style = MaterialTheme.typography.labelMedium, color = CreamFaint, modifier = Modifier.padding(start = 2.dp, top = 6.dp))
+                    card.def.placements.forEach { p -> Chip(p.label, card.placement == p) { onPlacement(p) } }
+                } else if (card.def.sizes.size > 1) {
                     Text("Size", style = MaterialTheme.typography.labelMedium, color = CreamFaint, modifier = Modifier.padding(start = 2.dp, top = 6.dp))
                     card.def.sizes.sortedBy { it.ordinal }.forEach { s -> Chip(s.label, card.size == s) { onSize(s) } }
                 }

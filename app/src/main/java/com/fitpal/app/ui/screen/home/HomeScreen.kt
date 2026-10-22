@@ -16,6 +16,7 @@ import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
@@ -208,14 +209,31 @@ fun HomeScreen(
     val fitnessGoal by viewModel.fitnessGoal.collectAsStateWithLifecycle()
     val weeklyBalanceKcal by viewModel.weeklyBalanceKcal.collectAsStateWithLifecycle()
     val dietaryStatuses by viewModel.dietaryStatuses.collectAsStateWithLifecycle()
-    val heroDrawerOpen by viewModel.heroDrawerOpen.collectAsStateWithLifecycle()
     val caffeineView by viewModel.caffeineView.collectAsStateWithLifecycle()
-    // A once-a-minute clock so "caffeine in your body now" keeps draining while Home is open.
+    val stripBigger by viewModel.homeStripBigger.collectAsStateWithLifecycle()
+    val stripTip by viewModel.homeStripTip.collectAsStateWithLifecycle()
+    val stepGoal by viewModel.stepGoal.collectAsStateWithLifecycle()
+    val wakeMin by viewModel.wakeMinutes.collectAsStateWithLifecycle()
+    val bedMin by viewModel.bedMinutes.collectAsStateWithLifecycle()
+    val weights by viewModel.weights.collectAsStateWithLifecycle()
+    // A once-a-minute clock so "caffeine in your body now" keeps draining and the water pace moves
+    // while Home is open.
     var nowMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(caffeineView != null) {
-        while (caffeineView != null) {
+    LaunchedEffect(Unit) {
+        while (true) {
             nowMillis = System.currentTimeMillis()
             kotlinx.coroutines.delay(60_000L)
+        }
+    }
+    // Undo for the strip's quick adds (a long press on water).
+    val snackbar = remember { androidx.compose.material3.SnackbarHostState() }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
+    fun announce(message: String, onUndo: () -> Unit) {
+        scope.launch {
+            snackbar.currentSnackbarData?.dismiss()
+            val result = snackbar.showSnackbar(message, actionLabel = "Undo", duration = androidx.compose.material3.SnackbarDuration.Short)
+            if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) onUndo()
         }
     }
 
@@ -261,6 +279,111 @@ fun HomeScreen(
         fiber = nutrition.fiber, fiberTarget = targets?.fiberG?.toFloat() ?: 0f,
         microCoverage = microCoverage(micros)
     )
+
+    // ---- The trackers (docs/redesign/05): one HomeTracker each, for the strip and the cards ----
+    val isToday = selectedDate == LocalDate.now()
+    val dateArg = selectedDate.toString()
+    val nowMin = java.time.Instant.ofEpochMilli(nowMillis).atZone(java.time.ZoneId.systemDefault()).toLocalTime()
+        .let { it.hour * 60 + it.minute }
+    val glassMl = waterPresets.firstOrNull() ?: 250
+    val addGlass = {
+        haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+        viewModel.addWaterWithUndo(glassMl.toFloat()) { id -> announce("Added $glassMl ml") { viewModel.undoWater(id) } }
+    }
+    val fastingLive = if (fastingSchedule.enabled) com.fitpal.app.ui.component.rememberFastingState(fastingSchedule) else null
+    val trackers: Map<String, HomeTracker> = buildMap {
+        run {
+            val status = if (isToday) com.fitpal.app.domain.WaterPace.statusToday(water, waterGoal, nowMin, wakeMin, bedMin, glassMl)
+                else com.fitpal.app.domain.WaterPace.statusPast(water, waterGoal)
+            val t = com.fitpal.app.domain.Trackers.water(water, waterGoal, status)
+            put("water", HomeTracker(
+                "water", "Water", Icons.Default.WaterDrop, AccentTrends, t.display, t.shortDisplay, t.fraction, t.status,
+                onClick = { onOpenWater(dateArg) }, onLongClick = addGlass, quickAdd = "+$glassMl" to addGlass
+            ))
+        }
+        run {
+            val t = com.fitpal.app.domain.Trackers.steps(dailySteps.coerceAtLeast(0), stepGoal, isToday)
+            put("steps", HomeTracker(
+                "steps", "Steps", Icons.AutoMirrored.Filled.DirectionsWalk, AccentActivity, t.display, t.shortDisplay,
+                t.fraction, t.status, onClick = { onOpenSteps(dateArg) }
+            ))
+        }
+        caffeineView?.let { c ->
+            val inYou = if (c.isToday) c.amountAt(nowMillis) else c.dayTotalMg
+            val limit = c.settings.dailyLimitMg
+            // Today: the bedtime verdict, as on the Caffeine page — with the day's limit deciding the border.
+            val status = if (c.isToday) {
+                val bed = com.fitpal.app.domain.Caffeine.bedtimeStatus(
+                    c.doses, nowMillis, com.fitpal.app.domain.Caffeine.nextBedtime(nowMillis, bedMin), c.settings.halfLifeHours
+                )
+                when {
+                    c.overLimit -> bed.copy(kind = com.fitpal.app.domain.StatusKind.OVER)
+                    c.nearLimit && bed.kind == com.fitpal.app.domain.StatusKind.OK -> bed.copy(kind = com.fitpal.app.domain.StatusKind.CLOSE)
+                    else -> bed
+                }
+            } else com.fitpal.app.domain.TrackerStatus(
+                if (c.overLimit) com.fitpal.app.domain.StatusKind.OVER else com.fitpal.app.domain.StatusKind.NEUTRAL,
+                "${c.dayTotalMg.roundToInt()} mg that day"
+            )
+            put("caffeine", HomeTracker(
+                "caffeine", "Caffeine", Icons.Default.LocalCafe, CaffeineColor, "${inYou.roundToInt()} mg", "${inYou.roundToInt()} mg",
+                if (limit > 0) inYou / limit else null, status, onClick = { onOpenCaffeine(dateArg) }
+            ))
+        }
+        run {
+            val today = LocalDate.now()
+            val weekChange = com.fitpal.app.domain.WeightTrend.changeOver(weights, today.minusDays(6), today)
+            val t = com.fitpal.app.domain.Trackers.weight(
+                latestWeight?.weightKg, weekChange, weekChange?.let { com.fitpal.app.domain.WeightTrend.changeIsOnTrack(it, fitnessGoal) }
+            )
+            put("weight", HomeTracker(
+                "weight", "Weight", Icons.Default.MonitorWeight, GoldLight, t.display, t.shortDisplay, null, t.status,
+                onClick = onOpenWeight
+            ))
+        }
+        dietaryStatuses.forEach { st ->
+            val name = com.fitpal.app.ui.component.ruleShortName(st.kind)
+            val t = com.fitpal.app.domain.Trackers.limit(name, st.consumedKcal, st.limitKcal)
+            val key = "limit_${st.kind.id}"
+            put(key, HomeTracker(
+                key, name, com.fitpal.app.ui.component.ruleIcon(st.kind), com.fitpal.app.ui.component.ruleColor(st.kind),
+                t.display, t.shortDisplay, t.fraction, t.status?.let { it.copy(text = it.text.removePrefix("$name: ")) },
+                onClick = { onOpenLimits(dateArg, st.kind.id) }
+            ))
+        }
+        // The fasting timer is live, so it's only in the strip for today.
+        if (fastingLive != null && isToday) {
+            val clock = com.fitpal.app.ui.component.fastingClockLabel(fastingLive.nextChangeMin)
+            val left = com.fitpal.app.ui.component.fastingCountdownLabel(fastingLive.minutesLeftInPhase)
+            put("fasting", HomeTracker(
+                "fasting", "Fasting", Icons.Default.HourglassEmpty, com.fitpal.app.ui.component.fastingAccent(fastingLive), left, left,
+                fastingLive.progressFraction,
+                com.fitpal.app.domain.TrackerStatus(
+                    com.fitpal.app.domain.StatusKind.NEUTRAL,
+                    if (fastingLive.isFasting) "eat at $clock" else "window closes $clock"
+                ),
+                onClick = { onOpenFasting(dateArg) }
+            ))
+        }
+    }
+    // A tracker whose feature is off is drawn nowhere, whatever its placement.
+    val featureOn: (String) -> Boolean = { key ->
+        when {
+            key == "fasting" -> fastingSchedule.enabled
+            key == "caffeine" -> caffeineView != null
+            key.startsWith("limit_") -> key in trackers
+            else -> true
+        }
+    }
+    val stripItems = widgetLayout
+        .filter { it.placement == com.fitpal.app.domain.model.TrackerPlacement.STRIP && featureOn(it.key) }
+        .mapNotNull { trackers[it.key] }
+    val fastingOnMain = widgetLayout.firstOrNull { it.key == "fasting" }?.placement == com.fitpal.app.domain.model.TrackerPlacement.MAIN
+    // What gets a row of its own: cards (not trackers in the strip or on the main card), with their
+    // feature on, and the strip only when something's in it.
+    val shownCards = widgetLayout.filter {
+        it.isOwnCard && featureOn(it.key) && (it.key != com.fitpal.app.domain.model.ScreenWidgets.STRIP || stripItems.isNotEmpty())
+    }
 
     var swipeDragX by remember { mutableFloatStateOf(0f) }
     // The search bar shows at the top and slides away as you scroll down, back on scroll up.
@@ -313,12 +436,7 @@ fun HomeScreen(
                     fat = nutrition.fat, fatTarget = targets?.fatG?.toFloat() ?: 0f,
                     carbs = nutrition.carbs, carbTarget = targets?.carbsG?.toFloat() ?: 0f,
                     fiber = nutrition.fiber, fiberTarget = targets?.fiberG?.toFloat() ?: 0f,
-                    drawer = com.fitpal.app.ui.component.HeroDrawerState(dietaryStatuses, caffeineView),
-                    drawerOpen = heroDrawerOpen,
-                    onToggleDrawer = viewModel::toggleHeroDrawer,
-                    nowMillis = nowMillis,
-                    onOpenCaffeine = { onOpenCaffeine(selectedDate.toString()) },
-                    onOpenLimit = { kind -> onOpenLimits(selectedDate.toString(), kind.id) },
+                    fastingOnMain = fastingOnMain,
                     onOpenFasting = { onOpenFasting(selectedDate.toString()) },
                     size = card.size,
                     variant = card.variant ?: "ring"
@@ -385,15 +503,24 @@ fun HomeScreen(
                 )
             }
             "fasting" -> FastingCard(schedule = fastingSchedule, small = small, modifier = m, onClick = { onOpenFasting(selectedDate.toString()) })
-            "caffeine" -> {
-                val now = caffeineView?.amountAt(nowMillis)
-                SmallTile(
-                    Icons.Default.LocalCafe, "Caffeine",
-                    now?.let { "${it.roundToInt()} mg" } ?: "Off",
-                    if (now != null) "in you now" else "Turn on in Settings",
-                    CaffeineColor, { if (caffeineView != null) onOpenCaffeine(selectedDate.toString()) }, m
-                )
+            "caffeine" -> trackers["caffeine"]?.let { t ->
+                if (small) SmallTile(
+                    t.icon, t.label, t.value, t.status?.text ?: "in you now",
+                    if (t.isOver) MacroOver else CaffeineColor, t.onClick, m
+                ) else TrackerWideCard(t, m)
             }
+            "limit_dessert", "limit_fried", "limit_drink" -> {
+                val st = dietaryStatuses.firstOrNull { "limit_${it.kind.id}" == card.key }
+                trackers[card.key]?.let { t ->
+                    SmallTile(
+                        t.icon, t.label, "${st?.consumedKcal ?: 0} kcal", t.status?.text ?: "",
+                        if (t.isOver) MacroOver else t.color, t.onClick, m
+                    )
+                }
+            }
+            com.fitpal.app.domain.model.ScreenWidgets.STRIP -> TodayStrip(
+                items = stripItems, bigger = stripBigger, numbers = card.variant == "numbers", modifier = m
+            )
         }
     }
 
@@ -494,7 +621,8 @@ fun HomeScreen(
                 // Cards below the header, in the user's layout (Settings → Home & screens, or the
                 // pencil in the header): order, shown/hidden, size and style. Two Small cards share a row.
                 if (!editing) {
-                    com.fitpal.app.domain.model.ScreenWidgets.rows(widgetLayout.filter { it.enabled }).forEach { row ->
+                    if (stripTip) item(key = "strip_tip") { StripMovedTip(onDismiss = viewModel::dismissHomeStripTip) }
+                    com.fitpal.app.domain.model.ScreenWidgets.rows(shownCards).forEach { row ->
                         val first = row.first()
                         if (row.size == 1 && first.key == "meals") {
                             sections.forEach { section ->
@@ -537,10 +665,16 @@ fun HomeScreen(
                                     dragHandle = Modifier.draggableHandle(),
                                     onSize = { viewModel.setCardSize(card.key, it) },
                                     onVariant = { viewModel.setCardVariant(card.key, it) },
+                                    onPlacement = { viewModel.setPlacement(card.key, it) },
                                     onHide = { viewModel.hideCard(card.key) }
                                 ) {
                                     when {
                                         card.key == "meals" -> MealsEditPlaceholder(sections.size)
+                                        // A tracker in the strip or on the main card, or one that's not in use.
+                                        card.def.isTracker && (!card.isOwnCard || !featureOn(card.key)) ->
+                                            PlacedElsewhere(trackers[card.key], card.def.label, card.placement, featureOn(card.key))
+                                        card.key == com.fitpal.app.domain.model.ScreenWidgets.STRIP && stripItems.isEmpty() ->
+                                            PlacedElsewhere(null, "Today strip", null, featureOn = true)
                                         card.size == com.fitpal.app.domain.model.CardSize.S -> Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                             homeCard(card, Modifier.weight(1f))
                                             Spacer(Modifier.weight(1f))
@@ -572,6 +706,10 @@ fun HomeScreen(
         ) {
             FastingBanner(schedule = fastingSchedule, onDismiss = { fastingBannerVisible = false })
         }
+        androidx.compose.material3.SnackbarHost(
+            snackbar,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(start = 16.dp, end = 16.dp, bottom = 104.dp)
+        )
         }
     }
 
@@ -791,12 +929,8 @@ private fun HeroCard(
     fat: Float, fatTarget: Float,
     carbs: Float, carbTarget: Float,
     fiber: Float, fiberTarget: Float,
-    drawer: com.fitpal.app.ui.component.HeroDrawerState = com.fitpal.app.ui.component.HeroDrawerState(),
-    drawerOpen: Boolean = false,
-    onToggleDrawer: () -> Unit = {},
-    nowMillis: Long = System.currentTimeMillis(),
-    onOpenCaffeine: () -> Unit = {},
-    onOpenLimit: (com.fitpal.app.domain.model.DietaryRuleKind) -> Unit = {},
+    /** Fasting's placement is the main card (else it's a card, in the strip, or off Home). */
+    fastingOnMain: Boolean = true,
     onOpenFasting: () -> Unit = {},
     /** L = ring + the vitamins page to swipe to; M = the ring page only, shorter. */
     size: com.fitpal.app.domain.model.CardSize = com.fitpal.app.domain.model.CardSize.L,
@@ -807,36 +941,10 @@ private fun HeroCard(
     val compact = size != com.fitpal.app.domain.model.CardSize.L
     val numbers = variant == "numbers"
     Column(modifier = Modifier.fillMaxWidth().glass().padding(vertical = 14.dp, horizontal = 16.dp)) {
-        // The food-limit + caffeine rings, folded away behind a small arrow so the hero stays calm.
-        // A dot on the arrow speaks up when a limit is close (amber) or passed (red).
-        if (!drawer.isEmpty) {
-            com.fitpal.app.ui.component.HeroDrawerHandle(
-                open = drawerOpen,
-                alertColor = drawer.alertColor,
-                onToggle = onToggleDrawer,
-                modifier = Modifier.offset(y = (-6).dp)
-            )
-            AnimatedVisibility(
-                visible = drawerOpen,
-                enter = expandVertically() + fadeIn(),
-                exit = shrinkVertically() + fadeOut()
-            ) {
-                Column {
-                    com.fitpal.app.ui.component.HeroDrawerRings(
-                        state = drawer,
-                        nowMillis = nowMillis,
-                        onOpenCaffeine = onOpenCaffeine,
-                        onOpenLimit = onOpenLimit,
-                        modifier = Modifier.padding(top = 2.dp)
-                    )
-                    Spacer(Modifier.height(12.dp))
-                }
-            }
-        }
         // The fasting timer — only for today, and only when fasting is enabled. Horizontal style: a slim
         // strip above the ring. Circle style: an arc wrapped around the ring itself (see below).
         val fastingSchedule = LocalFastingSchedule.current
-        val showFasting = fastingSchedule.enabled && isToday
+        val showFasting = fastingOnMain && fastingSchedule.enabled && isToday
         // The arc wraps the ring — with the big-number style there's no ring, so the strip shows instead.
         val fastingAroundRing = showFasting && fastingSchedule.style == FastingStyle.RING && !numbers
         if (showFasting && !fastingAroundRing) {

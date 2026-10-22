@@ -142,9 +142,21 @@ class HomeViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    /** Whether the food-limit + caffeine drawer on the main card is open (remembered across restarts). */
-    val heroDrawerOpen: StateFlow<Boolean> = settingsRepository.heroDrawerOpen
-    fun toggleHeroDrawer() = settingsRepository.setHeroDrawerOpen(!settingsRepository.heroDrawerOpen.value)
+    // ---- The strip (docs/redesign/05) and the trackers' numbers it shows ----
+
+    /** The tracker drawn bigger in a strip row of three (null = the row's first). */
+    val homeStripBigger: StateFlow<String?> = settingsRepository.homeStripBigger
+    /** The one-time "your limits moved out of the drawer" tip, for users who had the drawer. */
+    val homeStripTip: StateFlow<Boolean> = settingsRepository.homeStripTip
+    fun dismissHomeStripTip() = settingsRepository.dismissHomeStripTip()
+
+    val stepGoal: StateFlow<Int> = settingsRepository.stepGoal
+    val wakeMinutes: StateFlow<Int> = settingsRepository.wakeMinutes
+    val bedMinutes: StateFlow<Int> = settingsRepository.bedMinutes
+
+    /** Every weigh-in (the strip's weight item shows this week's change, as the Weight page does). */
+    val weights: StateFlow<List<WeightEntryEntity>> = weightRepository.getAll()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     /**
      * The caffeine tracker for the viewed day (null while the tracker is off). Doses cover that day
@@ -260,6 +272,8 @@ class HomeViewModel @Inject constructor(
         editLayout { l -> com.fitpal.app.domain.model.LayoutEdits.update(l, key) { it.copy(variant = variant) } }
     fun hideCard(key: String) = editLayout { l -> com.fitpal.app.domain.model.LayoutEdits.update(l, key) { it.copy(enabled = false) } }
     fun showCard(key: String) = editLayout { com.fitpal.app.domain.model.LayoutEdits.show(it, key) }
+    fun setPlacement(key: String, placement: com.fitpal.app.domain.model.TrackerPlacement) =
+        editLayout { com.fitpal.app.domain.model.LayoutEdits.place(it, key, placement) }
     fun resetLayout() = settingsRepository.setWidgetLayout(HOME_SCREEN, com.fitpal.app.domain.model.ScreenWidgets.defaultLayout(HOME_SCREEN))
 
     /**
@@ -319,6 +333,17 @@ class HomeViewModel @Inject constructor(
     fun addWater(ml: Float) {
         if (ml <= 0f) return
         viewModelScope.launch { mealRepository.logWater(ml, date = selectedDateIso()) }
+    }
+
+    /** Quick-add from the strip's long press; [onLogged] gets the new meal log's id, for Undo. */
+    fun addWaterWithUndo(ml: Float, onLogged: (Long) -> Unit) {
+        if (ml <= 0f) return
+        viewModelScope.launch { onLogged(mealRepository.logWater(ml, date = selectedDateIso())) }
+    }
+
+    /** Undo a quick-add: it made its own meal log, so removing that removes exactly it. */
+    fun undoWater(mealLogId: Long) {
+        viewModelScope.launch { mealRepository.deleteMeal(mealLogId) }
     }
 
     fun deleteItem(id: Long) {
