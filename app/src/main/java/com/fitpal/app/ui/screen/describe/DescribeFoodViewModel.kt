@@ -59,9 +59,22 @@ data class DescribeFoodUiState(
     /** Labels of results already saved to the collection (for the filled-bookmark state). */
     val savedLabels: Set<String> = emptySet(),
     /** Pending dietary-rule warning shown before analysis; null when none. */
-    val dietaryWarning: DietaryWarning? = null
+    val dietaryWarning: DietaryWarning? = null,
+    /** The whole meal's name, if the user gave it one before logging (written by logMeal). */
+    val mealName: String? = null
 ) {
     val totalCalories: Float get() = foods.sumOf { it.totalCalories.toDouble() }.toFloat()
+
+    /** Where the analysis is — the screen branches on this one value (docs/redesign/08). */
+    val phase: com.fitpal.app.ui.component.AnalysisPhase
+        get() = when {
+            isSaving -> com.fitpal.app.ui.component.AnalysisPhase.SAVING
+            onlineFailedReason != null -> com.fitpal.app.ui.component.AnalysisPhase.FAILED
+            isAnalyzing -> com.fitpal.app.ui.component.AnalysisPhase.WORKING
+            foods.isNotEmpty() -> com.fitpal.app.ui.component.AnalysisPhase.RESULTS
+            noMatchesFound -> com.fitpal.app.ui.component.AnalysisPhase.FAILED
+            else -> com.fitpal.app.ui.component.AnalysisPhase.READY
+        }
 }
 
 @HiltViewModel
@@ -405,6 +418,14 @@ class DescribeFoodViewModel @Inject constructor(
         }
     }
 
+    /** Name the whole meal before logging (empty = no name; the meal type shows instead). */
+    fun renameMeal(name: String) = _uiState.update { it.copy(mealName = name.trim().takeIf { n -> n.isNotEmpty() }) }
+
+    /** The ⋯ menu's "Save all to collection": every dish not saved yet. */
+    fun saveAllToGallery() {
+        _uiState.value.foods.forEachIndexed { i, food -> if (food.label !in _uiState.value.savedLabels) saveToGallery(i) }
+    }
+
     /** Log the found foods. [decision] = what the fasting check decided. */
     fun logMeal(decision: LogDecision = LogDecision.NONE) {
         val foods = _uiState.value.foods
@@ -417,6 +438,7 @@ class DescribeFoodViewModel @Inject constructor(
                     date = logDateIso(),
                     source = _uiState.value.aiSource,
                     meta = mealLogMeta(_logDate.value, eatenAtState.current, decision, _tags.value)
+                        .copy(name = _uiState.value.mealName)
                 )
                 jobManager.completeByUser()
                 _uiState.update { it.copy(isSaving = false, saved = true) }

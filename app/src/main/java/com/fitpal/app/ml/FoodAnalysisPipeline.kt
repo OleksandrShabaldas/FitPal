@@ -111,15 +111,18 @@ class FoodAnalysisPipeline @Inject constructor(
     }
 
     /**
-     * Second pass: guess which dish a photo's loose ingredients form, returning
-     * candidate dishes (most likely first) with suggested missing extras.
+     * Second pass (on-device): group a photo's loose ingredients into the plate's separate dishes,
+     * or — when it's one dish — name it, with candidate names (most likely first) and suggested
+     * missing extras.
      */
     suspend fun identifyDish(
         ingredients: List<Ingredient>,
         image: Bitmap? = null,
         note: String = ""
-    ): List<DetectedFood> =
-        ingredientEngine.identifyDish(ingredients, image, note).map { enrichZeros(it) }
+    ): DishResult {
+        val r = ingredientEngine.identifyDish(ingredients, image, note)
+        return DishResult(dishes = r.dishes.map { enrichZeros(it) }, candidates = r.candidates.map { enrichZeros(it) })
+    }
 
     /**
      * Fill in nutrition for any ingredient the AI returned with 0 kcal by looking

@@ -112,18 +112,25 @@ class AnalysisService : Service() {
         // to the plate stays a coffee (it used to be merged in and lost).
         val drinks = outcome.foods.filter { it.isDrink }
         val dishFoods = outcome.foods.filterNot { it.isDrink }
-        val candidates: List<DetectedFood> = if (outcome.source.isOnline) {
-            outcome.dishCandidates
+        // On-device, the same step also splits the plate into its separate dishes (fish and chips +
+        // a side salad = two dishes, as online does); a single dish comes back named, with candidates.
+        val dish: DishResult = if (outcome.source.isOnline) {
+            DishResult(candidates = outcome.dishCandidates)
         } else {
             val loose = dishFoods.flatMap { it.ingredients }
             if (dishFoods.isNotEmpty()) {
-                updateProgress(job, "Naming the dish…", outcome.source)
-                runCatching { pipeline.identifyDish(loose, bitmap, job.note) }.getOrDefault(emptyList())
-            } else emptyList()
+                updateProgress(job, "Naming the dishes…", outcome.source)
+                runCatching { pipeline.identifyDish(loose, bitmap, job.note) }.getOrDefault(DishResult())
+            } else DishResult()
         }
-        // When there are candidate dishes, show the first as the current pick (the chips let the
-        // user switch), with the plate's drinks beside it; otherwise the plate's foods as-is.
-        val finalFoods = if (candidates.isNotEmpty()) listOf(candidates.first()) + drinks else outcome.foods
+        val candidates = dish.candidates
+        // Candidates: the first is the current pick (its dish card offers the others), with the plate's
+        // drinks beside it. Separate dishes: a card each. Otherwise the plate's foods as they came.
+        val finalFoods = when {
+            candidates.isNotEmpty() -> listOf(candidates.first()) + drinks
+            dish.dishes.isNotEmpty() -> dish.dishes + drinks
+            else -> outcome.foods
+        }
 
         // Foods are ready — surface them and flip the notification to "tap to review".
         jobManager.setResult(

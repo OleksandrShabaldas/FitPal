@@ -37,7 +37,7 @@ interface IngredientEngine {
      * candidate dishes (most likely first); each holds the same ingredients plus
      * dish-specific "missing" extras (e.g. a dressing) as variations.
      */
-    suspend fun identifyDish(ingredients: List<Ingredient>, image: Bitmap? = null, note: String = ""): List<DetectedFood>
+    suspend fun identifyDish(ingredients: List<Ingredient>, image: Bitmap? = null, note: String = ""): DishResult
 
     /**
      * Third pass: generate health insights for an identified meal — health score,

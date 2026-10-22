@@ -21,6 +21,16 @@ data class VisionResult(
 )
 
 /**
+ * The on-device dish step's answer (docs/redesign/08): either the plate's separate [dishes] (fish and
+ * chips + a side salad = two), or — when it's one dish — likely names for it as [candidates], most
+ * likely first, each holding all the loose items. At most one of the two is non-empty.
+ */
+data class DishResult(
+    val dishes: List<DetectedFood> = emptyList(),
+    val candidates: List<DetectedFood> = emptyList()
+)
+
+/**
  * Turns the AI's JSON reply into our domain models. Shared by the on-device engine
  * ([LlmIngredientEngine]) and the online engine ([RemoteIngredientEngine]) so both
  * speak one contract — see [FoodPrompts] for the JSON shape these expect.
@@ -139,27 +149,66 @@ object FoodJsonParser {
         return VisionResult(foods, candidates)
     }
 
-    fun parseDishCandidates(raw: String, baseIngredients: List<Ingredient>): List<DetectedFood> {
-        val json = extractJsonObject(raw) ?: return emptyList()
-        val dishes = json.optJSONArray("dishes") ?: return emptyList()
+    /**
+     * Read the dish step's groups: `{"dishes":[{"name","items":[…],"also":[…],"missing":[…]}]}` —
+     * one entry per separate dish, naming which of the loose [baseIngredients] belong to it. Two or
+     * more groups with items → that many dishes (an item no group claimed joins the first, so nothing
+     * is lost). One group → one dish of everything, with its name and its "also" names as candidates.
+     * An answer in the older shape (several names, no "items") is read as candidates, as before.
+     */
+    fun parseDishGroups(raw: String, baseIngredients: List<Ingredient>): DishResult {
+        val json = extractJsonObject(raw) ?: return DishResult()
+        val arr = json.optJSONArray("dishes") ?: return DishResult()
+        val groups = (0 until arr.length()).mapNotNull { i ->
+            val obj = arr.optJSONObject(i) ?: return@mapNotNull null
+            val name = obj.optString("name").trim().takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+            fun strings(key: String) = obj.optJSONArray(key)?.let { a ->
+                (0 until a.length()).mapNotNull { a.optString(it).trim().takeIf { s -> s.isNotEmpty() } }
+            }.orEmpty()
+            DishGroup(name, strings("items"), strings("also"), obj.optJSONArray("missing"))
+        }
+        if (groups.isEmpty()) return DishResult()
         val totalGrams = baseIngredients.sumOf { it.grams.toDouble() }.toFloat()
-        val result = mutableListOf<DetectedFood>()
-        for (i in 0 until dishes.length()) {
-            val obj = dishes.optJSONObject(i) ?: continue
-            val name = obj.optString("name").trim()
-            if (name.isEmpty()) continue
-            result.add(
-                buildFood(
-                    label = name,
-                    grams = totalGrams,
-                    ingredients = baseIngredients,
-                    variations = parseVariations(obj.optJSONArray("missing")),
-                    isDrink = false
-                )
+        fun wholePlate(name: String, missing: JSONArray?) =
+            buildFood(label = name, grams = totalGrams, ingredients = baseIngredients, variations = parseVariations(missing), isDrink = false)
+
+        // The older answer: every entry is a guess at the same one dish.
+        if (groups.none { it.items.isNotEmpty() }) return DishResult(candidates = groups.map { wholePlate(it.name, it.missing) })
+
+        // Hand each loose item to the group that names it: the exact name first, then a containing one.
+        val owner = IntArray(baseIngredients.size) { -1 }
+        fun norm(s: String) = s.lowercase().trim()
+        groups.forEachIndexed { g, group ->
+            group.items.forEach { item ->
+                val n = norm(item)
+                val i = baseIngredients.indices.firstOrNull { owner[it] == -1 && norm(baseIngredients[it].name) == n }
+                    ?: baseIngredients.indices.firstOrNull {
+                        val b = norm(baseIngredients[it].name)
+                        owner[it] == -1 && (b.contains(n) || n.contains(b))
+                    }
+                if (i != null) owner[i] = g
+            }
+        }
+        val claimed = groups.indices.filter { g -> owner.any { it == g } }
+        if (claimed.size <= 1) {
+            val main = groups[claimed.firstOrNull() ?: 0]
+            return DishResult(candidates = listOf(wholePlate(main.name, main.missing)) + main.also.map { wholePlate(it, null) })
+        }
+        baseIngredients.indices.forEach { if (owner[it] == -1) owner[it] = claimed.first() }
+        val dishes = claimed.map { g ->
+            val items = baseIngredients.filterIndexed { i, _ -> owner[i] == g }
+            buildFood(
+                label = groups[g].name,
+                grams = items.sumOf { it.grams.toDouble() }.toFloat(),
+                ingredients = items,
+                variations = parseVariations(groups[g].missing),
+                isDrink = false
             )
         }
-        return result
+        return DishResult(dishes = dishes)
     }
+
+    private class DishGroup(val name: String, val items: List<String>, val also: List<String>, val missing: JSONArray?)
 
     fun parseInsights(raw: String): MealInsights {
         val json = extractJsonObject(raw) ?: return EMPTY_INSIGHTS

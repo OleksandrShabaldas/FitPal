@@ -10,26 +10,18 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -40,31 +32,21 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil.compose.AsyncImage
 import com.fitpal.app.ui.component.AiSourceBadge
 import com.fitpal.app.ui.component.BackdropTheme
 import com.fitpal.app.ui.component.CoachingTipCard
 import com.fitpal.app.ui.component.DatePickerDialog
 import com.fitpal.app.ui.component.GlassTopBar
 import com.fitpal.app.ui.component.GradientBackdrop
-import com.fitpal.app.ui.component.MealContextSelector
 import com.fitpal.app.ui.component.MealItemCard
 import com.fitpal.app.ui.component.MealItemContent
-import com.fitpal.app.ui.component.MealTypeSelector
 import com.fitpal.app.ui.component.RenameDialog
 import com.fitpal.app.ui.component.rememberFastingGuard
-import com.fitpal.app.ui.theme.CalorieColor
 import com.fitpal.app.ui.theme.Cream
-import com.fitpal.app.ui.theme.CreamMuted
-import com.fitpal.app.ui.theme.GoldLight
 import com.fitpal.app.ui.theme.glass
-import com.fitpal.app.ui.theme.glassSoft
 import java.time.LocalDate
 
 /**
@@ -82,6 +64,9 @@ fun MealGroupScreen(
     var showCopyPicker by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showRenameMeal by remember { mutableStateOf(false) }
+    var showDetails by remember { mutableStateOf(false) }
+    // One dish open at a time; all folded to start with (docs/redesign/08).
+    var expanded by remember { mutableStateOf<Long?>(null) }
     // A copy onto today is eating now, so it goes through the same fasting gate as a fresh log.
     val fastingGuard = rememberFastingGuard()
 
@@ -135,6 +120,17 @@ fun MealGroupScreen(
             onDismiss = { showRenameMeal = false }
         )
     }
+    if (showDetails) {
+        com.fitpal.app.ui.component.MealDetailsSheet(
+            mealType = state.mealType, onMealType = viewModel::setMealType,
+            // A logged meal moves to another day by copying (top bar), so no day choice here.
+            logDate = null, onPickDay = null,
+            eatenAt = state.eatenAt, onPickTime = viewModel::setMealTime,
+            tags = com.fitpal.app.domain.model.MealContext.parse(state.context),
+            onToggleTag = viewModel::toggleMealContext,
+            onDismiss = { showDetails = false }
+        )
+    }
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
@@ -157,13 +153,6 @@ fun MealGroupScreen(
                 actions = {
                     if (state.dishes.isNotEmpty()) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier.size(40.dp).glass(CircleShape).clickable { showRenameMeal = true },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Default.Edit, contentDescription = "Name this meal", tint = Cream, modifier = Modifier.size(20.dp))
-                            }
-                            Spacer(Modifier.width(8.dp))
                             Box(
                                 modifier = Modifier.size(40.dp).glass(CircleShape).clickable { showCopyPicker = true },
                                 contentAlignment = Alignment.Center
@@ -193,67 +182,33 @@ fun MealGroupScreen(
                         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 24.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
+                        // The same page as before logging: photo, details line, the meal, its dishes.
                         state.photoPath?.let { photo ->
-                            item {
-                                AsyncImage(
-                                    model = photo, contentDescription = null,
-                                    modifier = Modifier.fillMaxWidth().height(210.dp).clip(RoundedCornerShape(20.dp)),
-                                    contentScale = ContentScale.Crop
-                                )
-                            }
+                            item { com.fitpal.app.ui.component.MealPhoto(model = photo, source = state.aiSource) }
+                        }
+                        item {
+                            com.fitpal.app.ui.component.MealDetailsRow(
+                                mealType = state.mealType,
+                                logDate = state.date,
+                                eatenAt = state.eatenAt,
+                                tags = com.fitpal.app.domain.model.MealContext.parse(state.context),
+                                onClick = { showDetails = true }
+                            )
                         }
                         item {
                             Column {
-                                val n = state.dishes.size
-                                val totalGrams = state.dishes.sumOf { it.item.grams.toDouble() }.toFloat()
-                                // Prominent summary: the day-relevant totals big on the right, not buried.
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().glass().padding(16.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            if (n == 1) "1 dish" else "$n dishes",
-                                            style = MaterialTheme.typography.titleMedium, color = Cream
-                                        )
-                                        Text(
-                                            "${totalGrams.toInt()} g total",
-                                            style = MaterialTheme.typography.bodyMedium, color = CreamMuted
-                                        )
+                                com.fitpal.app.ui.component.MealHeader(
+                                    title = state.mealName ?: com.fitpal.app.domain.model.MealTypes.label(state.mealType),
+                                    kcal = state.totalCalories.toInt(),
+                                    onRename = { showRenameMeal = true }
+                                )
+                                // Which AI read this meal, when there's no photo to carry the badge.
+                                if (state.photoPath == null) {
+                                    state.aiSource?.let {
+                                        Spacer(Modifier.height(8.dp))
+                                        AiSourceBadge(it)
                                     }
-                                    Text(
-                                        "${state.totalCalories.toInt()} kcal",
-                                        style = MaterialTheme.typography.titleLarge, color = GoldLight
-                                    )
                                 }
-                                Spacer(Modifier.height(4.dp))
-                                // When it was eaten — tap to correct it.
-                                com.fitpal.app.ui.component.EatenAtChip(
-                                    eatenAt = state.eatenAt,
-                                    onPick = viewModel::setMealTime
-                                )
-                                Spacer(Modifier.height(4.dp))
-                                Text(
-                                    "Tap a dish to edit it, or its name to rename it.",
-                                    style = MaterialTheme.typography.bodySmall, color = CreamMuted
-                                )
-                                // Which AI read this meal — one generation, so one badge for it all.
-                                state.aiSource?.let {
-                                    Spacer(Modifier.height(8.dp))
-                                    AiSourceBadge(it)
-                                }
-                                Spacer(Modifier.height(12.dp))
-                                MealTypeSelector(selected = state.mealType, onSelected = viewModel::setMealType)
-                                Spacer(Modifier.height(14.dp))
-                                Text(
-                                    "Where & who with (optional)",
-                                    style = MaterialTheme.typography.labelMedium, color = CreamMuted
-                                )
-                                Spacer(Modifier.height(6.dp))
-                                MealContextSelector(
-                                    selected = com.fitpal.app.domain.model.MealContext.parse(state.context),
-                                    onToggle = viewModel::toggleMealContext
-                                )
                             }
                         }
                         state.coachingTip?.let { tip ->
@@ -262,6 +217,8 @@ fun MealGroupScreen(
                         itemsIndexed(state.dishes, key = { _, dish -> dish.item.id }) { _, dish ->
                             MealItemCard(
                                 content = dish.toMealItemContent(),
+                                collapsed = expanded != dish.item.id,
+                                onExpand = { expanded = if (expanded == dish.item.id) null else dish.item.id },
                                 onIngredientGramsChanged = { i, g -> viewModel.updateIngredientGrams(dish.item.id, i, g) },
                                 onIngredientRemoved = { i -> viewModel.removeIngredient(dish.item.id, i) },
                                 onTotalGramsChanged = { g -> viewModel.scaleDishToGrams(dish.item.id, g) },

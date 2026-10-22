@@ -55,7 +55,9 @@ data class MealLogMeta(
     /** Situation tags, already joined (see [com.fitpal.app.domain.model.MealContext.format]). */
     val context: String? = null,
     /** "Log anyway" during a fast — see [MealLogEntity.loggedDuringFast]. */
-    val loggedDuringFast: Boolean = false
+    val loggedDuringFast: Boolean = false,
+    /** The whole meal's own name, when the user gave it one before logging ([MealLogEntity.name]). */
+    val name: String? = null
 )
 
 /**
@@ -409,7 +411,8 @@ class MealRepository @Inject constructor(
         context = meta.context,
         timestamp = meta.eatenAt ?: defaultTimestamp(logDate),
         timeSource = if (meta.eatenAt == null) null else meta.timeSource.dbValue,
-        loggedDuringFast = meta.loggedDuringFast
+        loggedDuringFast = meta.loggedDuringFast,
+        name = meta.name?.trim()?.takeIf { it.isNotEmpty() }
     )
 
     // ---- Filling database foods' gaps (fibre, vitamins, caffeine…) — see NutrientFiller ----

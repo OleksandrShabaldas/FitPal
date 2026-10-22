@@ -84,10 +84,10 @@ class RemoteIngredientEngine @Inject constructor(
         ingredients: List<Ingredient>,
         image: Bitmap?,
         note: String
-    ): List<DetectedFood> {
+    ): DishResult {
         // Not used by the online photo flow (analyzeImage already names dishes); kept for the
         // interface. Naming a dish is reasoning, so give it the deeper level if it's ever called.
-        if (ingredients.isEmpty()) return emptyList()
+        if (ingredients.isEmpty()) return DishResult()
         val raw = gemini.generate(
             prompt = FoodPrompts.dish(ingredients, note),
             images = listOfNotNull(image),
@@ -95,7 +95,7 @@ class RemoteIngredientEngine @Inject constructor(
             jsonMode = true,
             thinkingLevel = DEEP
         )
-        return FoodJsonParser.parseDishCandidates(raw, ingredients)
+        return FoodJsonParser.parseDishGroups(raw, ingredients)
     }
 
     override suspend fun analyzeMealInsights(foods: List<DetectedFood>): MealInsights =

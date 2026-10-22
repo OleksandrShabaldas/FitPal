@@ -2,29 +2,17 @@ package com.fitpal.app.ui.screen.describe
 
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.CalendarToday
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -37,25 +25,30 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import com.fitpal.app.ui.component.AddIngredientDialog
-import com.fitpal.app.ui.component.AiSourceBadge
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.filled.Edit
+import com.fitpal.app.ui.component.AnalysisPhase
+import com.fitpal.app.ui.component.InlineMessageCard
+import com.fitpal.app.ui.component.LogBar
+import com.fitpal.app.ui.component.MealDetailsPanel
+import com.fitpal.app.ui.component.MealDetailsRow
+import com.fitpal.app.ui.component.MealDetailsSheet
+import com.fitpal.app.ui.component.MealHeader
+import com.fitpal.app.ui.component.NoteLine
+import com.fitpal.app.ui.component.SkeletonCard
 import com.fitpal.app.ui.component.AnalysingStrip
 import com.fitpal.app.ui.component.BackdropTheme
 import com.fitpal.app.ui.component.DatePickerDialog
-import com.fitpal.app.ui.component.EatenAtChip
 import com.fitpal.app.ui.component.GlassTopBar
 import com.fitpal.app.ui.component.DietaryWarningDialog
 import com.fitpal.app.ui.component.GradientBackdrop
-import com.fitpal.app.ui.component.MealContextSelector
 import com.fitpal.app.ui.component.MealItemCard
-import com.fitpal.app.ui.component.WhileYouWaitCard
 import com.fitpal.app.ui.theme.glass
-import com.fitpal.app.ui.component.MealTotalRow
-import com.fitpal.app.ui.component.MealTypeSelector
 import com.fitpal.app.ui.component.toMealItemContent
-import com.fitpal.app.ui.component.logDateLabel
 import com.fitpal.app.ui.component.rememberFastingGuard
 import com.fitpal.app.ui.theme.Cream
 import com.fitpal.app.ui.theme.CreamMuted
@@ -126,126 +119,166 @@ fun DescribeFoodScreen(
         )
     }
 
+    // The same page as the photo analysis (docs/redesign/08): the description sits where the photo
+    // would, then the details line, the phase's content, and the log bar — nothing moves between phases.
+    val phase = state.phase
+    val reduceMotion = com.fitpal.app.ui.theme.LookState.appearance.reduceMotion
+    var showDetails by remember { mutableStateOf(false) }
+    var renamingMeal by remember { mutableStateOf(false) }
+    var expanded by remember { mutableStateOf<Int?>(null) }
+    // After results, tapping the description edits it again; the bar then offers "Analyse again".
+    var editingDescription by remember { mutableStateOf(false) }
+    val editing = phase == AnalysisPhase.READY || editingDescription
+
+    if (showDetails) {
+        MealDetailsSheet(
+            mealType = mealType, onMealType = viewModel::setMealType,
+            logDate = logDate, onPickDay = { showDatePicker = true },
+            eatenAt = eatenAt, onPickTime = viewModel::pickEatenTime,
+            tags = tags, onToggleTag = viewModel::toggleTag,
+            onDismiss = { showDetails = false }
+        )
+    }
+    if (renamingMeal) {
+        com.fitpal.app.ui.component.RenameDialog(
+            currentName = state.mealName.orEmpty(),
+            title = "Name this meal",
+            label = "Meal name",
+            placeholder = "e.g. Sunday roast",
+            hint = "Names the whole meal on your day. Leave it empty to show the meal type instead.",
+            allowEmpty = true,
+            onConfirm = { viewModel.renameMeal(it); renamingMeal = false },
+            onDismiss = { renamingMeal = false }
+        )
+    }
+
     GradientBackdrop(theme = BackdropTheme.TODAY) {
         Column(modifier = Modifier.fillMaxSize()) {
             GlassTopBar(title = "Describe to AI", onBack = onBack)
 
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp)) {
-                OutlinedTextField(
-                    value = state.description,
-                    onValueChange = viewModel::onDescriptionChange,
-                    modifier = Modifier.fillMaxWidth().height(110.dp),
-                    placeholder = { Text("Describe your meal, e.g. \"chilli con carne\" or \"coca-cola\"") }
-                )
-                Spacer(Modifier.height(8.dp))
-                Button(
-                    onClick = { viewModel.analyze() },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = state.description.isNotBlank() && !state.isAnalyzing
-                ) {
-                    Icon(Icons.Default.AutoAwesome, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Analyse")
-                }
-                MealTypeSelector(
-                    selected = mealType,
-                    onSelected = viewModel::setMealType,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-                OutlinedButton(
-                    onClick = { showDatePicker = true },
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-                ) {
-                    Icon(Icons.Default.CalendarToday, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Logging to: ${logDateLabel(logDate)}")
-                }
-            }
+            LazyColumn(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                val fade: @Composable androidx.compose.foundation.lazy.LazyItemScope.() -> Modifier =
+                    { if (reduceMotion) Modifier else Modifier.animateItem() }
 
-            Box(modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 20.dp)) {
+                item(key = "description") {
+                    if (editing) {
+                        NoteLine(
+                            value = state.description,
+                            onValueChange = viewModel::onDescriptionChange,
+                            prompt = "Describe your meal",
+                            placeholder = "Describe your meal, e.g. \"chilli con carne\" or \"coca-cola\"",
+                            startOpen = true,
+                            minHeight = 90.dp
+                        )
+                    } else {
+                        // The description as a quote — tap to change it.
+                        Row(
+                            Modifier.fillMaxWidth().glass().clickable { editingDescription = true }.padding(16.dp),
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Text(
+                                "“${state.description.trim()}”",
+                                style = MaterialTheme.typography.titleLarge.copy(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic),
+                                color = Cream, modifier = Modifier.weight(1f)
+                            )
+                            Icon(Icons.Default.Edit, contentDescription = "Change the description", tint = CreamMuted, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
+
+                item(key = "details") {
+                    if (phase == AnalysisPhase.WORKING) {
+                        Column(Modifier.fillMaxWidth().glass().padding(16.dp)) {
+                            MealDetailsPanel(
+                                mealType = mealType, onMealType = viewModel::setMealType,
+                                logDate = logDate, onPickDay = { showDatePicker = true },
+                                eatenAt = eatenAt, onPickTime = viewModel::pickEatenTime,
+                                tags = tags, onToggleTag = viewModel::toggleTag
+                            )
+                        }
+                    } else {
+                        MealDetailsRow(mealType, logDate, eatenAt, tags, onClick = { showDetails = true })
+                    }
+                }
+
                 when {
-                    state.needsModel -> Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
-                        Text("The AI model isn't downloaded yet.", style = MaterialTheme.typography.titleMedium, color = Cream)
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            "Describe-to-AI can run on Google's online model, but it also needs the on-device model " +
+                    state.needsModel -> item(key = "needs_model") {
+                        InlineMessageCard(
+                            title = "The AI model isn't downloaded yet",
+                            reason = "Describe-to-AI can run on Google's online model, but it also needs the on-device model " +
                                 "as a fallback for when you're offline. Download it once and it works without internet after that.",
-                            style = MaterialTheme.typography.bodyMedium, color = CreamMuted
+                            primary = "Set up AI model" to onSetupModel
                         )
-                        Spacer(Modifier.height(12.dp))
-                        Button(onClick = onSetupModel) { Text("Set up AI model") }
                     }
 
-                    state.onlineFailedReason != null -> Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
-                        Text("Online AI isn't available", style = MaterialTheme.typography.titleMedium, color = Cream)
-                        Spacer(Modifier.height(4.dp))
+                    phase == AnalysisPhase.READY -> item(key = "tip") {
                         Text(
-                            (state.onlineFailedReason ?: "") + "\n\nContinue with the on-device model, or try online again?",
-                            style = MaterialTheme.typography.bodyMedium, color = CreamMuted
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        Button(onClick = { viewModel.retryOnline() }, modifier = Modifier.fillMaxWidth()) {
-                            Text("Try online again")
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        OutlinedButton(onClick = { viewModel.useOnDevice() }, modifier = Modifier.fillMaxWidth()) {
-                            Text("Continue on-device")
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        TextButton(onClick = { viewModel.cancelAnalysis() }, modifier = Modifier.fillMaxWidth()) {
-                            Text("Cancel")
-                        }
-                    }
-
-                    // The AI is reading the description: progress, then the details only the user knows.
-                    state.isAnalyzing -> Column(
-                        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(top = 12.dp, bottom = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
-                    ) {
-                        AnalysingStrip(
-                            message = state.progressMessage.ifBlank {
-                                "Thinking… online can take a moment, and the first on-device run is slower."
-                            },
-                            source = state.aiSource
-                        )
-                        WhileYouWaitCard(
-                            mealType = mealType,
-                            onMealType = viewModel::setMealType,
-                            eatenAt = eatenAt,
-                            onPickTime = viewModel::pickEatenTime,
-                            tags = tags,
-                            onToggleTag = viewModel::toggleTag,
-                            // The meal picker is already right above, next to the description.
-                            showMealType = false
+                            "Name what you ate or drank. Products like \"coca-cola\" come back as one item; dishes like " +
+                                "\"chilli con carne\" show their ingredients and variations you can pick.",
+                            style = MaterialTheme.typography.bodySmall, color = CreamMuted
                         )
                     }
 
-                    state.noMatchesFound -> Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
-                        Text("The AI couldn't pull foods from that description.", style = MaterialTheme.typography.titleMedium, color = Cream)
-                        Spacer(Modifier.height(4.dp))
-                        Text("Try rephrasing with the foods named directly, or add it by hand.", style = MaterialTheme.typography.bodyMedium, color = CreamMuted)
-                        Spacer(Modifier.height(12.dp))
-                        OutlinedButton(onClick = onGoToManual) { Text("Add manually instead") }
+                    phase == AnalysisPhase.WORKING -> {
+                        item(key = "progress") {
+                            AnalysingStrip(
+                                message = state.progressMessage.ifBlank {
+                                    "Thinking… online can take a moment, and the first on-device run is slower."
+                                },
+                                source = state.aiSource,
+                                modifier = fade()
+                            )
+                        }
+                        items(2, key = { "skeleton_$it" }) { SkeletonCard(fade()) }
                     }
 
-                    state.foods.isNotEmpty() -> LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 12.dp)
-                    ) {
-                        item {
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                state.aiSource?.let { AiSourceBadge(it, reason = state.onlineError) }
-                                Text("Found these — adjust amounts and pick variations", style = MaterialTheme.typography.titleMedium, color = Cream)
-                            }
+                    phase == AnalysisPhase.FAILED -> item(key = "failed") {
+                        if (state.onlineFailedReason != null) {
+                            InlineMessageCard(
+                                title = "Online AI isn't available",
+                                reason = state.onlineFailedReason,
+                                primary = "Try online again" to { viewModel.retryOnline() },
+                                secondary = "Use on-device" to { viewModel.useOnDevice() },
+                                tertiary = "Cancel" to { viewModel.cancelAnalysis() },
+                                modifier = fade()
+                            )
+                        } else {
+                            InlineMessageCard(
+                                title = "The AI couldn't pull foods from that",
+                                reason = "Try rephrasing with the foods named directly, or add it by hand.",
+                                primary = "Add by hand" to onGoToManual,
+                                modifier = fade()
+                            )
                         }
-                        itemsIndexed(state.foods) { index, food ->
+                    }
+
+                    else -> {
+                        item(key = "header") {
+                            MealHeader(
+                                title = state.mealName ?: com.fitpal.app.domain.model.MealTypes.label(mealType),
+                                kcal = state.totalCalories.toInt(),
+                                onRename = { renamingMeal = true },
+                                modifier = fade()
+                            )
+                        }
+                        // No photo to carry it, so the model's badge sits under the header.
+                        state.aiSource?.let { source ->
+                            item(key = "source") { com.fitpal.app.ui.component.AiSourceBadge(source, reason = state.onlineError) }
+                        }
+                        itemsIndexed(state.foods, key = { i, _ -> "dish_$i" }) { index, food ->
                             MealItemCard(
                                 content = food.toMealItemContent(),
+                                modifier = fade(),
+                                collapsed = expanded != index,
+                                onExpand = { expanded = if (expanded == index) null else index },
                                 onIngredientGramsChanged = { ii, g -> viewModel.updateIngredientGrams(index, ii, g) },
                                 onIngredientRemoved = { ii -> viewModel.removeIngredient(index, ii) },
                                 onToggleVariation = { vi -> viewModel.toggleVariation(index, vi) },
-                                onRemove = { viewModel.removeFood(index) },
+                                onRemove = { expanded = null; viewModel.removeFood(index) },
                                 onSetDrink = { viewModel.setFoodDrink(index, it) },
                                 onTotalGramsChanged = { g -> viewModel.scaleFoodToGrams(index, g) },
                                 onAddIngredient = { addIngredientFor = index },
@@ -259,51 +292,45 @@ fun DescribeFoodScreen(
                                 onRename = { viewModel.renameFood(index, it) }
                             )
                         }
-                        // The situation tags picked while waiting stay editable here.
-                        item {
-                            Column(modifier = Modifier.fillMaxWidth().glass().padding(16.dp)) {
-                                Text(
-                                    "Where & who with (optional)",
-                                    style = MaterialTheme.typography.labelMedium, color = CreamMuted
-                                )
-                                Spacer(Modifier.height(10.dp))
-                                MealContextSelector(selected = tags, onToggle = viewModel::toggleTag)
-                            }
-                        }
-                    }
-
-                    else -> Text(
-                        "Tip: name what you ate or drank. Products like \"coca-cola\" come back as one item; dishes like \"chilli con carne\" show their ingredients and variations you can pick. Uses the online AI when available, the on-device model when not.",
-                        style = MaterialTheme.typography.bodySmall, color = CreamMuted, modifier = Modifier.padding(top = 12.dp)
-                    )
-                }
-            }
-
-            if (state.foods.isNotEmpty()) {
-                Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
-                    MealTotalRow(totalCalories = state.totalCalories, itemCount = state.foods.size)
-                    EatenAtChip(
-                        eatenAt = eatenAt,
-                        onPick = viewModel::pickEatenTime,
-                        modifier = Modifier.padding(bottom = 4.dp)
-                    )
-                    Button(
-                        onClick = {
-                            fastingGuard.attempt(
-                                isForToday = logDate == java.time.LocalDate.now(),
-                                eatenAt = eatenAt.time,
-                                intake = com.fitpal.app.domain.model.FastingIntake.ofFoods(state.foods)
-                            ) { decision -> viewModel.logMeal(decision) }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = !state.isSaving
-                    ) {
-                        Icon(Icons.Default.Check, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text(if (state.isSaving) "Saving…" else "Log meal")
                     }
                 }
             }
+
+            LogBar(
+                totalKcal = state.totalCalories.toInt().takeIf { phase == AnalysisPhase.RESULTS && !editingDescription },
+                status = when (phase) {
+                    AnalysisPhase.WORKING -> "Working…"
+                    AnalysisPhase.SAVING -> "Saving…"
+                    else -> null
+                },
+                actionLabel = when {
+                    phase == AnalysisPhase.SAVING -> "Saving…"
+                    editingDescription && phase != AnalysisPhase.READY -> "Analyse again"
+                    phase == AnalysisPhase.READY || phase == AnalysisPhase.FAILED && state.onlineFailedReason == null -> "Analyse"
+                    else -> "Log meal"
+                },
+                actionEnabled = when {
+                    editing || (phase == AnalysisPhase.FAILED && state.onlineFailedReason == null) ->
+                        state.description.isNotBlank() && phase != AnalysisPhase.WORKING
+                    else -> phase == AnalysisPhase.RESULTS
+                },
+                onAction = {
+                    if (editing || (phase == AnalysisPhase.FAILED && state.onlineFailedReason == null)) {
+                        editingDescription = false
+                        expanded = null
+                        viewModel.analyze()
+                    } else {
+                        fastingGuard.attempt(
+                            isForToday = logDate == java.time.LocalDate.now(),
+                            eatenAt = eatenAt.time,
+                            intake = com.fitpal.app.domain.model.FastingIntake.ofFoods(state.foods)
+                        ) { decision -> viewModel.logMeal(decision) }
+                    }
+                },
+                menu = if (phase == AnalysisPhase.RESULTS && !editingDescription) listOf(
+                    "Save all to collection" to { viewModel.saveAllToGallery() }
+                ) else emptyList()
+            )
         }
     }
 }

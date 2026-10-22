@@ -231,9 +231,14 @@ object FoodPrompts {
         val noteLine = if (note.isBlank()) "" else
             "\n            The user added this context — use it: \"$note\"."
         return """
-            Look at THIS photo. These items were found on ONE plate: $names.
-            Use BOTH the photo and this list to name the actual dish — the 1-3 most likely
-            dishes, most likely first (e.g. a round base with dough, cheese, ham and mushrooms = Pizza).$noteLine
+            Look at THIS photo. These items were found on the plate: $names.
+            Use BOTH the photo and this list to name the actual DISHES. A dish is what you'd order or
+            serve on its own: a main, a side (fries, rice, a side salad), a dessert. Fish and chips with
+            a side salad = TWO dishes. Sauces, dips and toppings belong INSIDE the dish they come with.
+            Give ONE entry per separate dish, with "items" = exactly which of the listed items belong to it
+            (copy their names; every listed item in one dish). If it's all one dish, give one entry and put
+            1-2 other likely names for it in "also" (e.g. a round base with dough, cheese, ham and
+            mushrooms = Pizza, also ["Calzone"]).$noteLine
             For EACH dish, list its typical parts that are MISSING from the list above as "missing".
             ALWAYS put the dish's signature sauce or dressing FIRST if it isn't already present
             (for example: Caesar salad -> Caesar dressing; Greek salad -> olive oil and feta;
@@ -246,7 +251,7 @@ object FoodPrompts {
             Give each a realistic per-100 nutrition (light soups 25-60 kcal/100g, oils ~880) and a
             small serving size in grams.
             Reply with ONLY a JSON object in exactly this format and nothing else:
-            {"dishes":[{"name":"<dish name>","missing":[{"name":"<sauce or dressing>","grams":30,"kcalPer100g":300,"proteinPer100g":1,"fatPer100g":32,"carbsPer100g":4,"fiberPer100g":0,"vitA":0,"vitC":0,"vitD":0,"calcium":10,"iron":0,"potassium":5,"sodium":200,"b12":0,"folate":2,"b6":0,"magnesium":3,"zinc":0,"vitE":1,"caffeine":0}]}]}
+            {"dishes":[{"name":"<dish name>","items":["<listed item>"],"also":[],"missing":[{"name":"<sauce or dressing>","grams":30,"kcalPer100g":300,"proteinPer100g":1,"fatPer100g":32,"carbsPer100g":4,"fiberPer100g":0,"vitA":0,"vitC":0,"vitD":0,"calcium":10,"iron":0,"potassium":5,"sodium":200,"b12":0,"folate":2,"b6":0,"magnesium":3,"zinc":0,"vitE":1,"caffeine":0}]}]}
         """.trimIndent()
     }
 

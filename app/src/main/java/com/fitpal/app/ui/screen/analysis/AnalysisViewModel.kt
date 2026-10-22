@@ -86,8 +86,22 @@ data class AnalysisUiState(
     /** One-shot confirmation after "copy to another date" — shown as a toast, then cleared. */
     val copyConfirmation: String? = null,
     /** Pending dietary-rule warning shown before analysis; null when none. */
-    val dietaryWarning: DietaryWarning? = null
-)
+    val dietaryWarning: DietaryWarning? = null,
+    /** The whole meal's name, if the user gave it one before logging (written by logMeal). */
+    val mealName: String? = null
+) {
+    /** Where the analysis is — the screen branches on this one value (docs/redesign/08). */
+    val phase: com.fitpal.app.ui.component.AnalysisPhase
+        get() = when {
+            isSaving -> com.fitpal.app.ui.component.AnalysisPhase.SAVING
+            onlineFailedReason != null -> com.fitpal.app.ui.component.AnalysisPhase.FAILED
+            isAnalyzing -> com.fitpal.app.ui.component.AnalysisPhase.WORKING
+            detectedFoods.isNotEmpty() -> com.fitpal.app.ui.component.AnalysisPhase.RESULTS
+            error != null -> com.fitpal.app.ui.component.AnalysisPhase.FAILED
+            readyToAnalyze -> com.fitpal.app.ui.component.AnalysisPhase.READY
+            else -> com.fitpal.app.ui.component.AnalysisPhase.WORKING
+        }
+}
 
 @HiltViewModel
 class AnalysisViewModel @Inject constructor(
@@ -489,6 +503,7 @@ class AnalysisViewModel @Inject constructor(
                     date = logDateIso(),
                     source = _uiState.value.aiSource,
                     meta = mealLogMeta(_logDate.value, eatenAtState.current, decision, _tags.value)
+                        .copy(name = _uiState.value.mealName)
                 )
                 // The user handled it — stop the background service so it doesn't auto-save again.
                 jobManager.completeByUser()
@@ -650,6 +665,14 @@ class AnalysisViewModel @Inject constructor(
     }
 
     /** Pick which candidate dish to log — swaps in its ingredients + variations (drinks stay put). */
+    /** Name the whole meal before logging (empty = no name; the meal type shows instead). */
+    fun renameMeal(name: String) = _uiState.update { it.copy(mealName = name.trim().takeIf { n -> n.isNotEmpty() }) }
+
+    /** The ⋯ menu's "Save all to collection": every dish not saved yet. */
+    fun saveAllToGallery() {
+        _uiState.value.detectedFoods.indices.forEach { if (it !in _uiState.value.savedFoodIndices) saveToGallery(it) }
+    }
+
     fun selectDish(index: Int) {
         _uiState.update { state ->
             val candidate = state.dishCandidates.getOrNull(index) ?: return@update state

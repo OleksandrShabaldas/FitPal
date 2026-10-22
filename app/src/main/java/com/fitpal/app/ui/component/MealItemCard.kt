@@ -2,6 +2,7 @@ package com.fitpal.app.ui.component
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -20,14 +21,12 @@ import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material3.FilledTonalIconButton
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -117,10 +117,45 @@ fun MealItemCard(
     /** The Food / Drink switch — when the AI (or a database name) got it wrong. */
     onSetDrink: ((Boolean) -> Unit)? = null,
     mealPresets: List<ServingPreset> = emptyList(),
-    drinkPresets: List<ServingPreset> = emptyList()
+    drinkPresets: List<ServingPreset> = emptyList(),
+    /**
+     * Folded (docs/redesign/08): name · kcal · one line of what's in it; tap → [onExpand]. The screen
+     * keeps one dish open at a time. [onExpand] also gets a chevron on the open card to fold it again.
+     */
+    collapsed: Boolean = false,
+    onExpand: (() -> Unit)? = null,
+    /** Other likely names for this dish ("Not fish & chips? Fish tacos · Fish burger"), and the pick. */
+    alternatives: List<String> = emptyList(),
+    onPickAlternative: ((Int) -> Unit)? = null
 ) {
     val unit = if (content.isDrink) "ml" else "g"
     var renaming by remember { mutableStateOf(false) }
+
+    if (collapsed) {
+        Column(
+            modifier = modifier.fillMaxWidth().glass()
+                .then(if (onExpand != null) Modifier.clickable(onClick = onExpand) else Modifier)
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    content.name, style = MaterialTheme.typography.titleMedium, color = Cream,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text("${content.calories.toInt()} kcal", style = MaterialTheme.typography.titleSmall, color = CalorieColor)
+                if (onExpand != null) {
+                    Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Open ${content.name}", tint = CreamMuted, modifier = Modifier.padding(start = 4.dp).size(20.dp))
+                }
+            }
+            Text(
+                itemSummary(content, unit), style = MaterialTheme.typography.bodySmall, color = CreamMuted,
+                maxLines = 1, overflow = TextOverflow.Ellipsis
+            )
+            AlternativesLine(content.name, alternatives, onPickAlternative)
+        }
+        return
+    }
 
     if (renaming && onRename != null) {
         RenameDialog(
@@ -169,20 +204,16 @@ fun MealItemCard(
             }
             Text("${content.calories.toInt()} kcal", style = MaterialTheme.typography.titleMedium, color = CalorieColor)
             if (onToggleSave != null) {
-                IconButton(onClick = onToggleSave) {
-                    Icon(
-                        if (saved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
-                        contentDescription = if (saved) "${content.name} saved to collection" else "Save ${content.name} to collection",
-                        tint = if (saved) GoldLight else CreamMuted
-                    )
-                }
+                CardIcon(
+                    if (saved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                    if (saved) "${content.name} saved to collection" else "Save ${content.name} to collection",
+                    if (saved) GoldLight else CreamMuted, onToggleSave
+                )
             }
-            if (onRemove != null) {
-                IconButton(onClick = onRemove) {
-                    Icon(Icons.Default.Close, contentDescription = "Remove ${content.name}", tint = CreamMuted)
-                }
-            }
+            if (onRemove != null) CardIcon(Icons.Default.Close, "Remove ${content.name}", CreamMuted, onRemove)
+            if (onExpand != null) CardIcon(Icons.Default.KeyboardArrowUp, "Fold ${content.name}", CreamMuted, onExpand)
         }
+        AlternativesLine(content.name, alternatives, onPickAlternative)
 
         Spacer(Modifier.height(12.dp))
         MacroBar(protein = content.protein, fat = content.fat, carbs = content.carbs, fiber = content.fiber)
@@ -206,17 +237,13 @@ fun MealItemCard(
         if (onServingsChanged != null) {
             Row(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("Amount", style = MaterialTheme.typography.titleSmall, color = Cream, modifier = Modifier.weight(1f))
-                FilledTonalIconButton(onClick = { onServingsChanged(content.servings - 1) }, enabled = content.servings > 1) {
-                    Icon(Icons.Default.Remove, contentDescription = "One fewer")
-                }
+                RoundStepButton(Icons.Default.Remove, "One fewer", enabled = content.servings > 1) { onServingsChanged(content.servings - 1) }
                 Text(
                     "${content.servings}",
                     style = MaterialTheme.typography.titleMedium, color = Cream,
                     textAlign = TextAlign.Center, modifier = Modifier.width(40.dp)
                 )
-                FilledTonalIconButton(onClick = { onServingsChanged(content.servings + 1) }) {
-                    Icon(Icons.Default.Add, contentDescription = "One more")
-                }
+                RoundStepButton(Icons.Default.Add, "One more") { onServingsChanged(content.servings + 1) }
             }
         }
 
@@ -253,15 +280,12 @@ fun MealItemCard(
 
         // Add ingredient / Edit with AI — pre-log only.
         if (onAddIngredient != null || onEditWithAi != null) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                if (onAddIngredient != null) TextButton(onClick = onAddIngredient) { Text("+ Add ingredient") }
-                if (onEditWithAi != null) {
-                    TextButton(onClick = onEditWithAi) {
-                        Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("Edit with AI")
-                    }
-                }
+            FlowRow(
+                modifier = Modifier.padding(top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (onAddIngredient != null) SetupPill("+ Add ingredient", selected = false, onClick = onAddIngredient)
+                if (onEditWithAi != null) SetupPill("✦ Edit with AI", selected = false, onClick = onEditWithAi)
             }
         }
 
@@ -269,9 +293,9 @@ fun MealItemCard(
         if (content.variations.isNotEmpty() && onToggleVariation != null) {
             Spacer(Modifier.height(12.dp))
             Text("Variations — tap to add", style = MaterialTheme.typography.titleSmall, color = Cream, modifier = Modifier.padding(bottom = 8.dp))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 content.variations.forEachIndexed { index, variation ->
-                    FilterChip(selected = variation.isSelected, onClick = { onToggleVariation(index) }, label = { Text(variation.description) })
+                    SetupPill(variation.description, selected = variation.isSelected) { onToggleVariation(index) }
                 }
             }
         }
@@ -288,5 +312,46 @@ fun MealItemCard(
                 Text("Open details & AI insights", style = MaterialTheme.typography.labelLarge, color = Cream)
             }
         }
+    }
+}
+
+/** The folded card's one line: what's in it ("Cod in batter · fries · tartar sauce"), or its amount. */
+private fun itemSummary(content: MealItemContent, unit: String): String = when {
+    content.isDrink -> "${content.grams.toInt()} ml · drink"
+    content.ingredients.size > 1 -> content.ingredients.joinToString(" · ") { it.name }
+    else -> "${content.grams.toInt()} $unit"
+}
+
+/** "Not {current}? alt1 · alt2" — the other likely names, each a gold link that switches to it. */
+@Composable
+private fun AlternativesLine(current: String, alternatives: List<String>, onPick: ((Int) -> Unit)?) {
+    if (alternatives.isEmpty() || onPick == null) return
+    Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("Not ${current}? ", style = MaterialTheme.typography.bodySmall, color = CreamMuted, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+        alternatives.forEachIndexed { i, name ->
+            if (i > 0) Text(" · ", style = MaterialTheme.typography.bodySmall, color = CreamMuted)
+            Text(
+                name, style = MaterialTheme.typography.bodySmall, color = GoldLight, maxLines = 1,
+                modifier = Modifier.clickable { onPick(i) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun CardIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, description: String, tint: androidx.compose.ui.graphics.Color, onClick: () -> Unit) {
+    Icon(
+        icon, contentDescription = description, tint = tint,
+        modifier = Modifier.size(40.dp).clip(CircleShape).clickable(onClick = onClick).padding(9.dp)
+    )
+}
+
+@Composable
+private fun RoundStepButton(icon: androidx.compose.ui.graphics.vector.ImageVector, description: String, enabled: Boolean = true, onClick: () -> Unit) {
+    Box(
+        Modifier.size(36.dp).glassSoft(CircleShape).then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(icon, contentDescription = description, tint = if (enabled) Cream else CreamMuted, modifier = Modifier.size(18.dp))
     }
 }

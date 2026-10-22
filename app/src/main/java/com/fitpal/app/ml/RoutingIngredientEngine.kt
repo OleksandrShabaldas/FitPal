@@ -99,7 +99,7 @@ class RoutingIngredientEngine(
         ingredients: List<Ingredient>,
         image: Bitmap?,
         note: String
-    ): List<DetectedFood> =
+    ): DishResult =
         withFallback(
             { remote.identifyDish(ingredients, image, note) },
             { local.identifyDish(ingredients, image, note) }

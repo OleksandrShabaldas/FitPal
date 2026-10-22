@@ -124,10 +124,10 @@ class LlmIngredientEngine(
         ingredients: List<Ingredient>,
         image: Bitmap?,
         note: String
-    ): List<DetectedFood> {
-        if (ingredients.isEmpty()) return emptyList()
+    ): DishResult {
+        if (ingredients.isEmpty()) return DishResult()
         ensureLoaded()
-        val engine = llm ?: return emptyList()
+        val engine = llm ?: return DishResult()
         val raw = mutex.withLock {
             withContext(Dispatchers.Default) {
                 val builder = LlmInferenceSessionOptions.builder()
@@ -144,7 +144,7 @@ class LlmIngredientEngine(
                 }
             }
         }
-        return FoodJsonParser.parseDishCandidates(raw, ingredients)
+        return FoodJsonParser.parseDishGroups(raw, ingredients)
     }
 
     // ---- Third pass: health insights ----
