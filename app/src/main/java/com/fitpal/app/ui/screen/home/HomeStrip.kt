@@ -370,3 +370,42 @@ internal fun PlacedElsewhere(item: HomeTracker?, label: String, placement: Track
         Text(where, style = MaterialTheme.typography.labelMedium, color = if (featureOn) GoldLight else CreamFaint)
     }
 }
+
+/**
+ * The gentle suggestion (docs/redesign/06): one optional feature the user's own logs point to, under
+ * the strip. "Turn on" opens its setup, "Not now" waits a week, × never asks about it again.
+ */
+@Composable
+fun FeatureSuggestionCard(
+    suggestion: com.fitpal.app.domain.FeatureSuggestions.Suggestion,
+    onTurnOn: () -> Unit,
+    onNotNow: () -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier.fillMaxWidth().glassSoft().padding(start = 14.dp, top = 10.dp, bottom = 12.dp, end = 4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            com.fitpal.app.ui.component.FeatureIconCircle(suggestion.feature, size = 32.dp)
+            Spacer(Modifier.width(10.dp))
+            Text(suggestion.text, style = MaterialTheme.typography.bodyMedium, color = Cream, modifier = Modifier.weight(1f))
+            Icon(
+                Icons.Default.Close, contentDescription = "Don't suggest ${suggestion.feature.title} again", tint = CreamMuted,
+                modifier = Modifier.size(36.dp).clip(CircleShape).clickable(onClick = onDismiss).padding(8.dp)
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.padding(start = 42.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Turn on",
+                style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = com.fitpal.app.ui.theme.OnGold,
+                modifier = Modifier.clip(RoundedCornerShape(50)).background(GoldLight).clickable(onClick = onTurnOn)
+                    .padding(horizontal = 16.dp, vertical = 7.dp)
+            )
+            Text(
+                "Not now",
+                style = MaterialTheme.typography.labelLarge, color = CreamMuted,
+                modifier = Modifier.clip(RoundedCornerShape(50)).clickable(onClick = onNotNow).padding(horizontal = 10.dp, vertical = 7.dp)
+            )
+        }
+    }
+}

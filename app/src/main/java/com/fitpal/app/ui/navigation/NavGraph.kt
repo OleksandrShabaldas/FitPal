@@ -251,6 +251,7 @@ fun FitPalNavHost(
                         navController.navigate(Screen.AiReview.buildRoute(period, key))
                     },
                     onOpenTrail = { navController.navigate(Screen.Trail.route) },
+                    onOpenAnalytics = { navTo(Screen.Analytics.route) },
                     onLogExercise = { navController.navigate(Screen.LogExercise.route) },
                     onExerciseClick = { id -> navController.navigate(Screen.ExerciseDetail.buildRoute(id)) },
                     onOpenWater = { date -> navController.navigate(Screen.WaterDetail.buildRoute(date)) },

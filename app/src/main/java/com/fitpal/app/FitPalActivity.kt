@@ -80,8 +80,10 @@ class FitPalActivity : ComponentActivity() {
                     LocalFastingBackdate provides fastingBackdate
                 ) {
                     val navConfig by settingsRepository.navConfig.collectAsStateWithLifecycle()
+                    val trailOn by settingsRepository.trailEnabled.collectAsStateWithLifecycle()
                     FitPalNavHost(
-                        navConfig = navConfig,
+                        // The Trail's tab goes with the Trail (Settings → Features), and comes back with it.
+                        navConfig = if (trailOn) navConfig else navConfig.copy(tabs = navConfig.tabs - com.fitpal.app.domain.model.NavTab.TRAIL),
                         pendingRoute = pendingRoute,
                         onPendingRouteHandled = { pendingRoute = null },
                         startOnboarding = startOnboarding

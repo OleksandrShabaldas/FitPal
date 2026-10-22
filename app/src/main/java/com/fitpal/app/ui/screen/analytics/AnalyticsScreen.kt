@@ -388,6 +388,17 @@ fun AnalyticsScreen(
         }
     }
     val latestItemKeys by androidx.compose.runtime.rememberUpdatedState(itemKeys)
+    // Opened at a section (Home's streak with the Trail off → Habits): unfold it and scroll there.
+    val pendingSection by viewModel.pendingSection.collectAsStateWithLifecycle()
+    LaunchedEffect(pendingSection) {
+        val id = pendingSection ?: return@LaunchedEffect
+        viewModel.consumeFocus()
+        viewModel.expandSection(id)
+        androidx.compose.runtime.withFrameNanos { }
+        androidx.compose.runtime.withFrameNanos { }
+        val i = latestItemKeys.indexOf("sec_$id")
+        if (i >= 0) listState.animateScrollToItem(i)
+    }
     fun jumpTo(key: String) {
         // A card in a folded section opens its section first, then scrolls once that's drawn.
         widgetLayout.firstOrNull { it.key == key }?.def?.section?.let { viewModel.expandSection(it) }

@@ -168,6 +168,9 @@ fun SettingsCategoryScreen(
                     SettingsAnchor("app_icon", focus) { AppIconSection() }
                     SettingsAnchor("look_tuning", focus) { AppearanceTuningSection(viewModel) }
                 }
+                "features" -> {
+                    SettingsAnchor("features", focus) { FeaturesSection(viewModel, onOpenCategory) }
+                }
                 "personalize" -> {
                     SettingsAnchor("trackers", focus) { TrackersOnHomeSection(viewModel) }
                     SettingsAnchor("customize", focus) { PersonalizeSection(onCustomizeScreen) }

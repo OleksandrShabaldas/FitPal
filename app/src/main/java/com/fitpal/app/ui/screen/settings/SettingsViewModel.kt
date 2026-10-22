@@ -33,8 +33,19 @@ class SettingsViewModel @Inject constructor(
     private val reminderManager: com.fitpal.app.reminder.ReminderManager,
     private val watchLink: com.fitpal.app.wear.WatchLink,
     private val updateManager: com.fitpal.app.update.UpdateManager,
-    private val mealRepository: com.fitpal.app.data.repository.MealRepository
+    private val mealRepository: com.fitpal.app.data.repository.MealRepository,
+    private val featureSwitches: com.fitpal.app.data.repository.FeatureSwitches
 ) : ViewModel() {
+
+    // ---- Optional features (Settings → Features, docs/redesign/06) ----
+    val featuresOn: StateFlow<Set<com.fitpal.app.domain.model.Feature>> = featureSwitches.on
+        .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000),
+            com.fitpal.app.domain.model.Feature.entries.filter { featureSwitches.isOn(it) }.toSet())
+    fun featureSetup(): com.fitpal.app.domain.model.FeatureSetup = featureSwitches.current()
+    fun turnFeatureOn(feature: com.fitpal.app.domain.model.Feature, setup: com.fitpal.app.domain.model.FeatureSetup) =
+        featureSwitches.turnOn(feature, setup)
+    fun turnFeatureOff(feature: com.fitpal.app.domain.model.Feature) = featureSwitches.turnOff(feature)
+    val trailEnabled: StateFlow<Boolean> = settingsRepository.trailEnabled
 
     // ---- Caffeine tracker ----
     val caffeineSettings: StateFlow<com.fitpal.app.domain.CaffeineSettings> = settingsRepository.caffeineSettings

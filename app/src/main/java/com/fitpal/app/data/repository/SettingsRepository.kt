@@ -519,6 +519,40 @@ class SettingsRepository @Inject constructor(
         _navConfig.value = config
     }
 
+    // --- Optional features (docs/redesign/06) ---
+
+    private val _trailEnabled = MutableStateFlow(prefs.getBoolean(KEY_TRAIL_ENABLED, true))
+    /** The Trail (garden, challenges): on unless turned off. Off = no tab, no badge on the streak. */
+    val trailEnabled: StateFlow<Boolean> = _trailEnabled
+
+    fun setTrailEnabled(on: Boolean) {
+        prefs.edit().putBoolean(KEY_TRAIL_ENABLED, on).apply()
+        _trailEnabled.value = on
+    }
+
+    private val _dismissedSuggestions = MutableStateFlow(
+        prefs.getStringSet(KEY_DISMISSED_SUGGESTIONS, emptySet())?.toSet() ?: emptySet()
+    )
+    /** Features whose suggestion on Home was dismissed with × — never suggested again (feature ids). */
+    val dismissedSuggestions: StateFlow<Set<String>> = _dismissedSuggestions
+
+    fun setDismissedSuggestions(ids: Set<String>) {
+        prefs.edit().putStringSet(KEY_DISMISSED_SUGGESTIONS, ids).apply()
+        _dismissedSuggestions.value = ids
+    }
+
+    /** The day the current week's suggestion was first shown (ISO), and the day "Not now" hid it. */
+    var suggestionShownOn: String
+        get() = prefs.getString(KEY_SUGGESTION_SHOWN, "") ?: ""
+        set(v) { prefs.edit().putString(KEY_SUGGESTION_SHOWN, v).apply() }
+    private val _suggestionHiddenOn = MutableStateFlow(prefs.getString(KEY_SUGGESTION_HIDDEN, "") ?: "")
+    val suggestionHiddenOn: StateFlow<String> = _suggestionHiddenOn
+
+    fun hideSuggestionToday(dateIso: String) {
+        prefs.edit().putString(KEY_SUGGESTION_HIDDEN, dateIso).apply()
+        _suggestionHiddenOn.value = dateIso
+    }
+
     // --- Home's strip (docs/redesign/05; it replaced the hero's drawer) ---
 
     private val _homeStripBigger = MutableStateFlow(prefs.getString(KEY_HOME_STRIP_BIGGER, null))
@@ -1121,6 +1155,10 @@ class SettingsRepository @Inject constructor(
         private const val KEY_HOME_STRIP_MIGRATED = "home_strip_migrated"
         private const val KEY_ANALYTICS_TILES_MIGRATED = "analytics_tiles_off_migrated"
         private const val KEY_ANALYTICS_COLLAPSED = "analytics_collapsed"
+        private const val KEY_TRAIL_ENABLED = "trail_enabled"
+        private const val KEY_DISMISSED_SUGGESTIONS = "dismissed_suggestions"
+        private const val KEY_SUGGESTION_SHOWN = "suggestion_shown_on"
+        private const val KEY_SUGGESTION_HIDDEN = "suggestion_hidden_on"
         private const val KEY_APPEARANCE = "appearance"
         private const val KEY_NAV_CONFIG = "nav_config"
 

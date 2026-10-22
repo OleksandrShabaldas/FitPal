@@ -85,7 +85,7 @@ fun CustomizeWidgetsScreen(
                         style = MaterialTheme.typography.bodyMedium, color = CreamMuted
                     )
                 }
-                val shown = com.fitpal.app.domain.model.ScreenWidgets.bySection(cards)
+                val shown = com.fitpal.app.domain.model.ScreenWidgets.bySection(cards).filter { viewModel.inUse(it.key) }
                 val titles = com.fitpal.app.domain.model.ScreenWidgets.analyticsSections.toMap()
                 shown.forEachIndexed { i, card ->
                     val section = card.def.section

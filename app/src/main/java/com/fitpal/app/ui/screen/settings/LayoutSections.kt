@@ -60,7 +60,8 @@ internal fun NavBarSection(viewModel: SettingsViewModel) {
             style = MaterialTheme.typography.bodySmall, color = CreamMuted
         )
         Spacer(Modifier.height(10.dp))
-        NavTab.entries.forEach { tab ->
+        val trailOn by viewModel.trailEnabled.collectAsStateWithLifecycle()
+        NavTab.entries.filter { it != NavTab.TRAIL || trailOn }.forEach { tab ->
             val on = tab in shown
             val locked = tab == NavTab.HOME || tab == NavTab.SETTINGS
             val index = shown.indexOf(tab)

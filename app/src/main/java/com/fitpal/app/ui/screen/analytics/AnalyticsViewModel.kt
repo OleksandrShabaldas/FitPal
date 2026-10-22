@@ -46,8 +46,13 @@ class AnalyticsViewModel @Inject constructor(
     private val stepRepository: StepRepository,
     private val exerciseRepository: ExerciseRepository,
     private val settingsRepository: SettingsRepository,
-    private val focusedDate: FocusedDate
+    private val focusedDate: FocusedDate,
+    private val analyticsFocus: com.fitpal.app.domain.AnalyticsFocus
 ) : ViewModel() {
+
+    /** A section another screen asked to open at (Home's streak → Habits); taken once. */
+    val pendingSection: StateFlow<String?> = analyticsFocus.section
+    fun consumeFocus() { analyticsFocus.section.value = null }
 
     private val dateFormat = DateTimeFormatter.ISO_LOCAL_DATE
     private val today = LocalDate.now()

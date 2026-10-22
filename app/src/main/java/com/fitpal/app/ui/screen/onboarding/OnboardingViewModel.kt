@@ -7,8 +7,8 @@ import com.fitpal.app.data.repository.SettingsRepository
 import com.fitpal.app.data.repository.WeightRepository
 import com.fitpal.app.domain.BmrCalculator
 import com.fitpal.app.domain.DailyTargets
-import com.fitpal.app.domain.model.DietaryRuleKind
-import com.fitpal.app.domain.model.FastingPreset
+import com.fitpal.app.domain.model.Feature
+import com.fitpal.app.domain.model.FeatureSetup
 import com.fitpal.app.domain.model.FitnessGoal
 import com.fitpal.app.domain.model.ReminderKind
 import com.fitpal.app.domain.model.Sex
@@ -32,10 +32,13 @@ data class OnboardingDraft(
     val weightTouched: Boolean = false,
     val goal: FitnessGoal = FitnessGoal.RECOMP,
     val geminiKey: String = "",
-    val fastingOn: Boolean = false,
-    val fastingPreset: FastingPreset = FastingPreset.SIXTEEN_EIGHT,
-    val rules: Set<DietaryRuleKind> = emptySet(),
-    val caffeineOn: Boolean = false,
+    /** Your day: wake-up and bedtime (minutes of the day). */
+    val wakeMin: Int = SettingsRepository.DEFAULT_WAKE_MINUTES,
+    val bedMin: Int = SettingsRepository.DEFAULT_BED_MINUTES,
+    /** The optional features picked on "What do you want to keep an eye on?". */
+    val features: Set<Feature> = setOf(Feature.TRAIL),
+    /** Their basic setup (docs/redesign/06), shared with the Features page. */
+    val setup: FeatureSetup = FeatureSetup(),
     val mealReminders: Boolean = false,
     val weighInReminder: Boolean = false
 ) {
@@ -49,6 +52,9 @@ data class OnboardingDraft(
 
     /** The daily targets these answers work out to (null until there's a weight to base them on). */
     val targets: DailyTargets? get() = weightKg?.let { BmrCalculator.dailyTargets(profile, it) }
+
+    /** The picked features that have something to set up, in the order their setup screens come. */
+    val toSetUp: List<Feature> get() = Feature.entries.filter { it in features && it != Feature.TRAIL }
 
     /** ~35 ml per kg — the same automatic water goal the app uses. */
     val waterGoalMl: Int? get() = weightKg?.let { SettingsRepository.autoWaterGoal(it) }
@@ -65,7 +71,8 @@ class OnboardingViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val weightRepository: WeightRepository,
     private val reminderManager: ReminderManager,
-    private val mealRepository: MealRepository
+    private val mealRepository: MealRepository,
+    private val featureSwitches: com.fitpal.app.data.repository.FeatureSwitches
 ) : ViewModel() {
 
     private val _draft = MutableStateFlow(OnboardingDraft())
@@ -76,10 +83,6 @@ class OnboardingViewModel @Inject constructor(
         viewModelScope.launch {
             val profile = settingsRepository.userProfile.value
             val latest = weightRepository.getLatest().first()
-            val fasting = settingsRepository.fastingSchedule.value
-            val preset = FastingPreset.entries.firstOrNull {
-                it.eatStartMin == fasting.eatStartMin && it.eatEndMin == fasting.eatEndMin
-            } ?: FastingPreset.SIXTEEN_EIGHT
             val reminders = settingsRepository.reminders.value
             _draft.value = OnboardingDraft(
                 sex = profile.sex,
@@ -88,10 +91,11 @@ class OnboardingViewModel @Inject constructor(
                 weight = latest?.weightKg?.let { String.format(java.util.Locale.US, "%.1f", it) } ?: "",
                 goal = profile.fitnessGoal,
                 geminiKey = settingsRepository.geminiApiKey.value.orEmpty(),
-                fastingOn = fasting.enabled,
-                fastingPreset = preset,
-                rules = settingsRepository.dietaryRules.value.filter { it.enabled }.map { it.kind }.toSet(),
-                caffeineOn = settingsRepository.caffeineSettings.value.enabled,
+                wakeMin = settingsRepository.wakeMinutes.value,
+                bedMin = settingsRepository.bedMinutes.value,
+                features = Feature.entries.filter { featureSwitches.isOn(it) }.toSet(),
+                // A first run starts from the setup's defaults; a replay from what's set now.
+                setup = if (settingsRepository.hasOnboarded.value) featureSwitches.current() else FeatureSetup(),
                 mealReminders = listOf(ReminderKind.BREAKFAST, ReminderKind.LUNCH, ReminderKind.DINNER)
                     .any { reminders[it.key]?.enabled == true },
                 weighInReminder = reminders[ReminderKind.WEIGHT.key]?.enabled == true
@@ -105,8 +109,19 @@ class OnboardingViewModel @Inject constructor(
         it.copy(weight = text.filter { c -> c.isDigit() || c == '.' || c == ',' }.take(6), weightTouched = true)
     }
 
-    fun toggleRule(kind: DietaryRuleKind) = _draft.update {
-        it.copy(rules = if (kind in it.rules) it.rules - kind else it.rules + kind)
+    fun toggleFeature(feature: Feature) = _draft.update {
+        it.copy(features = if (feature in it.features) it.features - feature else it.features + feature)
+    }
+
+    /** "Use the defaults" on one feature's setup screen. */
+    fun useDefaults(feature: Feature) = _draft.update { d ->
+        val defaults = FeatureSetup()
+        d.copy(setup = when (feature) {
+            Feature.FASTING -> d.setup.copy(eatStartMin = defaults.eatStartMin, eatEndMin = defaults.eatEndMin, intensity = defaults.intensity)
+            Feature.CAFFEINE -> d.setup.copy(caffeineLimitMg = defaults.caffeineLimitMg, caffeineHalfLifeHours = defaults.caffeineHalfLifeHours)
+            Feature.LIMITS -> d.setup.copy(limits = defaults.limits)
+            Feature.TRAIL -> d.setup
+        })
     }
 
     /**
@@ -124,15 +139,14 @@ class OnboardingViewModel @Inject constructor(
             if (key.isNotEmpty()) settingsRepository.setOnlineAiEnabled(true)
         }
 
-        settingsRepository.setFastingEnabled(d.fastingOn)
-        if (d.fastingOn) settingsRepository.setFastingWindow(d.fastingPreset.eatStartMin, d.fastingPreset.eatEndMin)
+        settingsRepository.setWakeMinutes(d.wakeMin)
+        settingsRepository.setBedMinutes(d.bedMin)
 
-        DietaryRuleKind.entries.forEach { kind ->
-            settingsRepository.setDietaryRuleEnabled(kind, kind in d.rules)
+        // Picked features go on with their setup, the rest off — the same switches as Settings →
+        // Features. Home's placements are the defaults for anything newly on (spec 05).
+        Feature.entries.forEach { f ->
+            if (f in d.features && d.setup.canTurnOn(f)) featureSwitches.turnOn(f, d.setup) else featureSwitches.turnOff(f)
         }
-
-        val caffeineWasOn = settingsRepository.caffeineSettings.value.enabled
-        settingsRepository.setCaffeineEnabled(d.caffeineOn)
 
         listOf(ReminderKind.BREAKFAST, ReminderKind.LUNCH, ReminderKind.DINNER).forEach { kind ->
             reminderManager.setReminder(kind, d.mealReminders, settingsRepository.reminderStateFor(kind).minutes)
@@ -148,7 +162,6 @@ class OnboardingViewModel @Inject constructor(
             // Log a weight only if it was typed now (a first run, or a real change on a replay).
             val kg = d.weightKg
             if (kg != null && d.weightTouched) weightRepository.logWeight(kg)
-            if (d.caffeineOn && !caffeineWasOn) runCatching { mealRepository.backfillCaffeine() }
             onDone()
         }
     }

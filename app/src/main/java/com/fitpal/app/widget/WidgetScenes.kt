@@ -387,8 +387,9 @@ internal object WidgetScenes {
     private fun fasting(d: WidgetData, w: Float, h: Float): WidgetScene {
         val s = d.fasting
         if (!s.enabled) {
-            return WidgetScene("Fasting is off. Tap to set your eating window.", WidgetTarget.Open(Screen.SettingsCategory.buildRoute("fasting"))) { p, c, W, H ->
-                message(p, c, W, H, WidgetIcon.HOURGLASS, p.tone(Tone.FASTING), "Fasting is off", "Tap to set your eating window")
+            // A placed widget can't vanish: one calm line, and a tap to the Features page.
+            return WidgetScene("Fasting is off. Turn it on in FitPal.", WidgetTarget.Open(Screen.SettingsCategory.buildRoute("features", "features"))) { p, c, W, H ->
+                message(p, c, W, H, WidgetIcon.HOURGLASS, p.tone(Tone.FASTING), "Fasting is off", "Turn on in FitPal")
             }
         }
         val st = s.stateAt(minuteOfDayNow())
@@ -611,8 +612,8 @@ internal object WidgetScenes {
 
     private fun caffeine(d: WidgetData, w: Float, h: Float): WidgetScene {
         val cf = d.caffeine
-            ?: return WidgetScene("The caffeine tracker is off. Tap to turn it on.", WidgetTarget.Open(Screen.SettingsCategory.buildRoute("caffeine"))) { p, c, W, H ->
-                message(p, c, W, H, WidgetIcon.COFFEE, p.tone(Tone.CAFFEINE), "Caffeine tracker is off", "Tap to turn it on")
+            ?: return WidgetScene("Caffeine is off. Turn it on in FitPal.", WidgetTarget.Open(Screen.SettingsCategory.buildRoute("features", "features"))) { p, c, W, H ->
+                message(p, c, W, H, WidgetIcon.COFFEE, p.tone(Tone.CAFFEINE), "Caffeine is off", "Turn on in FitPal")
             }
         val limit = cf.settings.dailyLimitMg.coerceAtLeast(1)
         val now = cf.nowMg.roundToInt()

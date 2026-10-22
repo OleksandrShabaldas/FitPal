@@ -37,6 +37,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -67,6 +68,8 @@ class HomeViewModel @Inject constructor(
     private val challengeRepository: ChallengeRepository,
     private val focusedDate: FocusedDate,
     private val appForeground: com.fitpal.app.ml.AppForegroundState,
+    private val analyticsFocus: com.fitpal.app.domain.AnalyticsFocus,
+    private val featureSwitches: com.fitpal.app.data.repository.FeatureSwitches,
     @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
@@ -221,6 +224,58 @@ class HomeViewModel @Inject constructor(
             Streaks.current(set)
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    /** The Trail is on (Settings → Features). Off: the streak stays, without the garden's badge. */
+    val trailEnabled: StateFlow<Boolean> = settingsRepository.trailEnabled
+
+    /** Ask Analytics to open at its Habits section (the streak's target while the Trail is off). */
+    fun focusHabits() = analyticsFocus.request(com.fitpal.app.domain.model.ScreenWidgets.SECTION_HABITS)
+
+    // ---- The gentle suggestion (docs/redesign/06): one optional feature the last two weeks point to ----
+
+    private val recentActivity = run {
+        val today = LocalDate.now()
+        val from = today.minusDays(com.fitpal.app.domain.FeatureSuggestions.LOOKBACK_DAYS).format(dateFormat)
+        val to = today.format(dateFormat)
+        combine(mealRepository.caffeineRowsInRange(from, to), mealRepository.getMealTimesInRange(from, to)) { items, meals ->
+            items.mapNotNull { r ->
+                runCatching { LocalDate.parse(r.date) }.getOrNull()?.let { com.fitpal.app.domain.FeatureSuggestions.Item(it, r.name, r.grams, r.caffeineMg) }
+            } to meals.mapNotNull { m ->
+                runCatching { LocalDate.parse(m.date) }.getOrNull()?.let { d ->
+                    val t = java.time.Instant.ofEpochMilli(m.timestamp).atZone(java.time.ZoneId.systemDefault())
+                    com.fitpal.app.domain.FeatureSuggestions.MealTime(d, t.hour * 60 + t.minute)
+                }
+            }
+        }
+    }
+
+    val suggestion: StateFlow<com.fitpal.app.domain.FeatureSuggestions.Suggestion?> = combine(
+        dailyStreak, featureSwitches.on, settingsRepository.dismissedSuggestions, settingsRepository.suggestionHiddenOn, recentActivity
+    ) { streak, on, dismissed, hiddenOn, (items, meals) ->
+        val today = LocalDate.now()
+        val shownOn = settingsRepository.suggestionShownOn.takeIf { it.isNotBlank() }?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+        val hidden = hiddenOn.takeIf { it.isNotBlank() }?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+        if (!com.fitpal.app.domain.FeatureSuggestions.mayShow(streak, today, shownOn, hidden)) null
+        else com.fitpal.app.domain.FeatureSuggestions.pick(items, meals, on, dismissed)
+    }.onEach { s ->
+        // Seen today: this week's suggestion slot is taken from today.
+        val today = LocalDate.now().format(dateFormat)
+        if (s != null && settingsRepository.suggestionShownOn != today) {
+            val shownOn = settingsRepository.suggestionShownOn.takeIf { it.isNotBlank() }?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+            if (shownOn == null || java.time.temporal.ChronoUnit.DAYS.between(shownOn, LocalDate.now()) >= 7) settingsRepository.suggestionShownOn = today
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    /** "Not now": gone for today, and the next one waits a week. */
+    fun snoozeSuggestion() = settingsRepository.hideSuggestionToday(LocalDate.now().format(dateFormat))
+
+    /** ×: never suggest this feature again. */
+    fun dismissSuggestion(feature: com.fitpal.app.domain.model.Feature) =
+        settingsRepository.setDismissedSuggestions(settingsRepository.dismissedSuggestions.value + feature.id)
+
+    fun featureSetup(): com.fitpal.app.domain.model.FeatureSetup = featureSwitches.current()
+    fun turnFeatureOn(feature: com.fitpal.app.domain.model.Feature, setup: com.fitpal.app.domain.model.FeatureSetup) =
+        featureSwitches.turnOn(feature, setup)
 
     /** True when the trail has growth waiting, an unfolded day, or a challenge to claim. */
     val trailPending: StateFlow<Boolean> = combine(

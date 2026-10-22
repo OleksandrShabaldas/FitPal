@@ -175,6 +175,8 @@ fun HomeScreen(
     onGroupClick: (Long) -> Unit = {},
     onOpenReview: (period: String, key: String) -> Unit = { _, _ -> },
     onOpenTrail: () -> Unit = {},
+    /** Open the Analytics tab (the streak's target while the Trail is off). */
+    onOpenAnalytics: () -> Unit = {},
     onLogExercise: () -> Unit = {},
     onExerciseClick: (Long) -> Unit = {},
     onOpenWater: (String) -> Unit = {},
@@ -198,6 +200,9 @@ fun HomeScreen(
     val dailySteps by viewModel.dailySteps.collectAsStateWithLifecycle()
     val dailyStreak by viewModel.dailyStreak.collectAsStateWithLifecycle()
     val trailPending by viewModel.trailPending.collectAsStateWithLifecycle()
+    val trailOn by viewModel.trailEnabled.collectAsStateWithLifecycle()
+    val suggestion by viewModel.suggestion.collectAsStateWithLifecycle()
+    var suggestionSetup by remember { mutableStateOf<com.fitpal.app.domain.model.Feature?>(null) }
     val exerciseCalories by viewModel.exerciseCalories.collectAsStateWithLifecycle()
     val exerciseEntries by viewModel.exerciseEntries.collectAsStateWithLifecycle()
     val latestWeight by viewModel.latestWeight.collectAsStateWithLifecycle()
@@ -612,8 +617,9 @@ fun HomeScreen(
                         onToday = viewModel::goToday,
                         onPrevDay = viewModel::goPrevDay,
                         onNextDay = viewModel::goNextDay,
-                        onOpenTrail = onOpenTrail,
-                        trailPending = trailPending,
+                        // With the Trail off the streak still shows; it opens Analytics' Habits instead.
+                        onOpenTrail = if (trailOn) onOpenTrail else ({ viewModel.focusHabits(); onOpenAnalytics() }),
+                        trailPending = trailOn && trailPending,
                         onCustomize = { editing = !editing }
                     )
                 }
@@ -622,6 +628,21 @@ fun HomeScreen(
                 // pencil in the header): order, shown/hidden, size and style. Two Small cards share a row.
                 if (!editing) {
                     if (stripTip) item(key = "strip_tip") { StripMovedTip(onDismiss = viewModel::dismissHomeStripTip) }
+                    // The suggestion sits under the strip (or the main card without one), on today only.
+                    val suggestionAnchor = shownCards.firstOrNull { it.key == com.fitpal.app.domain.model.ScreenWidgets.STRIP }?.key
+                        ?: shownCards.firstOrNull { it.key == "hero" }?.key
+                    val suggestionCard: androidx.compose.foundation.lazy.LazyListScope.() -> Unit = {
+                        val s = suggestion
+                        if (s != null && isToday) item(key = "suggestion") {
+                            FeatureSuggestionCard(
+                                suggestion = s,
+                                onTurnOn = { if (s.feature == com.fitpal.app.domain.model.Feature.TRAIL) viewModel.turnFeatureOn(s.feature, viewModel.featureSetup()) else suggestionSetup = s.feature },
+                                onNotNow = viewModel::snoozeSuggestion,
+                                onDismiss = { viewModel.dismissSuggestion(s.feature) }
+                            )
+                        }
+                    }
+                    if (suggestionAnchor == null) suggestionCard()
                     com.fitpal.app.domain.model.ScreenWidgets.rows(shownCards).forEach { row ->
                         val first = row.first()
                         if (row.size == 1 && first.key == "meals") {
@@ -652,10 +673,12 @@ fun HomeScreen(
                                 }
                             }
                         }
+                        if (row.any { it.key == suggestionAnchor }) suggestionCard()
                     }
                 } else {
                     item(key = "edit_banner") { EditModeBanner(onDone = { editing = false }) }
-                    editList.filter { it.enabled }.forEachIndexed { index, card ->
+                    // Off features aren't arranged here either (Settings → Features turns them on).
+                    editList.filter { it.enabled && featureOn(it.key) }.forEachIndexed { index, card ->
                         item(key = "card_${card.key}") {
                             ReorderableItem(reorderState, key = "card_${card.key}") { dragging ->
                                 EditFrame(
@@ -687,7 +710,7 @@ fun HomeScreen(
                     }
                     item(key = "edit_tray") {
                         HiddenCardsTray(
-                            hidden = editList.filterNot { it.enabled },
+                            hidden = editList.filterNot { it.enabled }.filter { featureOn(it.key) },
                             onShow = viewModel::showCard,
                             onReset = viewModel::resetLayout,
                             onDone = { editing = false }
@@ -735,6 +758,15 @@ fun HomeScreen(
             },
             onChangeMealType = { type -> viewModel.setItemMealType(item, type); editingItem = null },
             onDismiss = { editingItem = null }
+        )
+    }
+
+    suggestionSetup?.let { feature ->
+        com.fitpal.app.ui.component.FeatureSetupSheet(
+            feature = feature,
+            initial = viewModel.featureSetup(),
+            onTurnOn = { setup -> viewModel.turnFeatureOn(feature, setup); suggestionSetup = null },
+            onDismiss = { suggestionSetup = null }
         )
     }
 

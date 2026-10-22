@@ -66,6 +66,8 @@ class DataManager @Inject constructor(
             root.put("step_goal", settings.stepGoalManual.value)
             settings.homeStripBigger.value?.let { root.put("home_strip_bigger", it) }
             root.put("analytics_collapsed", JSONArray(settings.analyticsCollapsed.value.toList()))
+            root.put("trail_enabled", settings.trailEnabled.value)
+            root.put("dismissed_suggestions", JSONArray(settings.dismissedSuggestions.value.toList()))
             context.contentResolver.openOutputStream(uri)?.use { out ->
                 out.write(root.toString().toByteArray(Charsets.UTF_8))
             } ?: return@withContext false
@@ -118,6 +120,10 @@ class DataManager @Inject constructor(
             root.optJSONObject("widget_layouts")?.let { settings.importWidgetLayoutsJson(it.toString()) }
             root.optJSONObject("nav_config")?.let { settings.setNavConfig(com.fitpal.app.domain.model.NavConfig.fromJson(it.toString())) }
             if (root.has("step_goal")) settings.setStepGoalManual(root.optInt("step_goal", 0))
+            if (root.has("trail_enabled")) settings.setTrailEnabled(root.optBoolean("trail_enabled", true))
+            root.optJSONArray("dismissed_suggestions")?.let { arr ->
+                settings.setDismissedSuggestions((0 until arr.length()).mapNotNull { arr.optString(it).takeIf { s -> s.isNotBlank() } }.toSet())
+            }
             root.optJSONArray("analytics_collapsed")?.let { arr ->
                 settings.setAnalyticsCollapsed((0 until arr.length()).mapNotNull { arr.optString(it).takeIf { s -> s.isNotBlank() } }.toSet())
             }

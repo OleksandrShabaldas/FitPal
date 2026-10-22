@@ -44,4 +44,13 @@ class CustomizeWidgetsViewModel @Inject constructor(
     fun setVariant(key: String, variant: String) = edit { l -> LayoutEdits.update(l, key) { it.copy(variant = variant) } }
     fun setPlacement(key: String, placement: com.fitpal.app.domain.model.TrackerPlacement) = edit { LayoutEdits.place(it, key, placement) }
     fun resetToDefault() = edit { ScreenWidgets.defaultLayout(screenId) }
+
+    /** False for a card of a feature that's off — those aren't listed (docs/redesign/06: off = invisible). */
+    fun inUse(key: String): Boolean = when {
+        key == "fasting" -> settingsRepository.fastingSchedule.value.enabled
+        key == "caffeine" -> settingsRepository.caffeineSettings.value.enabled
+        key == "limits" -> settingsRepository.dietaryRules.value.any { it.enabled }
+        key.startsWith("limit_") -> settingsRepository.dietaryRules.value.any { it.enabled && "limit_${it.kind.id}" == key }
+        else -> true
+    }
 }

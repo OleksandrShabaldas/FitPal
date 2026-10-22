@@ -109,6 +109,11 @@ import com.fitpal.app.ui.component.CalorieRing
 import com.fitpal.app.ui.component.GradientBackdrop
 import com.fitpal.app.ui.component.MacroRingsRow
 import com.fitpal.app.ui.component.fastingClockLabel
+import com.fitpal.app.ui.component.color
+import com.fitpal.app.ui.component.setupSentence
+import androidx.compose.material.icons.filled.AddCircleOutline
+import androidx.compose.material.icons.filled.Bedtime
+import androidx.compose.material.icons.filled.WbSunny
 import com.fitpal.app.ui.theme.AccentTrends
 import com.fitpal.app.ui.theme.FastingColor
 import com.fitpal.app.ui.theme.CaffeineColor
@@ -131,10 +136,13 @@ private enum class Step(val skippable: Boolean, val counted: Boolean) {
     HOW(true, true),
     RING(true, true),
     ABOUT(true, true),
+    YOUR_DAY(true, true),
     GOAL(true, true),
     PLAN(false, true),
+    TRACK(true, true),
+    SETUP(false, true),
     AI(true, true),
-    EXTRAS(true, true),
+    REMINDERS(true, true),
     DONE(false, false)
 }
 
@@ -154,8 +162,12 @@ fun OnboardingScreen(
     val draft by viewModel.draft.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var stepIndex by rememberSaveable { mutableIntStateOf(0) }
+    // Which picked feature's setup screen is showing (SET UP walks them one after another).
+    var setupIndex by rememberSaveable { mutableIntStateOf(0) }
     var forward by remember { mutableStateOf(true) }
     val step = Step.entries[stepIndex]
+    val toSetUp = draft.toSetUp
+    val setupFeature = toSetUp.getOrNull(setupIndex)
 
     val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
     fun askForNotifications() {
@@ -164,31 +176,42 @@ fun OnboardingScreen(
         ) notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 
-    // The plan needs a weight to work from — without one, it's skipped (both ways).
+    // The plan needs a weight to work from — without one, it's skipped (both ways). SET UP only has
+    // screens for the features picked on TRACK, so with none it's skipped too.
     fun next(from: Step): Step = when (from) {
-        Step.GOAL -> if (draft.targets != null) Step.PLAN else Step.AI
+        Step.GOAL -> if (draft.targets != null) Step.PLAN else Step.TRACK
+        Step.TRACK -> if (toSetUp.isNotEmpty()) Step.SETUP else Step.AI
         Step.DONE -> Step.DONE
         else -> Step.entries[from.ordinal + 1]
     }
     fun previous(from: Step): Step = when (from) {
-        Step.AI -> if (draft.targets != null) Step.PLAN else Step.GOAL
+        Step.TRACK -> if (draft.targets != null) Step.PLAN else Step.GOAL
+        Step.AI -> if (toSetUp.isNotEmpty()) Step.SETUP else Step.TRACK
         Step.WELCOME -> Step.WELCOME
         else -> Step.entries[from.ordinal - 1]
     }
     fun go(to: Step) {
         forward = to.ordinal > stepIndex
+        if (to == Step.SETUP) setupIndex = if (forward) 0 else (toSetUp.size - 1).coerceAtLeast(0)
         stepIndex = to.ordinal
+    }
+    // Inside SET UP, Continue and Back move between the picked features first.
+    fun advance() {
+        if (step == Step.SETUP && setupIndex < toSetUp.size - 1) { forward = true; setupIndex++ } else go(next(step))
+    }
+    fun back() {
+        if (step == Step.SETUP && setupIndex > 0) { forward = false; setupIndex-- } else go(previous(step))
     }
     fun finish() = viewModel.finish(onFinish)
 
-    BackHandler(enabled = stepIndex > 0 && step != Step.DONE) { go(previous(step)) }
+    BackHandler(enabled = stepIndex > 0 && step != Step.DONE) { back() }
 
     GradientBackdrop(theme = BackdropTheme.TODAY) {
         DriftingGlow()
         Column(modifier = Modifier.fillMaxSize().imePadding()) {
             TopBar(
                 step = step,
-                onBack = { go(previous(step)) },
+                onBack = { back() },
                 onSkip = {
                     when (step) {
                         // No body stats → no plan to show; go to the goal.
@@ -199,7 +222,7 @@ fun OnboardingScreen(
             )
 
             AnimatedContent(
-                targetState = step,
+                targetState = step to setupIndex,
                 transitionSpec = {
                     val dir = if (forward) 1 else -1
                     (slideInHorizontally(tween(380)) { it * dir / 3 } + fadeIn(tween(380))) togetherWith
@@ -207,16 +230,19 @@ fun OnboardingScreen(
                 },
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 label = "onboardingStep"
-            ) { s ->
+            ) { (s, index) ->
                 when (s) {
                     Step.WELCOME -> WelcomeStep(replay)
                     Step.HOW -> HowStep()
                     Step.RING -> RingStep()
                     Step.ABOUT -> AboutStep(draft, viewModel)
+                    Step.YOUR_DAY -> YourDayStep(draft, viewModel)
                     Step.GOAL -> GoalStep(draft, viewModel)
                     Step.PLAN -> PlanStep(draft)
+                    Step.TRACK -> TrackStep(draft, viewModel)
+                    Step.SETUP -> draft.toSetUp.getOrNull(index)?.let { f -> SetupStep(f, index, draft.toSetUp.size, draft, viewModel) }
                     Step.AI -> AiStep(draft, viewModel)
-                    Step.EXTRAS -> ExtrasStep(draft, viewModel, onReminderOn = ::askForNotifications)
+                    Step.REMINDERS -> RemindersStep(draft, viewModel, onReminderOn = ::askForNotifications)
                     Step.DONE -> DoneStep(draft, replay)
                 }
             }
@@ -230,20 +256,25 @@ fun OnboardingScreen(
                     Step.DONE -> if (replay) "Done" else "Start using FitPal"
                     else -> "Continue"
                 },
-                enabled = step != Step.ABOUT || draft.aboutYouValid,
+                enabled = when (step) {
+                    Step.ABOUT -> draft.aboutYouValid
+                    Step.SETUP -> setupFeature == null || draft.setup.canTurnOn(setupFeature)
+                    else -> true
+                },
                 onClick = {
                     when (step) {
-                        // Leaving the extras is the natural moment to ask — reminders, and the "your
+                        // Leaving the reminders is the natural moment to ask — reminders, and the "your
                         // photo's been analysed" notification, both need it.
-                        Step.EXTRAS -> { askForNotifications(); go(Step.DONE) }
+                        Step.REMINDERS -> { askForNotifications(); go(Step.DONE) }
                         Step.DONE -> finish()
-                        else -> go(next(step))
+                        else -> advance()
                     }
                 },
                 secondary = when (step) {
                     Step.WELCOME -> (if (replay) "Close" else "Skip setup") to {
                         if (replay) onFinish() else { viewModel.skip(); onFinish() }
                     }
+                    Step.SETUP -> setupFeature?.let { f -> "Use the defaults" to { viewModel.useDefaults(f); advance() } }
                     else -> null
                 }
             )
@@ -713,75 +744,128 @@ private fun MiniInfoCard(icon: ImageVector, title: String, body: String, modifie
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ExtrasStep(draft: OnboardingDraft, viewModel: OnboardingViewModel, onReminderOn: () -> Unit) {
+private fun YourDayStep(draft: OnboardingDraft, viewModel: OnboardingViewModel) {
+    val context = LocalContext.current
+    fun pick(minutes: Int, onPick: (Int) -> Unit) {
+        android.app.TimePickerDialog(context, { _, hh, mm -> onPick(hh * 60 + mm) }, minutes / 60, minutes % 60, false).show()
+    }
     StepColumn {
-        Staggered(0) { StepTitle("Make it yours", "All optional — switch on what helps. Each can be changed later in Settings.") }
+        Staggered(0) {
+            StepTitle("Your day", "We use these to pace your water and to tell you if caffeine will keep you up.")
+        }
         Staggered(1) {
-            ToggleCard(
-                icon = Icons.Default.HourglassEmpty,
-                accent = FastingColor,
-                title = "Intermittent fasting",
-                body = "A daily eating window, a live countdown on Home, and a gentle check if you log during a fast.",
-                checked = draft.fastingOn,
-                onChange = { on -> viewModel.update { it.copy(fastingOn = on) } }
-            ) {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FastingPreset.entries.forEach { p ->
-                        Choice(label = p.label, selected = draft.fastingPreset == p) { viewModel.update { it.copy(fastingPreset = p) } }
-                    }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                TimeTile(Icons.Default.WbSunny, "Wake up", draft.wakeMin, Modifier.weight(1f)) {
+                    pick(draft.wakeMin) { m -> viewModel.update { it.copy(wakeMin = m) } }
                 }
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    "Eat ${fastingClockLabel(draft.fastingPreset.eatStartMin)} – ${fastingClockLabel(draft.fastingPreset.eatEndMin)}",
-                    style = MaterialTheme.typography.bodySmall, color = CreamMuted
-                )
+                TimeTile(Icons.Default.Bedtime, "Bedtime", draft.bedMin, Modifier.weight(1f)) {
+                    pick(draft.bedMin) { m -> viewModel.update { it.copy(bedMin = m) } }
+                }
             }
         }
-        Staggered(2) {
-            Column(modifier = Modifier.fillMaxWidth().glass().padding(16.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Icecream, contentDescription = null, tint = DessertColor, modifier = Modifier.size(22.dp))
-                    Spacer(Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Food limits", style = MaterialTheme.typography.titleMedium, color = Cream)
-                        Text(
-                            "A daily calorie cap for treats, with a quiet heads-up as you get close. Tap the ones you want.",
-                            style = MaterialTheme.typography.bodySmall, color = CreamMuted
+        Staggered(2) { Bullet("Change them any time in Settings → Profile & goals → Your day.") }
+    }
+}
+
+/** A big tappable time: icon, label, the time in large numbers. */
+@Composable
+private fun TimeTile(icon: ImageVector, label: String, minutes: Int, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Column(
+        modifier = modifier.glass().clickable(onClick = onClick).padding(vertical = 18.dp, horizontal = 14.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(icon, contentDescription = null, tint = GoldLight, modifier = Modifier.size(26.dp))
+        Spacer(Modifier.height(8.dp))
+        Text(label, style = MaterialTheme.typography.labelLarge, color = CreamMuted)
+        Text(
+            fastingClockLabel(minutes),
+            style = TextStyle(fontFamily = InterFamily, fontWeight = FontWeight.ExtraBold, fontSize = 30.sp, fontFeatureSettings = "tnum"),
+            color = Cream
+        )
+    }
+}
+
+/** "What do you want to keep an eye on?" — tap the optional features you want; the core is always on. */
+@Composable
+private fun TrackStep(draft: OnboardingDraft, viewModel: OnboardingViewModel) {
+    StepColumn {
+        Staggered(0) { StepTitle("What do you want to keep an eye on?", "Pick any — you'll set each one up next. Change it later in Settings → Features.") }
+        com.fitpal.app.domain.model.Feature.entries.forEachIndexed { i, feature ->
+            Staggered(1 + i) {
+                val picked = feature in draft.features
+                val shape = RoundedCornerShape(22.dp)
+                Column(
+                    modifier = Modifier.fillMaxWidth()
+                        .then(if (picked) Modifier.accentGlass(feature.color, shape) else Modifier.glass(shape))
+                        .clickable { viewModel.toggleFeature(feature) }
+                        .padding(14.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        com.fitpal.app.ui.component.FeatureIconCircle(feature, size = 40.dp)
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(feature.title, style = MaterialTheme.typography.titleMedium, color = Cream)
+                            Text(feature.line, style = MaterialTheme.typography.bodySmall, color = CreamMuted)
+                        }
+                        Icon(
+                            if (picked) Icons.Default.CheckCircle else Icons.Default.AddCircleOutline,
+                            contentDescription = if (picked) "Picked" else "Not picked",
+                            tint = if (picked) feature.color else CreamFaint,
+                            modifier = Modifier.size(24.dp)
                         )
                     }
-                }
-                Spacer(Modifier.height(10.dp))
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    DietaryRuleKind.entries.forEach { kind ->
-                        Choice(
-                            label = "${ruleLabel(kind)} · ${kind.defaultLimitKcal} kcal",
-                            selected = kind in draft.rules
-                        ) { viewModel.toggleRule(kind) }
+                    // Picking one shows what it adds.
+                    AnimatedVisibility(visible = picked, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
+                        com.fitpal.app.ui.component.FeatureVisual(feature, draft.setup, Modifier.padding(top = 10.dp))
                     }
                 }
             }
         }
-        Staggered(3) {
-            ToggleCard(
-                icon = Icons.Default.LocalCafe,
-                accent = CaffeineColor,
-                title = "Caffeine tracker",
-                body = "See how much caffeine is still in you, and roughly when it's low enough for a good night's sleep.",
-                checked = draft.caffeineOn,
-                onChange = { on -> viewModel.update { it.copy(caffeineOn = on) } }
+        Staggered(6) {
+            Text(
+                "Always on: calories, meals, water, steps and weight.",
+                style = MaterialTheme.typography.bodySmall, color = CreamFaint
             )
         }
-        Staggered(4) {
+    }
+}
+
+/** One picked feature's basic setup — the same screen as Settings → Features opens. */
+@Composable
+private fun SetupStep(
+    feature: com.fitpal.app.domain.model.Feature,
+    index: Int,
+    count: Int,
+    draft: OnboardingDraft,
+    viewModel: OnboardingViewModel
+) {
+    StepColumn {
+        Staggered(0) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (count > 1) Text("${index + 1} of $count", style = MaterialTheme.typography.labelLarge, color = feature.color)
+                StepTitle(feature.title, feature.setupSentence)
+            }
+        }
+        Staggered(1) { com.fitpal.app.ui.component.FeatureVisual(feature, draft.setup) }
+        Staggered(2) {
+            Column(Modifier.fillMaxWidth().glass().padding(16.dp)) {
+                com.fitpal.app.ui.component.FeatureSetupControls(feature, draft.setup) { s -> viewModel.update { it.copy(setup = s) } }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RemindersStep(draft: OnboardingDraft, viewModel: OnboardingViewModel, onReminderOn: () -> Unit) {
+    StepColumn {
+        Staggered(0) { StepTitle("A gentle nudge?", "Only if it helps — change the times any time in Settings → Reminders.") }
+        Staggered(1) {
             Column(modifier = Modifier.fillMaxWidth().glass().padding(16.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.NotificationsActive, contentDescription = null, tint = GoldLight, modifier = Modifier.size(22.dp))
                     Spacer(Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Reminders", style = MaterialTheme.typography.titleMedium, color = Cream)
-                        Text("Gentle nudges — nothing else. Times can be changed in Settings.", style = MaterialTheme.typography.bodySmall, color = CreamMuted)
-                    }
+                    Text("Reminders", style = MaterialTheme.typography.titleMedium, color = Cream)
                 }
                 SwitchRow("Meal reminders", "Breakfast, lunch and dinner", draft.mealReminders) { on ->
                     viewModel.update { it.copy(mealReminders = on) }
@@ -791,41 +875,6 @@ private fun ExtrasStep(draft: OnboardingDraft, viewModel: OnboardingViewModel, o
                     viewModel.update { it.copy(weighInReminder = on) }
                     if (on) onReminderOn()
                 }
-            }
-        }
-    }
-}
-
-private fun ruleLabel(kind: DietaryRuleKind): String = when (kind) {
-    DietaryRuleKind.DESSERT -> "Desserts"
-    DietaryRuleKind.FRIED -> "Fried & fast food"
-    DietaryRuleKind.SUGARY_DRINK -> "Sugary drinks"
-}
-
-@Composable
-private fun ToggleCard(
-    icon: ImageVector,
-    accent: Color,
-    title: String,
-    body: String,
-    checked: Boolean,
-    onChange: (Boolean) -> Unit,
-    extra: (@Composable ColumnScope.() -> Unit)? = null
-) {
-    Column(modifier = Modifier.fillMaxWidth().glass().padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(22.dp))
-            Spacer(Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleMedium, color = Cream)
-                Text(body, style = MaterialTheme.typography.bodySmall, color = CreamMuted)
-            }
-            Spacer(Modifier.width(10.dp))
-            Switch(checked = checked, onCheckedChange = onChange)
-        }
-        if (extra != null) {
-            AnimatedVisibility(visible = checked, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
-                Column(modifier = Modifier.padding(top = 12.dp)) { extra() }
             }
         }
     }
@@ -870,10 +919,13 @@ private fun DoneStep(draft: OnboardingDraft, replay: Boolean) {
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     draft.targets?.let { SummaryLine("Daily target", "%,d kcal".format(it.calories)) }
+                    SummaryLine("Your day", "${fastingClockLabel(draft.wakeMin)} – ${fastingClockLabel(draft.bedMin)}")
                     SummaryLine("AI", if (draft.geminiKey.isNotBlank()) "Online, with on-phone backup" else "Add a key or the on-phone model later")
-                    if (draft.fastingOn) SummaryLine("Fasting", "${draft.fastingPreset.label} · eat ${fastingClockLabel(draft.fastingPreset.eatStartMin)} – ${fastingClockLabel(draft.fastingPreset.eatEndMin)}")
-                    if (draft.rules.isNotEmpty()) SummaryLine("Food limits", DietaryRuleKind.entries.filter { it in draft.rules }.joinToString { ruleLabel(it) })
-                    if (draft.caffeineOn) SummaryLine("Caffeine", "Tracking")
+                    val on = com.fitpal.app.domain.model.Feature.entries.filter { it in draft.features && draft.setup.canTurnOn(it) }
+                    SummaryLine("On", if (on.isEmpty()) "Just the basics — add more in Settings → Features" else on.joinToString(" · ") { it.title })
+                    if (com.fitpal.app.domain.model.Feature.FASTING in on) {
+                        SummaryLine("Fasting", "Eat ${fastingClockLabel(draft.setup.eatStartMin)} – ${fastingClockLabel(draft.setup.eatEndMin)}")
+                    }
                     if (draft.mealReminders || draft.weighInReminder) {
                         SummaryLine(
                             "Reminders",

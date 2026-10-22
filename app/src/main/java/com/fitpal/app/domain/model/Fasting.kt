@@ -141,6 +141,7 @@ data class FastingState(
 
 /** One-tap eating-window presets offered in Settings. Labels are the familiar fast:eat ratios. */
 enum class FastingPreset(val label: String, val eatStartMin: Int, val eatEndMin: Int) {
+    FOURTEEN_TEN("14:10", 10 * 60, 20 * 60),   // eat 10:00–20:00 (the gentle start)
     SIXTEEN_EIGHT("16:8", 12 * 60, 20 * 60),   // eat 12:00–20:00
     EIGHTEEN_SIX("18:6", 13 * 60, 19 * 60),    // eat 13:00–19:00
     TWENTY_FOUR("20:4", 14 * 60, 18 * 60),     // eat 14:00–18:00

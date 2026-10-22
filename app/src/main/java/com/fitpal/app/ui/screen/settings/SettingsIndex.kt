@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.Icecream
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.ToggleOn
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.ui.graphics.Color
@@ -43,6 +44,7 @@ data class SettingsGroup(val title: String, val categories: List<SettingsCategor
 const val SETTINGS_WIDGETS = "widgets"
 const val SETTINGS_FEEDBACK = "feedback"
 
+private val FEATURES get() = SettingsCategoryInfo("features", "Features", "Fasting, caffeine, food limits, the Trail — on or off", Icons.Default.ToggleOn)
 private val PROFILE get() = SettingsCategoryInfo("profile", "Profile & goals", "You, your goal, calorie and macro targets", Icons.Default.Person)
 private val LOGGING get() = SettingsCategoryInfo("presets", "Logging & meal times", "Quick-add amounts and when each meal counts", Icons.Default.Restaurant)
 private val FASTING get() = SettingsCategoryInfo("fasting", "Fasting", "Your eating window, the timer and how strict it is", Icons.Default.HourglassEmpty, FastingColor)
@@ -59,6 +61,7 @@ private val ABOUT get() = SettingsCategoryInfo("about", "Updates & about", "App 
 
 /** The hub, top to bottom. A getter, so the rows' tints follow the current look. */
 val SETTINGS_GROUPS get() = listOf(
+    SettingsGroup("Features", listOf(FEATURES)),
     SettingsGroup("You", listOf(PROFILE)),
     SettingsGroup("Tracking", listOf(LOGGING, FASTING, LIMITS, CAFFEINE)),
     SettingsGroup("Notifications", listOf(REMINDERS)),
@@ -93,6 +96,12 @@ data class SettingsSearchEntry(
 }
 
 val SETTINGS_SEARCH_INDEX = listOf(
+    // Features
+    SettingsSearchEntry("Features", "features", "features", "features turn on off enable disable optional fasting caffeine food limits trail garden"),
+    SettingsSearchEntry("The Trail", "features", "features", "trail garden challenges streak grow turn off hide"),
+    SettingsSearchEntry("Turn on fasting", "features", "features", "fasting turn on intermittent eating window"),
+    SettingsSearchEntry("Turn on caffeine", "features", "features", "caffeine turn on coffee tracker"),
+    SettingsSearchEntry("Turn on food limits", "features", "features", "food limits turn on dessert fried sugary drinks cap"),
     // Profile & goals
     SettingsSearchEntry("Your profile", "profile", "profile", "sex age height weight current weight fitness goal lose gain maintain muscle"),
     SettingsSearchEntry("Daily calorie goal", "profile", "calorie_goal", "calorie target override budget kcal limit"),
