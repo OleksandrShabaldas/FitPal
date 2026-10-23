@@ -26,7 +26,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material3.AlertDialog
+import com.fitpal.app.ui.component.kit.FpAlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -141,7 +141,7 @@ fun MealGroupScreen(
         )
     }
     if (showDeleteDialog) {
-        AlertDialog(
+        FpAlertDialog(
             onDismissRequest = { showDeleteDialog = false },
             title = { Text("Delete this meal?") },
             text = { Text("This removes all ${state.dishes.size} dishes in this meal from your log.") },

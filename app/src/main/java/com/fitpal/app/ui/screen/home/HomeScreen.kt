@@ -78,7 +78,7 @@ import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.LocalFireDepartment
-import androidx.compose.material3.AlertDialog
+import com.fitpal.app.ui.component.kit.FpAlertDialog
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -961,9 +961,15 @@ private fun HeaderGreeting(text: String) {
     val minSize = 15.sp
     var fontSize by remember(text) { mutableStateOf(maxSize) }
     var settled by remember(text) { mutableStateOf(false) }
+    // Liquid glass is all Inter, except this line: Fraunces keeps a little FitPal character there.
+    val greetingStyle = MaterialTheme.typography.displaySmall.let {
+        if (com.fitpal.app.ui.theme.LookState.style == com.fitpal.app.ui.theme.LookStyle.LIQUID) {
+            it.copy(fontFamily = com.fitpal.app.ui.theme.FrauncesFamily, fontWeight = FontWeight.Medium, letterSpacing = 0.sp)
+        } else it
+    }
     Text(
         ann,
-        style = MaterialTheme.typography.displaySmall.copy(
+        style = greetingStyle.copy(
             fontSize = fontSize,
             lineHeight = fontSize * 1.16f
         ),
@@ -1118,7 +1124,7 @@ private fun HeroNumbers(consumed: Int, goal: Int, tier: DayScore.Tier) {
     Column(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
             "%,d".format(kotlin.math.abs(left)),
-            style = androidx.compose.ui.text.TextStyle(fontFamily = com.fitpal.app.ui.theme.InterFamily, fontWeight = FontWeight.ExtraBold, fontSize = 56.sp, fontFeatureSettings = "tnum"),
+            style = androidx.compose.ui.text.TextStyle(fontFamily = com.fitpal.app.ui.theme.NumberFamily, fontWeight = FontWeight.ExtraBold, fontSize = 56.sp, fontFeatureSettings = "tnum"),
             color = if (over) MacroOver else Cream
         )
         Text(if (over) "kcal over" else "kcal left", style = MaterialTheme.typography.bodyMedium, color = CreamMuted)
@@ -1563,13 +1569,19 @@ private fun WaterCard(totalMl: Float, goalMl: Int, presets: List<Int>, onAddWate
  */
 @Composable
 private fun HomeSearchBar(onClick: () -> Unit) {
+    // Material You: Material's search bar (full-round, a raised surface); the other looks keep the
+    // glass pill.
+    val material = com.fitpal.app.ui.theme.LookState.style == com.fitpal.app.ui.theme.LookStyle.MATERIAL
+    val surface = if (material) {
+        Modifier.clip(RoundedCornerShape(28.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh)
+    } else Modifier.glass(RoundedCornerShape(14.dp))
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 2.dp)
-            .glass(RoundedCornerShape(14.dp))
+            .then(surface)
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = if (material) 16.dp else 12.dp, vertical = if (material) 12.dp else 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(Icons.Default.Search, contentDescription = null, tint = CreamMuted, modifier = Modifier.size(18.dp))
@@ -1713,7 +1725,7 @@ private fun EditEntryDialog(
         return
     }
 
-    AlertDialog(
+    FpAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(item.name) },
         text = {
@@ -1772,7 +1784,7 @@ private fun CalorieCalendarDialog(
 
     androidx.compose.runtime.LaunchedEffect(viewMonth) { onMonthChanged(viewMonth) }
 
-    AlertDialog(
+    FpAlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
         title = { Text("Select a date") },

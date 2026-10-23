@@ -136,7 +136,8 @@ val SETTINGS_SEARCH_INDEX = listOf(
     SettingsSearchEntry("Online AI", "ai", "online_ai", "gemini api key model fallback test connection quota quick check models flash lite"),
     SettingsSearchEntry("On-device AI model", "ai", "ondevice", "offline gemma download model european foods open food facts food database import"),
     // Appearance
-    SettingsSearchEntry("Look", "appearance", "look", "theme style glow liquid glass paper material you dark light mode night colours colors palette ocean forest berry aurora graphite ember wallpaper dynamic"),
+    SettingsSearchEntry("Look", "appearance", "look", "theme style glow liquid glass paper material you dark light mode night colours colors palette ocean forest berry aurora graphite ember wallpaper dynamic blue teal green gold orange red pink purple slate"),
+    SettingsSearchEntry("Background photo", "appearance", "background", "background photo picture image wallpaper own behind cards dim glow liquid"),
     SettingsSearchEntry("App icon", "appearance", "app_icon", "icon launcher apple carrot sprout ring logo home screen icon change"),
     SettingsSearchEntry("Fine-tune the look", "appearance", "look_tuning", "glow grain texture opacity transparency corners rounding compact spacing density reduce motion animation"),
     // Home & screens

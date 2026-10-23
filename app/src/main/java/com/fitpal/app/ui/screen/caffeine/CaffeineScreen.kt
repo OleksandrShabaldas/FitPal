@@ -82,7 +82,7 @@ import com.fitpal.app.ui.theme.CreamFaint
 import com.fitpal.app.ui.theme.CreamMuted
 import com.fitpal.app.ui.theme.FastingColor
 import com.fitpal.app.ui.theme.GoldLight
-import com.fitpal.app.ui.theme.InterFamily
+import com.fitpal.app.ui.theme.NumberFamily
 import com.fitpal.app.ui.theme.MacroOver
 import com.fitpal.app.ui.theme.ScoreFair
 import com.fitpal.app.ui.theme.accentGlass
@@ -167,7 +167,7 @@ fun CaffeineScreen(
                 Row(verticalAlignment = Alignment.Bottom) {
                     Text(
                         view.amountAt(now).roundToInt().toString(),
-                        style = TextStyle(fontFamily = InterFamily, fontWeight = FontWeight.ExtraBold, fontSize = 44.sp, fontFeatureSettings = "tnum"),
+                        style = TextStyle(fontFamily = NumberFamily, fontWeight = FontWeight.ExtraBold, fontSize = 44.sp, fontFeatureSettings = "tnum"),
                         color = Cream
                     )
                     Spacer(Modifier.width(6.dp))
@@ -179,7 +179,7 @@ fun CaffeineScreen(
                 Row(verticalAlignment = Alignment.Bottom) {
                     Text(
                         view.dayTotalMg.roundToInt().toString(),
-                        style = TextStyle(fontFamily = InterFamily, fontWeight = FontWeight.ExtraBold, fontSize = 44.sp, fontFeatureSettings = "tnum"),
+                        style = TextStyle(fontFamily = NumberFamily, fontWeight = FontWeight.ExtraBold, fontSize = 44.sp, fontFeatureSettings = "tnum"),
                         color = Cream
                     )
                     Spacer(Modifier.width(6.dp))

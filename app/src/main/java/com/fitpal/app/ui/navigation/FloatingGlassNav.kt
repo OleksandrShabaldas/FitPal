@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -27,8 +28,16 @@ import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Landscape
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.BookmarkBorder
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Landscape
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -58,8 +67,9 @@ import dev.chrisbanes.haze.hazeEffect
 /**
  * The bottom bar: the user's tabs (Settings → Home & screens → Bottom bar) with a raised accent "+"
  * in the middle. It floats over the content as frosted glass (Glow, Liquid glass) or docks to the
- * bottom edge as a solid bar (Paper, Material You) — or whichever the user chose. A long press on
- * "+" always opens the full Add menu, whatever the tap is set to do.
+ * bottom edge as a solid bar (Paper) — or whichever the user chose. Material You (unless the user
+ * picked a floating bar) gets Material's navigation bar with a + button above it at the end. A long
+ * press on "+" always opens the full Add menu, whatever the tap is set to do.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -75,6 +85,11 @@ fun FloatingGlassNav(
     style: NavStyle = NavStyle.AUTO
 ) {
     val look = LookState.look
+    // Material You: the real Material navigation bar, with logging on a + button above it.
+    if (look.style == LookStyle.MATERIAL && style != NavStyle.FLOATING) {
+        MaterialNav(tabs, current, onTab, onAdd, onAddLong, modifier, showLabels)
+        return
+    }
     val docked = when (style) {
         NavStyle.DOCKED -> true
         NavStyle.FLOATING -> false
@@ -165,5 +180,60 @@ private fun NavItem(tab: NavTab, selected: Boolean, showLabel: Boolean, onClick:
             Spacer(Modifier.height(1.dp))
             Text(tab.label, style = MaterialTheme.typography.labelSmall, color = tint, maxLines = 1)
         }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun MaterialNav(
+    tabs: List<NavTab>,
+    current: NavTab?,
+    onTab: (NavTab) -> Unit,
+    onAdd: () -> Unit,
+    onAddLong: () -> Unit,
+    modifier: Modifier,
+    showLabels: Boolean
+) {
+    val scheme = MaterialTheme.colorScheme
+    Column(modifier = modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = scheme.primaryContainer,
+            contentColor = scheme.onPrimaryContainer,
+            shadowElevation = 6.dp,
+            modifier = Modifier.padding(end = 16.dp, bottom = 16.dp).size(56.dp)
+        ) {
+            Box(
+                Modifier.fillMaxSize().combinedClickable(onClick = onAdd, onLongClick = onAddLong),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "Add food", modifier = Modifier.size(24.dp))
+            }
+        }
+        NavigationBar(containerColor = scheme.surfaceContainer) {
+            tabs.forEach { tab ->
+                val selected = tab == current
+                NavigationBarItem(
+                    selected = selected,
+                    onClick = { onTab(tab) },
+                    alwaysShowLabel = showLabels,
+                    label = { Text(tab.label, maxLines = 1) },
+                    icon = { MaterialTabIcon(tab, selected) }
+                )
+            }
+        }
+    }
+}
+
+/** Filled when selected, outlined otherwise — the way Pixel apps draw their tabs. */
+@Composable
+private fun MaterialTabIcon(tab: NavTab, selected: Boolean) {
+    when (tab) {
+        NavTab.HOME -> Icon(if (selected) Icons.Default.Home else Icons.Outlined.Home, contentDescription = null)
+        NavTab.ANALYTICS -> Icon(painterResource(R.drawable.ic_bar_chart), contentDescription = null)
+        NavTab.COACH -> Icon(if (selected) Icons.Default.AutoAwesome else Icons.Outlined.AutoAwesome, contentDescription = null)
+        NavTab.COLLECTION -> Icon(if (selected) Icons.Default.Bookmark else Icons.Outlined.BookmarkBorder, contentDescription = null)
+        NavTab.TRAIL -> Icon(if (selected) Icons.Default.Landscape else Icons.Outlined.Landscape, contentDescription = null)
+        NavTab.SETTINGS -> Icon(if (selected) Icons.Default.Settings else Icons.Outlined.Settings, contentDescription = null)
     }
 }

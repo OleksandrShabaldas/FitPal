@@ -56,3 +56,10 @@ scanning their barcode resolves locally too.
 - Open Food Facts is crowd-sourced: popular products are well filled in, obscure ones may have
   gaps or the odd bad value. Re-running the script later picks up newer data.
 - This complements the USDA databases; it doesn't replace them.
+
+## Material You palettes
+
+`GenMaterialPalettes.java` writes `app/src/main/java/com/fitpal/app/ui/theme/MaterialSchemes.kt`: the nine
+built-in Material You colour palettes (Settings → Appearance → Colours), each a full Material 3 scheme made
+with Google's own colour library. How to run it is at the top of the file. Edit the seeds there, not the
+generated Kotlin.

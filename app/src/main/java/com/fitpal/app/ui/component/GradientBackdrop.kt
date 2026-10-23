@@ -1,20 +1,18 @@
 package com.fitpal.app.ui.component
 
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.State
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.withFrameMillis
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -22,17 +20,29 @@ import androidx.compose.ui.graphics.ImageShader
 import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
+import com.fitpal.app.ui.component.kit.LocalTopBarScroll
+import com.fitpal.app.ui.component.kit.rememberTopBarScroll
+import com.fitpal.app.ui.theme.BackdropPhoto
 import com.fitpal.app.ui.theme.BackdropWorld
+import com.fitpal.app.ui.theme.LiquidBackdrop
 import com.fitpal.app.ui.theme.LookState
 import com.fitpal.app.ui.theme.LookStyle
-import kotlin.math.cos
-import kotlin.math.sin
 
 /**
  * Per-section background "world" in the current look, all generated on the phone:
  *  - Glow: a warm gradient wash + soft glowing light orbs + a fine grain.
  *  - Liquid glass: big vivid colour blobs drifting slowly (still with reduce-motion) — the colour
  *    the thick glass on top has to catch.
+ *  - Glow and Liquid glass can show the user's own photo instead (Settings → Appearance →
+ *    Background), dimmed by their chosen amount; Glow keeps its grain on top.
  *  - Paper: a flat sheet with a faint wash and paper grain.
  *  - Material You: the plain surface colour.
  * Content sits on top. The world (Today / Trends / …) keeps each section its own colour where the
@@ -61,6 +71,7 @@ private fun rememberNoise() = remember {
         .asImageBitmap()
 }
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun GradientBackdrop(
     modifier: Modifier = Modifier,
@@ -75,21 +86,45 @@ fun GradientBackdrop(
     val grain = look.appearance.grain
 
     // Liquid glass's drift: one slow loop the blobs ride around (a still frame with reduce-motion).
+    // The phase is shared (LiquidBackdrop) because the glass draws the same blobs at its edges; it's
+    // read only inside draw phases, so the drift redraws without recomposing.
     val drifting = look.style == LookStyle.LIQUID && !look.appearance.reduceMotion
-    // Read only inside the Canvas below, so the drift redraws the backdrop without recomposing.
-    val phaseState: State<Float>? = if (drifting) {
-        val t = rememberInfiniteTransition(label = "liquidDrift")
-        t.animateFloat(
-            initialValue = 0f, targetValue = (2 * Math.PI).toFloat(),
-            animationSpec = infiniteRepeatable(tween(36_000, easing = LinearEasing), RepeatMode.Restart),
-            label = "phase"
-        )
-    } else null
+    if (drifting) {
+        LaunchedEffect(Unit) {
+            while (true) {
+                withFrameMillis { ms -> LiquidBackdrop.phase = ((ms % 36_000L) / 36_000f) * (2 * Math.PI).toFloat() }
+            }
+        }
+    } else if (look.style == LookStyle.LIQUID) {
+        SideEffect { LiquidBackdrop.phase = 0f }
+    }
 
-    Box(modifier.fillMaxSize()) {
+    // The user's own photo (Glow and Liquid glass), loaded once per pick.
+    val context = LocalContext.current
+    val photo = if (look.hasPhoto) BackdropPhoto.image else null
+    if (look.hasPhoto) {
+        LaunchedEffect(look.appearance.photoVersion) { BackdropPhoto.ensureLoaded(context, look.appearance.photoVersion) }
+    }
+
+    val frameModifier = if (look.style == LookStyle.LIQUID) {
+        Modifier.onGloballyPositioned { coords ->
+            val r = coords.boundsInWindow()
+            if (r != LiquidBackdrop.frame) LiquidBackdrop.frame = r
+        }
+    } else Modifier
+
+    // Liquid glass and Material You collapse the screen's top bar as its content scrolls.
+    val topBarScroll = if (look.style == LookStyle.LIQUID || look.style == LookStyle.MATERIAL) rememberTopBarScroll() else null
+    val scrollModifier = if (topBarScroll != null) Modifier.nestedScroll(topBarScroll.nestedScrollConnection) else Modifier
+
+    Box(modifier.fillMaxSize().then(frameModifier).then(scrollModifier)) {
         Canvas(Modifier.fillMaxSize()) {
             when (look.style) {
-                LookStyle.GLOW -> {
+                LookStyle.GLOW -> if (photo != null) {
+                    drawCover(photo)
+                    drawRect(Color.Black, alpha = look.appearance.photoDim)
+                    if (grain) drawRect(brush = noiseBrush, alpha = 0.05f, blendMode = BlendMode.Softlight)
+                } else {
                     drawRect(
                         brush = Brush.radialGradient(
                             colors = spec.base,
@@ -110,22 +145,20 @@ fun GradientBackdrop(
                     drawRect(Color.Black, alpha = colors.backdropShade)
                     if (grain) drawRect(brush = noiseBrush, alpha = 0.05f, blendMode = BlendMode.Softlight)
                 }
-                LookStyle.LIQUID -> {
-                    val phase = phaseState?.value ?: 0f
+                LookStyle.LIQUID -> if (photo != null) {
+                    drawCover(photo)
+                    drawRect(if (colors.isLight) Color.White else Color.Black, alpha = look.appearance.photoDim)
+                } else {
+                    val phase = LiquidBackdrop.phase
                     drawRect(colors.inkBlack)
                     spec.orbs.forEachIndexed { i, o ->
-                        val a = phase + i * 2.1f
-                        val c = Offset(
-                            size.width * (o.cx + 0.10f * cos(a)),
-                            size.height * (o.cy + 0.06f * sin(a * 0.8f))
-                        )
-                        val r = size.minDimension * o.rFrac * (1f + 0.08f * sin(a * 1.3f))
+                        val (c, r) = LiquidBackdrop.orb(i, o, phase, size.width, size.height)
                         drawCircle(
                             brush = Brush.radialGradient(
                                 listOf(o.color.copy(alpha = o.alpha), o.color.copy(alpha = o.alpha * 0.35f), Color.Transparent),
-                                center = c, radius = r * 1.6f
+                                center = c, radius = r
                             ),
-                            radius = r * 1.6f, center = c
+                            radius = r, center = c
                         )
                     }
                     if (colors.backdropShade > 0f) drawRect(Color.Black, alpha = colors.backdropShade)
@@ -151,6 +184,18 @@ fun GradientBackdrop(
                 LookStyle.MATERIAL -> drawRect(colors.inkBlack)
             }
         }
-        content()
+        if (topBarScroll != null) CompositionLocalProvider(LocalTopBarScroll provides topBarScroll) { content() } else content()
     }
+}
+
+/** The photo, centre-cropped to cover the whole backdrop (the glass uses the same mapping). */
+private fun DrawScope.drawCover(photo: ImageBitmap) {
+    val src = BackdropPhoto.coverSource(photo.width, photo.height, size.width, size.height)
+    drawImage(
+        photo,
+        srcOffset = IntOffset(src.left.toInt(), src.top.toInt()),
+        srcSize = IntSize(src.width.toInt(), src.height.toInt()),
+        dstSize = IntSize(size.width.toInt(), size.height.toInt()),
+        filterQuality = FilterQuality.Medium
+    )
 }

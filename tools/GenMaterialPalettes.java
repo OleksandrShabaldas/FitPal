@@ -1,0 +1,132 @@
+/*
+ * Generates app/src/main/java/com/fitpal/app/ui/theme/MaterialSchemes.kt — the Material You look's
+ * built-in colour palettes (Settings → Appearance → Colours), one full Material 3 scheme per seed
+ * colour, light and dark, made the way Android makes the wallpaper scheme ("tonal spot").
+ *
+ * It uses Google's colour library (com.google.android.material.color.utilities), which ships inside
+ * the Material Components AAR. FitPal doesn't depend on that library — the schemes are baked into
+ * the generated Kotlin file, so the app needs nothing at run time. To regenerate (from the repo root):
+ *
+ *   unzip -o -q ~/.gradle/caches/modules-2/files-2.1/com.google.android.material/material/1.13.0/<hash>/material-1.13.0.aar classes.jar -d /tmp/mat
+ *   javac -cp /tmp/mat/classes.jar -d /tmp/mat/out tools/GenMaterialPalettes.java
+ *   java -cp "/tmp/mat/classes.jar:/tmp/mat/out" GenMaterialPalettes app/src/main/java/com/fitpal/app/ui/theme/MaterialSchemes.kt
+ *
+ * (Use ';' instead of ':' in the classpath on Windows.) Edit the SEEDS below, not the output.
+ */
+
+import com.google.android.material.color.utilities.DynamicColor;
+import com.google.android.material.color.utilities.DynamicScheme;
+import com.google.android.material.color.utilities.Hct;
+import com.google.android.material.color.utilities.MaterialDynamicColors;
+import com.google.android.material.color.utilities.SchemeNeutral;
+import com.google.android.material.color.utilities.SchemeTonalSpot;
+
+import java.io.FileOutputStream;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+
+public class GenMaterialPalettes {
+
+    /** enum name, label, seed, neutral (low-chroma scheme). Order = the order the picker shows. */
+    private static final Object[][] SEEDS = {
+        {"BLUE", "Blue", 0xFF4285F4, false},
+        {"TEAL", "Teal", 0xFF009688, false},
+        {"GREEN", "Green", 0xFF4CAF50, false},
+        {"GOLD", "Gold", 0xFFFFB300, false},
+        {"ORANGE", "Orange", 0xFFFF7043, false},
+        {"RED", "Red", 0xFFE53935, false},
+        {"PINK", "Pink", 0xFFEC407A, false},
+        {"PURPLE", "Purple", 0xFF7E57C2, false},
+        {"SLATE", "Slate", 0xFF607D8B, true},
+    };
+
+    /** The ColorScheme roles, in the order MaterialSchemes.kt reads them. */
+    private static final String[] ROLES = {
+        "primary", "onPrimary", "primaryContainer", "onPrimaryContainer", "inversePrimary",
+        "secondary", "onSecondary", "secondaryContainer", "onSecondaryContainer",
+        "tertiary", "onTertiary", "tertiaryContainer", "onTertiaryContainer",
+        "background", "onBackground", "surface", "onSurface", "surfaceVariant", "onSurfaceVariant",
+        "surfaceTint", "inverseSurface", "inverseOnSurface",
+        "error", "onError", "errorContainer", "onErrorContainer",
+        "outline", "outlineVariant", "scrim",
+        "surfaceBright", "surfaceContainer", "surfaceContainerHigh", "surfaceContainerHighest",
+        "surfaceContainerLow", "surfaceContainerLowest", "surfaceDim",
+    };
+
+    private static List<DynamicColor> colors(MaterialDynamicColors m) {
+        List<DynamicColor> l = new ArrayList<>();
+        l.add(m.primary()); l.add(m.onPrimary()); l.add(m.primaryContainer()); l.add(m.onPrimaryContainer()); l.add(m.inversePrimary());
+        l.add(m.secondary()); l.add(m.onSecondary()); l.add(m.secondaryContainer()); l.add(m.onSecondaryContainer());
+        l.add(m.tertiary()); l.add(m.onTertiary()); l.add(m.tertiaryContainer()); l.add(m.onTertiaryContainer());
+        l.add(m.background()); l.add(m.onBackground()); l.add(m.surface()); l.add(m.onSurface()); l.add(m.surfaceVariant()); l.add(m.onSurfaceVariant());
+        l.add(m.surfaceTint()); l.add(m.inverseSurface()); l.add(m.inverseOnSurface());
+        l.add(m.error()); l.add(m.onError()); l.add(m.errorContainer()); l.add(m.onErrorContainer());
+        l.add(m.outline()); l.add(m.outlineVariant()); l.add(m.scrim());
+        l.add(m.surfaceBright()); l.add(m.surfaceContainer()); l.add(m.surfaceContainerHigh()); l.add(m.surfaceContainerHighest());
+        l.add(m.surfaceContainerLow()); l.add(m.surfaceContainerLowest()); l.add(m.surfaceDim());
+        return l;
+    }
+
+    private static String row(DynamicScheme scheme, MaterialDynamicColors m) {
+        StringBuilder sb = new StringBuilder();
+        List<DynamicColor> cs = colors(m);
+        for (int i = 0; i < cs.size(); i++) {
+            if (i > 0) sb.append(i % 6 == 0 ? ",\n            " : ", ");
+            sb.append(String.format("0x%08X", cs.get(i).getArgb(scheme)));
+        }
+        return sb.toString();
+    }
+
+    public static void main(String[] args) throws Exception {
+        if (ROLES.length != colors(new MaterialDynamicColors()).size()) throw new IllegalStateException("roles out of sync");
+        MaterialDynamicColors m = new MaterialDynamicColors();
+        StringBuilder out = new StringBuilder();
+        out.append("// GENERATED by tools/GenMaterialPalettes.java — edit the generator, not this file.\n");
+        out.append("package com.fitpal.app.ui.theme\n\n");
+        out.append("import androidx.compose.material3.ColorScheme\n");
+        out.append("import androidx.compose.material3.darkColorScheme\n");
+        out.append("import androidx.compose.material3.lightColorScheme\n");
+        out.append("import androidx.compose.ui.graphics.Color\n\n");
+        out.append("/** Material You's built-in colours (when it doesn't follow the wallpaper): full tonal-spot schemes. */\n");
+        out.append("enum class MaterialPalette(val label: String, val seed: Long) {\n");
+        for (int i = 0; i < SEEDS.length; i++) {
+            Object[] s = SEEDS[i];
+            out.append(String.format("    %s(\"%s\", 0x%08XL)%s\n", s[0], s[1], (Integer) s[2], i == SEEDS.length - 1 ? ";" : ","));
+        }
+        out.append("}\n\n");
+        out.append("internal object MaterialSchemes {\n");
+        out.append("    fun scheme(p: MaterialPalette, light: Boolean): ColorScheme = build(if (light) LIGHT.getValue(p) else DARK.getValue(p), light)\n\n");
+        StringBuilder light = new StringBuilder("    private val LIGHT = mapOf(\n");
+        StringBuilder dark = new StringBuilder("    private val DARK = mapOf(\n");
+        for (Object[] s : SEEDS) {
+            Hct seed = Hct.fromInt((Integer) s[2]);
+            boolean neutral = (Boolean) s[3];
+            DynamicScheme l = neutral ? new SchemeNeutral(seed, false, 0.0) : new SchemeTonalSpot(seed, false, 0.0);
+            DynamicScheme d = neutral ? new SchemeNeutral(seed, true, 0.0) : new SchemeTonalSpot(seed, true, 0.0);
+            light.append("        MaterialPalette.").append(s[0]).append(" to longArrayOf(\n            ").append(row(l, m)).append("\n        ),\n");
+            dark.append("        MaterialPalette.").append(s[0]).append(" to longArrayOf(\n            ").append(row(d, m)).append("\n        ),\n");
+        }
+        light.append("    )\n\n");
+        dark.append("    )\n\n");
+        out.append(light).append(dark);
+        out.append("    private fun build(r: LongArray, light: Boolean): ColorScheme {\n");
+        out.append("        fun c(i: Int) = Color(r[i])\n");
+        out.append("        return if (light) lightColorScheme(\n");
+        appendArgs(out);
+        out.append("        ) else darkColorScheme(\n");
+        appendArgs(out);
+        out.append("        )\n    }\n}\n");
+        try (Writer w = new OutputStreamWriter(new FileOutputStream(args[0]), StandardCharsets.UTF_8)) {
+            w.write(out.toString());
+        }
+    }
+
+    private static void appendArgs(StringBuilder out) {
+        for (int i = 0; i < ROLES.length; i++) {
+            out.append("            ").append(ROLES[i]).append(" = c(").append(i).append(")").append(i == ROLES.length - 1 ? "\n" : ",\n");
+        }
+    }
+}

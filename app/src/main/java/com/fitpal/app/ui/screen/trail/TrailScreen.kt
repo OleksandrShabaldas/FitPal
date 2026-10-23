@@ -23,7 +23,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
+import com.fitpal.app.ui.component.kit.FpAlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -662,7 +662,7 @@ private fun RewardDialog(reward: CaseReward, onDismiss: () -> Unit) {
         is CaseReward.GotGrowth -> Triple("🌿", "${reward.amount} growth", "Straight into your pocket.")
     }
 
-    AlertDialog(
+    FpAlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = { TextButton(onClick = onDismiss) { Text("Nice") } },
         title = { Text(title) },

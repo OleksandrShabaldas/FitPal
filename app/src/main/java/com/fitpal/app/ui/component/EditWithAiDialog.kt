@@ -9,7 +9,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material3.AlertDialog
+import com.fitpal.app.ui.component.kit.FpAlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -40,7 +40,7 @@ fun EditWithAiDialog(
     onDismiss: () -> Unit
 ) {
     var text by remember { mutableStateOf("") }
-    AlertDialog(
+    FpAlertDialog(
         onDismissRequest = { if (!loading) onDismiss() },
         title = { Text("Edit \"$foodLabel\" with AI") },
         text = {

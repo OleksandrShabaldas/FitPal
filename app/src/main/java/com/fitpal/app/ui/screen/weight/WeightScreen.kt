@@ -51,7 +51,7 @@ import com.fitpal.app.ui.theme.CreamFaint
 import com.fitpal.app.ui.theme.CreamMuted
 import com.fitpal.app.ui.theme.Gold
 import com.fitpal.app.ui.theme.GoldLight
-import com.fitpal.app.ui.theme.InterFamily
+import com.fitpal.app.ui.theme.NumberFamily
 import com.fitpal.app.ui.theme.MacroOver
 import com.fitpal.app.ui.theme.ScoreFair
 import kotlinx.coroutines.launch
@@ -101,7 +101,7 @@ fun WeightScreen(
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
                     latest?.let { format1(it.weightKg) } ?: "—",
-                    style = TextStyle(fontFamily = InterFamily, fontWeight = FontWeight.ExtraBold, fontSize = 44.sp, fontFeatureSettings = "tnum"),
+                    style = TextStyle(fontFamily = NumberFamily, fontWeight = FontWeight.ExtraBold, fontSize = 44.sp, fontFeatureSettings = "tnum"),
                     color = Cream
                 )
                 Spacer(Modifier.width(6.dp))

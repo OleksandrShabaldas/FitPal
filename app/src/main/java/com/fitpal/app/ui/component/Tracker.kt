@@ -58,6 +58,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.Brush
+import com.fitpal.app.ui.component.kit.liquidPress
+import com.fitpal.app.ui.component.kit.liquidWindowBlur
+import com.fitpal.app.ui.theme.LookState
+import com.fitpal.app.ui.theme.LookStyle
+import com.fitpal.app.ui.theme.glassOverlay
 import com.fitpal.app.domain.GoalKind
 import com.fitpal.app.domain.StatusKind
 import com.fitpal.app.domain.TrackerStatus
@@ -208,7 +219,7 @@ fun TrackerRing(
             Text(
                 value,
                 style = androidx.compose.ui.text.TextStyle(
-                    fontFamily = com.fitpal.app.ui.theme.InterFamily, fontWeight = FontWeight.ExtraBold,
+                    fontFamily = com.fitpal.app.ui.theme.NumberFamily, fontWeight = FontWeight.ExtraBold,
                     fontSize = androidx.compose.ui.unit.TextUnit(22f, androidx.compose.ui.unit.TextUnitType.Sp),
                     fontFeatureSettings = "tnum"
                 ),
@@ -363,13 +374,7 @@ fun WeekBars(
 @Composable
 fun TrackerSheet(title: String, onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
     val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = state,
-        containerColor = OverlaySurface,
-        contentColor = Cream,
-        dragHandle = { BottomSheetDefaults.DragHandle(color = CreamFaint) }
-    ) {
+    val body: @Composable ColumnScope.() -> Unit = {
         Column(
             Modifier.fillMaxWidth().imePadding().padding(start = 20.dp, end = 20.dp, bottom = 28.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
@@ -377,6 +382,39 @@ fun TrackerSheet(title: String, onDismiss: () -> Unit, content: @Composable Colu
             Text(title, style = MaterialTheme.typography.headlineSmall, color = Cream)
             content()
         }
+    }
+    when (LookState.style) {
+        // Liquid glass: a floating glass sheet, inset from the edges with big round corners, over
+        // the blurred page (the panel stays opaque where the phone can't blur).
+        LookStyle.LIQUID -> ModalBottomSheet(
+            onDismissRequest = onDismiss,
+            sheetState = state,
+            modifier = Modifier.padding(horizontal = 8.dp).navigationBarsPadding().padding(bottom = 8.dp),
+            shape = RoundedCornerShape(34.dp),
+            containerColor = Color.Transparent,
+            contentColor = Cream,
+            tonalElevation = 0.dp,
+            dragHandle = null
+        ) {
+            val frosted = liquidWindowBlur()
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .then(if (frosted) Modifier.background(OverlaySurface.copy(alpha = 0.72f), RoundedCornerShape(34.dp)) else Modifier.glassOverlay(RoundedCornerShape(34.dp)))
+            ) {
+                BottomSheetDefaults.DragHandle(color = CreamFaint, modifier = Modifier.align(Alignment.CenterHorizontally))
+                body()
+            }
+        }
+        // Material You: Material's own sheet, in its colours, with its drag handle.
+        LookStyle.MATERIAL -> ModalBottomSheet(onDismissRequest = onDismiss, sheetState = state) { body() }
+        else -> ModalBottomSheet(
+            onDismissRequest = onDismiss,
+            sheetState = state,
+            containerColor = OverlaySurface,
+            contentColor = Cream,
+            dragHandle = { BottomSheetDefaults.DragHandle(color = CreamFaint) }
+        ) { body() }
     }
 }
 
@@ -434,11 +472,19 @@ fun TrackerChip(
 /** The main action of a sheet or block: a gold pill. */
 @Composable
 fun GoldButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
+    if (LookState.style == LookStyle.MATERIAL) {
+        // Material You: Material's filled button.
+        Button(onClick = onClick, modifier = modifier, enabled = enabled) { Text(text, maxLines = 1) }
+        return
+    }
+    val interaction = remember { MutableInteractionSource() }
     Box(
         modifier = modifier
+            .liquidPress(interaction)
             .clip(RoundedCornerShape(50))
             .background(if (enabled) GoldLight else GoldLight.copy(alpha = 0.35f))
-            .clickable(enabled = enabled, onClick = onClick)
+            .then(if (LookState.style == LookStyle.LIQUID) Modifier.liquidSheen() else Modifier)
+            .clickable(interactionSource = interaction, indication = LocalIndication.current, enabled = enabled, onClick = onClick)
             .padding(horizontal = 18.dp, vertical = 12.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -446,13 +492,28 @@ fun GoldButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier,
     }
 }
 
+/** Liquid glass's accent capsule catches the light too: a soft sheen along its top. */
+private fun Modifier.liquidSheen(): Modifier = this.drawWithContent {
+    drawContent()
+    drawRect(
+        Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.28f), Color.Transparent), endY = size.height * 0.55f)
+    )
+}
+
 /** A secondary action: a glass pill. */
 @Composable
 fun GlassButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    if (LookState.style == LookStyle.MATERIAL) {
+        // Material You: Material's tonal button.
+        FilledTonalButton(onClick = onClick, modifier = modifier) { Text(text, maxLines = 1) }
+        return
+    }
+    val interaction = remember { MutableInteractionSource() }
     Box(
         modifier = modifier
+            .liquidPress(interaction)
             .glassSoft(RoundedCornerShape(50))
-            .clickable(onClick = onClick)
+            .clickable(interactionSource = interaction, indication = LocalIndication.current, onClick = onClick)
             .padding(horizontal = 18.dp, vertical = 12.dp),
         contentAlignment = Alignment.Center
     ) {

@@ -21,6 +21,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MailOutline
 import androidx.compose.material.icons.filled.Search
@@ -36,6 +37,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
@@ -49,6 +52,9 @@ import com.fitpal.app.ui.theme.Cream
 import com.fitpal.app.ui.theme.CreamFaint
 import com.fitpal.app.ui.theme.CreamMuted
 import com.fitpal.app.ui.theme.GoldLight
+import com.fitpal.app.ui.theme.LookState
+import com.fitpal.app.ui.theme.LookStyle
+import com.fitpal.app.ui.theme.filmColor
 import com.fitpal.app.ui.theme.accentGlass
 import com.fitpal.app.ui.theme.glass
 
@@ -79,31 +85,48 @@ fun SettingsScreen(
     }
 
     GradientBackdrop(theme = BackdropTheme.TODAY) {
+        // Liquid glass and Material You pin the large title above the scrolling list (it collapses
+        // as the list scrolls); Glow and Paper scroll it away with the content, as before.
+        val pinnedBar = LookState.style == LookStyle.LIQUID || LookState.style == LookStyle.MATERIAL
+        Column(Modifier.fillMaxSize()) {
+        if (pinnedBar) GlassTopBar(title = "Settings")
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .swipeNavigation(onSwipeLeft = {}, onSwipeRight = onSwipeToCollection)
                 .verticalScroll(rememberScrollState())
-                .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 110.dp),
+                .padding(start = 16.dp, end = 16.dp, top = if (pinnedBar) 4.dp else 16.dp, bottom = 110.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            GlassTopBar(title = "Settings")
+            if (!pinnedBar) GlassTopBar(title = "Settings")
             SettingsSearchField(query = query, onQueryChange = { query = it })
 
             if (query.isNotBlank()) {
                 SearchResults(query = query, onOpen = open)
             } else {
+                val style = LookState.style
                 SETTINGS_GROUPS.forEach { group ->
                     Text(
                         group.title,
                         style = MaterialTheme.typography.labelLarge,
-                        color = CreamMuted,
-                        modifier = Modifier.padding(start = 6.dp, top = 6.dp)
+                        // Material You titles its sections in the accent colour, as Pixel's Settings does.
+                        color = if (style == LookStyle.MATERIAL) MaterialTheme.colorScheme.primary else CreamMuted,
+                        modifier = Modifier.padding(start = if (style == LookStyle.MATERIAL) 16.dp else 6.dp, top = 6.dp)
                     )
                     Column(modifier = Modifier.fillMaxWidth().glass()) {
                         group.categories.forEachIndexed { index, category ->
-                            if (index > 0) HorizontalDivider(color = Cream.copy(alpha = 0.07f), modifier = Modifier.padding(start = 64.dp))
-                            CategoryRow(category) { open(category.id, null) }
+                            when (style) {
+                                LookStyle.LIQUID -> {
+                                    // iPhone grouped list: the hairline starts after the icon.
+                                    if (index > 0) HorizontalDivider(thickness = 0.5.dp, color = Cream.copy(alpha = 0.14f), modifier = Modifier.padding(start = 58.dp))
+                                    LiquidCategoryRow(category) { open(category.id, null) }
+                                }
+                                LookStyle.MATERIAL -> MaterialCategoryRow(category) { open(category.id, null) }
+                                else -> {
+                                    if (index > 0) HorizontalDivider(color = Cream.copy(alpha = 0.07f), modifier = Modifier.padding(start = 64.dp))
+                                    CategoryRow(category) { open(category.id, null) }
+                                }
+                            }
                         }
                     }
                 }
@@ -135,6 +158,7 @@ fun SettingsScreen(
                 }
             }
         }
+        }
     }
 }
 
@@ -165,15 +189,92 @@ private fun CategoryRow(category: SettingsCategoryInfo, onClick: () -> Unit) {
     }
 }
 
+/**
+ * Liquid glass: an iPhone Settings row — the category's icon white on a rounded square of its
+ * colour, one line of title and a small chevron.
+ */
+@Composable
+private fun LiquidCategoryRow(category: SettingsCategoryInfo, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier.size(30.dp).background(liquidIconColor(category), RoundedCornerShape(8.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(category.icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+        }
+        Spacer(Modifier.width(14.dp))
+        Text(category.title, style = MaterialTheme.typography.bodyLarge, color = Cream, modifier = Modifier.weight(1f))
+        Icon(
+            Icons.AutoMirrored.Filled.ArrowForwardIos,
+            contentDescription = null,
+            tint = CreamFaint,
+            modifier = Modifier.size(14.dp)
+        )
+    }
+}
+
+/** iPhone Settings' saturated icon squares: a fixed system colour per category (white icon on top). */
+private fun liquidIconColor(category: SettingsCategoryInfo): Color = Color(
+    when (category.id) {
+        "features" -> 0xFF34C759
+        "presets" -> 0xFFFF9500
+        "fasting" -> 0xFF5E5CE6
+        "rules" -> 0xFFFF2D55
+        "caffeine" -> 0xFFA2845E
+        "reminders" -> 0xFFFF3B30
+        "activity" -> 0xFF30B0C7
+        "ai" -> 0xFFAF52DE
+        "appearance" -> 0xFF007AFF
+        "personalize" -> 0xFF5856D6
+        SETTINGS_WIDGETS -> 0xFFFF9F0A
+        "data" -> 0xFF636366
+        else -> 0xFF8E8E93
+    }
+)
+
+/**
+ * Material You: a Material list item — the icon in a tonal circle, the title over its one-line
+ * description, no chevron (Pixel's Settings has none).
+ */
+@Composable
+private fun MaterialCategoryRow(category: SettingsCategoryInfo, onClick: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier.size(40.dp).background(scheme.secondaryContainer, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(category.icon, contentDescription = null, tint = scheme.onSecondaryContainer, modifier = Modifier.size(22.dp))
+        }
+        Spacer(Modifier.width(16.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(category.title, style = MaterialTheme.typography.bodyLarge, color = scheme.onSurface)
+            Text(category.description, style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant)
+        }
+    }
+}
+
 /** The glass search pill at the top of the hub — the same shape as Home's search bar, but live. */
 @Composable
 private fun SettingsSearchField(query: String, onQueryChange: (String) -> Unit) {
     val focusManager = LocalFocusManager.current
+    // Per look: Glow's glass pill; Liquid glass an iPhone search field (a filled, gently rounded
+    // bar); Material You a Material search bar (a tall full-round bar in a raised surface).
+    val bar = when (LookState.style) {
+        LookStyle.LIQUID -> Modifier.clip(RoundedCornerShape(12.dp)).background(filmColor(0.10f)).padding(horizontal = 10.dp, vertical = 9.dp)
+        LookStyle.MATERIAL -> Modifier.clip(RoundedCornerShape(28.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(horizontal = 16.dp, vertical = 16.dp)
+        else -> Modifier.glass(RoundedCornerShape(14.dp)).padding(horizontal = 12.dp, vertical = 10.dp)
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .glass(RoundedCornerShape(14.dp))
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .then(bar),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(Icons.Default.Search, contentDescription = null, tint = CreamMuted, modifier = Modifier.size(18.dp))

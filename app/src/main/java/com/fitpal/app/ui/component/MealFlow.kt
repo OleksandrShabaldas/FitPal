@@ -56,7 +56,7 @@ import com.fitpal.app.ui.theme.CreamFaint
 import com.fitpal.app.ui.theme.CreamMuted
 import com.fitpal.app.ui.theme.GoldLight
 import com.fitpal.app.ui.theme.InkBlack
-import com.fitpal.app.ui.theme.InterFamily
+import com.fitpal.app.ui.theme.NumberFamily
 import com.fitpal.app.ui.theme.LookState
 import com.fitpal.app.ui.theme.OnGold
 import com.fitpal.app.ui.theme.filmColor
@@ -316,7 +316,7 @@ fun LogBar(
                 totalKcal != null -> Row(verticalAlignment = Alignment.Bottom) {
                     Text(
                         "%,d".format(shown),
-                        style = TextStyle(fontFamily = InterFamily, fontWeight = FontWeight.ExtraBold, fontSize = 22.sp, fontFeatureSettings = "tnum"),
+                        style = TextStyle(fontFamily = NumberFamily, fontWeight = FontWeight.ExtraBold, fontSize = 22.sp, fontFeatureSettings = "tnum"),
                         color = Cream
                     )
                     Text(" kcal", style = MaterialTheme.typography.labelMedium, color = CreamMuted, modifier = Modifier.padding(bottom = 3.dp))

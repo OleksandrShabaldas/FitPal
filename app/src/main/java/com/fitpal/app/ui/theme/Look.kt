@@ -48,8 +48,16 @@ data class Appearance(
     val style: LookStyle = LookStyle.GLOW,
     val palette: LookPalette = LookPalette.EMBER,
     val mode: LookMode = LookMode.SYSTEM,
-    /** Material You: take the colours from the wallpaper (Android 12+) instead of the palette. */
+    /** Material You: take the colours from the wallpaper (Android 12+) instead of [materialPalette]. */
     val dynamicColor: Boolean = true,
+    /** Material You's own colours when it doesn't follow the wallpaper (and on Android 11 and older). */
+    val materialPalette: MaterialPalette = MaterialPalette.BLUE,
+    /** Glow and Liquid glass: the user's own photo behind everything instead of the glow / colour. */
+    val photo: Boolean = false,
+    /** 0–0.8 — how much the photo is dimmed (darkened on dark looks, lightened on light ones). */
+    val photoDim: Float = 0.35f,
+    /** Bumped each time a new photo is picked, so the backdrop reloads the file. */
+    val photoVersion: Long = 0L,
     /** 0.4–1.6 — how bright the backdrop's light orbs are. */
     val glow: Float = 1f,
     /** The fine film-grain texture over the backdrop. */
@@ -65,21 +73,36 @@ data class Appearance(
 ) {
     fun toJson(): String = JSONObject()
         .put("style", style.name).put("palette", palette.name).put("mode", mode.name)
-        .put("dynamic", dynamicColor).put("glow", glow.toDouble()).put("grain", grain)
+        .put("dynamic", dynamicColor).put("materialPalette", materialPalette.name)
+        .put("photo", photo).put("photoDim", photoDim.toDouble()).put("photoVersion", photoVersion)
+        .put("glow", glow.toDouble()).put("grain", grain)
         .put("cardOpacity", cardOpacity.toDouble()).put("roundness", roundness.toDouble())
         .put("compact", compact).put("reduceMotion", reduceMotion)
         .toString()
+
+    /** What "Reset fine-tuning" keeps: the look itself, its colours and the background. */
+    fun withoutTuning(): Appearance = Appearance(
+        style = style, palette = palette, mode = mode, dynamicColor = dynamicColor,
+        materialPalette = materialPalette, photo = photo, photoDim = photoDim, photoVersion = photoVersion
+    )
 
     companion object {
         fun fromJson(json: String?): Appearance {
             if (json.isNullOrBlank()) return Appearance()
             return runCatching {
                 val o = JSONObject(json)
+                val palette = LookPalette.entries.firstOrNull { it.name == o.optString("palette") } ?: LookPalette.EMBER
                 Appearance(
                     style = LookStyle.entries.firstOrNull { it.name == o.optString("style") } ?: LookStyle.GLOW,
-                    palette = LookPalette.entries.firstOrNull { it.name == o.optString("palette") } ?: LookPalette.EMBER,
+                    palette = palette,
                     mode = LookMode.entries.firstOrNull { it.name == o.optString("mode") } ?: LookMode.SYSTEM,
                     dynamicColor = o.optBoolean("dynamic", true),
+                    // Before 2.14 Material You borrowed the Glow palette's colour; keep the nearest one.
+                    materialPalette = MaterialPalette.entries.firstOrNull { it.name == o.optString("materialPalette") }
+                        ?: materialPaletteFor(palette),
+                    photo = o.optBoolean("photo", false),
+                    photoDim = o.optDouble("photoDim", 0.35).toFloat().coerceIn(0f, 0.8f),
+                    photoVersion = o.optLong("photoVersion", 0L),
                     glow = o.optDouble("glow", 1.0).toFloat().coerceIn(0.4f, 1.6f),
                     grain = o.optBoolean("grain", true),
                     cardOpacity = o.optDouble("cardOpacity", 1.0).toFloat().coerceIn(0.5f, 2f),
@@ -88,6 +111,15 @@ data class Appearance(
                     reduceMotion = o.optBoolean("reduceMotion", false)
                 )
             }.getOrDefault(Appearance())
+        }
+
+        fun materialPaletteFor(p: LookPalette): MaterialPalette = when (p) {
+            LookPalette.EMBER -> MaterialPalette.GOLD
+            LookPalette.OCEAN -> MaterialPalette.TEAL
+            LookPalette.FOREST -> MaterialPalette.GREEN
+            LookPalette.BERRY -> MaterialPalette.PINK
+            LookPalette.AURORA -> MaterialPalette.PURPLE
+            LookPalette.GRAPHITE -> MaterialPalette.SLATE
         }
     }
 }
@@ -130,9 +162,14 @@ enum class BackdropWorld { TODAY, ACTIVITY, TRENDS, GARDEN }
 data class Look(
     val appearance: Appearance,
     val style: LookStyle,
-    val colors: FitPalColors
+    val colors: FitPalColors,
+    /** Material You's real Material 3 scheme (wallpaper or a built-in palette); null in other looks. */
+    val scheme: androidx.compose.material3.ColorScheme? = null
 ) {
     val isLight: Boolean get() = colors.isLight
+
+    /** Whether the user's own photo is behind this look (only Glow and Liquid glass have one). */
+    val hasPhoto: Boolean get() = appearance.photo && (style == LookStyle.GLOW || style == LookStyle.LIQUID)
 
     companion object {
         val DEFAULT = Look(Appearance(), LookStyle.GLOW, Palettes.glow(LookPalette.EMBER))
@@ -167,19 +204,21 @@ object LookState {
                 LookMode.SYSTEM -> !systemDark
             }
         }
+        val scheme = if (style == LookStyle.MATERIAL) materialScheme(appearance, context, wantLight) else null
         val base = when (style) {
             LookStyle.GLOW -> Palettes.glow(appearance.palette)
             LookStyle.LIQUID -> if (wantLight) Palettes.liquidLight(appearance.palette) else Palettes.liquidDark(appearance.palette)
             LookStyle.PAPER -> if (wantLight) Palettes.paperLight(appearance.palette) else Palettes.paperDark(appearance.palette)
-            LookStyle.MATERIAL -> {
-                val dynamic = if (appearance.dynamicColor && context != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    if (wantLight) dynamicLightColorScheme(context) else dynamicDarkColorScheme(context)
-                } else null
-                Palettes.material(appearance.palette, wantLight, dynamic)
-            }
+            LookStyle.MATERIAL -> Palettes.material(scheme!!, wantLight)
         }
-        return Look(appearance, style, base.tuned(appearance))
+        return Look(appearance, style, base.tuned(appearance), scheme)
     }
+
+    /** Material You's scheme: the wallpaper's on Android 12+ (if chosen), else a built-in palette. */
+    fun materialScheme(appearance: Appearance, context: Context?, light: Boolean): androidx.compose.material3.ColorScheme =
+        if (appearance.dynamicColor && context != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (light) dynamicLightColorScheme(context) else dynamicDarkColorScheme(context)
+        } else MaterialSchemes.scheme(appearance.materialPalette, light)
 
     /** The user's knobs on top of the look's own colours: glow strength and card opacity. */
     private fun FitPalColors.tuned(a: Appearance): FitPalColors {
@@ -420,31 +459,34 @@ object Palettes {
     }
 
     // ================= MATERIAL YOU =================
-    private fun materialSeed(p: LookPalette, light: Boolean): Triple<Color, Color, Color> = when (p) {
-        // primary, primaryContainer-ish (cards), onPrimary
-        LookPalette.EMBER -> if (light) Triple(Color(0xFF8B5000), Color(0xFFF7EDE4), Color(0xFFFFFFFF)) else Triple(Color(0xFFFFB86E), Color(0xFF2A2119), Color(0xFF4A2800))
-        LookPalette.OCEAN -> if (light) Triple(Color(0xFF006A62), Color(0xFFE6F2F0), Color(0xFFFFFFFF)) else Triple(Color(0xFF4FDBCE), Color(0xFF16221F), Color(0xFF003732))
-        LookPalette.FOREST -> if (light) Triple(Color(0xFF3B6939), Color(0xFFEBF2E4), Color(0xFFFFFFFF)) else Triple(Color(0xFFA1D39A), Color(0xFF1C211A), Color(0xFF0A390F))
-        LookPalette.BERRY -> if (light) Triple(Color(0xFF8E4A6C), Color(0xFFF8EAF0), Color(0xFFFFFFFF)) else Triple(Color(0xFFFFB0D2), Color(0xFF261C21), Color(0xFF561D3C))
-        LookPalette.AURORA -> if (light) Triple(Color(0xFF6750A4), Color(0xFFF3EDF7), Color(0xFFFFFFFF)) else Triple(Color(0xFFD0BCFF), Color(0xFF211F26), Color(0xFF381E72))
-        LookPalette.GRAPHITE -> if (light) Triple(Color(0xFF4A4A55), Color(0xFFF0F0F3), Color(0xFFFFFFFF)) else Triple(Color(0xFFC6C6D0), Color(0xFF1F1F23), Color(0xFF2E2E36))
-    }
-
-    fun material(p: LookPalette, light: Boolean, dynamic: androidx.compose.material3.ColorScheme?): FitPalColors {
-        val (seedPrimary, seedCard, seedOn) = materialSeed(p, light)
-        val primary = dynamic?.primary ?: seedPrimary
-        val surface = dynamic?.surface ?: if (light) Color(0xFFFEF7FF) else Color(0xFF141218)
-        val card = dynamic?.surfaceContainer ?: seedCard
-        val cardSoft = dynamic?.surfaceContainerHigh ?: lerp(seedCard, if (light) Color.Black else Color.White, 0.04f)
-        val text = dynamic?.onSurface ?: if (light) Color(0xFF1D1B20) else Color(0xFFE6E0E9)
-        val outline = dynamic?.outlineVariant ?: if (light) Color(0xFFCAC4D0) else Color(0xFF49454F)
-        return build(
-            isLight = light, text = text, inkBlack = surface, ink = surface,
-            glassFill = card, glassFillSoft = cardSoft,
-            glassBorder = outline.copy(alpha = 0f), glassBorderSoft = outline.copy(alpha = 0f),
-            overlay = dynamic?.surfaceContainerHigh ?: cardSoft,
-            gold = primary, goldLight = primary, onGold = dynamic?.onPrimary ?: seedOn,
-            backdrops = flatWorlds(surface, primary), backdropShade = 0f
+    /**
+     * Material You's tokens from a real Material 3 scheme. Rings and charts use the scheme's colour
+     * roles, the way Pixel apps do — calories and protein on primary, steps and fat on secondary,
+     * water and carbs on tertiary, over-budget on error — and the trackers that need a hue of their
+     * own (fasting, caffeine, the food limits) get theirs harmonized toward the scheme's primary, the
+     * way Material does custom colours.
+     */
+    fun material(scheme: androidx.compose.material3.ColorScheme, light: Boolean): FitPalColors {
+        val p = scheme.primary
+        fun own(hue: Long) = Harmonize.toward(Color(hue), p)
+        val s = Semantic(
+            scoreFair = scheme.tertiary, scoreLow = scheme.secondary, scorePoor = scheme.error,
+            loggedBest = p, loggedGood = scheme.tertiary, loggedMid = scheme.secondary,
+            loggedLow = own(0xFFE58A3C), loggedWorst = scheme.error,
+            protein = p, fat = scheme.secondary, carb = scheme.tertiary, fiber = scheme.onSurfaceVariant,
+            macroOver = scheme.error,
+            dessert = own(0xFFE9A6C3), fried = own(0xFFE59A5B), sugaryDrink = own(0xFF7FC4E8), caffeine = own(0xFFC9A27E),
+            accentActivity = scheme.secondary, accentTrends = scheme.tertiary, accentGarden = own(0xFF8CC152),
+            fasting = own(0xFFA592FF)
         )
+        return build(
+            isLight = light, text = scheme.onSurface, inkBlack = scheme.surface, ink = scheme.surface,
+            glassFill = scheme.surfaceContainer, glassFillSoft = scheme.surfaceContainerHigh,
+            glassBorder = scheme.outlineVariant.copy(alpha = 0f), glassBorderSoft = scheme.outlineVariant.copy(alpha = 0f),
+            overlay = scheme.surfaceContainerHigh,
+            gold = p, goldLight = p, onGold = scheme.onPrimary,
+            backdrops = flatWorlds(scheme.surface, p), backdropShade = 0f,
+            s = s
+        ).copy(track = scheme.surfaceContainerHighest)
     }
 }

@@ -20,7 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
+import com.fitpal.app.ui.component.kit.FpAlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -134,7 +134,7 @@ internal fun AppIconSection() {
     }
 
     pending?.let { icon ->
-        AlertDialog(
+        FpAlertDialog(
             onDismissRequest = { pending = null },
             title = { Text("Switch to ${icon.label}${if (icon.colourway.isNotEmpty()) " · ${icon.colourway}" else ""}?") },
             text = { Text("Your home-screen shortcut may disappear while the launcher swaps the icon — add FitPal back from the app drawer if it does.") },

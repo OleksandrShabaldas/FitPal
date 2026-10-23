@@ -37,7 +37,7 @@ import com.fitpal.app.ui.theme.FastingColor
 import com.fitpal.app.ui.theme.Cream
 import com.fitpal.app.ui.theme.CreamFaint
 import com.fitpal.app.ui.theme.CreamMuted
-import com.fitpal.app.ui.theme.InterFamily
+import com.fitpal.app.ui.theme.NumberFamily
 import com.fitpal.app.ui.theme.glassSoft
 
 /** A lighter step of the fasting blue, for the ring's sweep. */
@@ -104,7 +104,7 @@ fun FastingTakeover(
                         Text(
                             fastingCountdownLabel(state.minutesLeftInPhase),
                             style = TextStyle(
-                                fontFamily = InterFamily,
+                                fontFamily = NumberFamily,
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 40.sp,
                                 fontFeatureSettings = "tnum"

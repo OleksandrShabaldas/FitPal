@@ -38,7 +38,7 @@ import androidx.compose.material.icons.filled.Label
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material3.AlertDialog
+import com.fitpal.app.ui.component.kit.FpAlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -238,7 +238,7 @@ fun CollectionScreen(
     }
 
     if (editingFood != null) {
-        AlertDialog(
+        FpAlertDialog(
             onDismissRequest = { editingFood = null },
             title = { Text("Edit food") },
             text = {
@@ -393,7 +393,7 @@ private fun AssignCategoryDialog(
     onDismiss: () -> Unit
 ) {
     val tops = categories.filter { it.parentId == null }
-    AlertDialog(
+    FpAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("File \"${food.name}\"") },
         text = {
@@ -453,7 +453,7 @@ private fun ManageCategoriesDialog(
     var addSubFor by remember { mutableStateOf<Long?>(null) }
     var newSub by remember { mutableStateOf("") }
 
-    AlertDialog(
+    FpAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Manage categories") },
         text = {

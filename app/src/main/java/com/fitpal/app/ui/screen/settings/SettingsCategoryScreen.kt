@@ -1,5 +1,7 @@
 package com.fitpal.app.ui.screen.settings
 
+import com.fitpal.app.ui.theme.LookStyle
+import com.fitpal.app.ui.theme.LookState
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateFloatAsState
@@ -50,7 +52,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.HourglassEmpty
-import androidx.compose.material3.AlertDialog
+import com.fitpal.app.ui.component.kit.FpAlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
@@ -66,7 +68,7 @@ import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
-import androidx.compose.material3.Switch
+import com.fitpal.app.ui.component.kit.FpSwitch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -117,14 +119,19 @@ fun SettingsCategoryScreen(
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     GradientBackdrop(theme = BackdropTheme.TODAY) {
+        // Liquid glass and Material You pin the bar above the scrolling page (it collapses as the page
+        // scrolls); Glow and Paper scroll it away with the content, as they always have.
+        val pinnedBar = LookState.style == LookStyle.LIQUID || LookState.style == LookStyle.MATERIAL
+        Column(Modifier.fillMaxSize()) {
+        if (pinnedBar) GlassTopBar(title = settingsCategoryTitle(category), onBack = onBack)
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 40.dp),
+                .padding(start = 16.dp, end = 16.dp, top = if (pinnedBar) 4.dp else 16.dp, bottom = 40.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            GlassTopBar(title = settingsCategoryTitle(category), onBack = onBack)
+            if (!pinnedBar) GlassTopBar(title = settingsCategoryTitle(category), onBack = onBack)
             // Each section carries an anchor id, so a settings search can land right on it.
             when (category) {
                 "profile" -> {
@@ -168,6 +175,7 @@ fun SettingsCategoryScreen(
                 }
                 "appearance" -> {
                     SettingsAnchor("look", focus) { AppearanceLookSection(viewModel) }
+                    SettingsAnchor("background", focus) { AppearanceBackgroundSection(viewModel) }
                     SettingsAnchor("app_icon", focus) { AppIconSection() }
                     SettingsAnchor("look_tuning", focus) { AppearanceTuningSection(viewModel) }
                 }
@@ -189,6 +197,7 @@ fun SettingsCategoryScreen(
                     SettingsAnchor("about", focus) { AboutSection(viewModel, onReplayIntro) }
                 }
             }
+        }
         }
     }
 }
@@ -483,7 +492,7 @@ private fun CalistappSyncSection(viewModel: SettingsViewModel) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Switch(checked = enabled, onCheckedChange = { viewModel.setCalistappSyncEnabled(it) })
+                FpSwitch(checked = enabled, onCheckedChange = { viewModel.setCalistappSyncEnabled(it) })
             }
         }
     }
@@ -585,7 +594,7 @@ private fun OnlineAiSection(viewModel: SettingsViewModel) {
                     )
                 }
                 Spacer(Modifier.width(12.dp))
-                Switch(checked = onlineAiEnabled, onCheckedChange = { viewModel.setOnlineAiEnabled(it) })
+                FpSwitch(checked = onlineAiEnabled, onCheckedChange = { viewModel.setOnlineAiEnabled(it) })
             }
 
             if (onlineAiEnabled) {
@@ -904,7 +913,7 @@ private fun DailyReminderCard(viewModel: SettingsViewModel) {
                     Text("A gentle once-a-day nudge to log your meals.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Spacer(Modifier.width(12.dp))
-                Switch(checked = enabled, onCheckedChange = { viewModel.setReminderEnabled(it) })
+                FpSwitch(checked = enabled, onCheckedChange = { viewModel.setReminderEnabled(it) })
             }
             if (enabled) {
                 Spacer(Modifier.height(4.dp))
@@ -1046,7 +1055,7 @@ private fun ReminderRow(
             Text(kind.settingDesc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Spacer(Modifier.width(12.dp))
-        Switch(checked = enabled, onCheckedChange = { viewModel.setReminder(kind, it, minutes) })
+        FpSwitch(checked = enabled, onCheckedChange = { viewModel.setReminder(kind, it, minutes) })
     }
     if (enabled) {
         TimePickRow(if (kind.weekly) "Sunday time" else "Time", minutes) { viewModel.setReminder(kind, true, it) }
@@ -1346,7 +1355,7 @@ private fun FastingSection(viewModel: SettingsViewModel, onWhereOnHome: () -> Un
                     )
                 }
                 Spacer(Modifier.width(12.dp))
-                Switch(checked = schedule.enabled, onCheckedChange = { viewModel.setFastingEnabled(it) })
+                FpSwitch(checked = schedule.enabled, onCheckedChange = { viewModel.setFastingEnabled(it) })
             }
 
             if (schedule.enabled) {
@@ -1476,7 +1485,7 @@ private fun FastingSection(viewModel: SettingsViewModel, onWhereOnHome: () -> Un
                         )
                     }
                     Spacer(Modifier.width(12.dp))
-                    Switch(checked = schedule.warnOnLog, onCheckedChange = { viewModel.setFastingWarnOnLog(it) })
+                    FpSwitch(checked = schedule.warnOnLog, onCheckedChange = { viewModel.setFastingWarnOnLog(it) })
                 }
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Column(modifier = Modifier.weight(1f)) {
@@ -1488,7 +1497,7 @@ private fun FastingSection(viewModel: SettingsViewModel, onWhereOnHome: () -> Un
                         )
                     }
                     Spacer(Modifier.width(12.dp))
-                    Switch(checked = schedule.notify, onCheckedChange = { viewModel.setFastingNotify(it) })
+                    FpSwitch(checked = schedule.notify, onCheckedChange = { viewModel.setFastingNotify(it) })
                 }
             }
         }
@@ -1566,7 +1575,7 @@ private fun DietaryRuleCard(rule: com.fitpal.app.domain.model.DietaryRule, viewM
                     Text(kind.blurb, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Spacer(Modifier.width(12.dp))
-                Switch(checked = rule.enabled, onCheckedChange = { viewModel.setDietaryRuleEnabled(kind, it) })
+                FpSwitch(checked = rule.enabled, onCheckedChange = { viewModel.setDietaryRuleEnabled(kind, it) })
             }
 
             if (rule.enabled) {
@@ -1605,7 +1614,7 @@ private fun DietaryRuleCard(rule: com.fitpal.app.domain.model.DietaryRule, viewM
                         )
                     }
                     Spacer(Modifier.width(12.dp))
-                    Switch(checked = rule.warnOnLog, onCheckedChange = { viewModel.setDietaryRuleWarn(kind, it) })
+                    FpSwitch(checked = rule.warnOnLog, onCheckedChange = { viewModel.setDietaryRuleWarn(kind, it) })
                 }
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Column(modifier = Modifier.weight(1f)) {
@@ -1617,7 +1626,7 @@ private fun DietaryRuleCard(rule: com.fitpal.app.domain.model.DietaryRule, viewM
                         )
                     }
                     Spacer(Modifier.width(12.dp))
-                    Switch(checked = rule.notify, onCheckedChange = { viewModel.setDietaryRuleNotify(kind, it) })
+                    FpSwitch(checked = rule.notify, onCheckedChange = { viewModel.setDietaryRuleNotify(kind, it) })
                 }
             }
         }
@@ -1646,7 +1655,7 @@ private fun HomeDisplaySection(viewModel: SettingsViewModel) {
                     )
                 }
                 Spacer(Modifier.width(12.dp))
-                Switch(checked = compactEmptyMeals, onCheckedChange = { viewModel.setCompactEmptyMeals(it) })
+                FpSwitch(checked = compactEmptyMeals, onCheckedChange = { viewModel.setCompactEmptyMeals(it) })
             }
         }
     }
@@ -1770,7 +1779,7 @@ private fun UpdatesSection(viewModel: SettingsViewModel) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Switch(checked = autoCheck, onCheckedChange = { viewModel.setAutoCheckUpdates(it) })
+                FpSwitch(checked = autoCheck, onCheckedChange = { viewModel.setAutoCheckUpdates(it) })
             }
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
@@ -1782,7 +1791,7 @@ private fun UpdatesSection(viewModel: SettingsViewModel) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Switch(
+                FpSwitch(
                     checked = autoInstall,
                     enabled = autoCheck,
                     onCheckedChange = { viewModel.setAutoInstallUpdates(it) }
@@ -1854,7 +1863,7 @@ private fun DataSection(viewModel: SettingsViewModel) {
     }
 
     if (showClearConfirm) {
-        AlertDialog(
+        FpAlertDialog(
             onDismissRequest = { showClearConfirm = false },
             title = { Text("Clear all data?") },
             text = { Text("This permanently deletes all your logged meals, weights, steps, exercises, trail progress and saved foods. Your downloaded food database stays. This can't be undone.") },
@@ -1919,7 +1928,7 @@ private fun CaffeineSection(viewModel: SettingsViewModel) {
                     )
                 }
                 Spacer(Modifier.width(12.dp))
-                Switch(checked = s.enabled, onCheckedChange = { viewModel.setCaffeineEnabled(it) })
+                FpSwitch(checked = s.enabled, onCheckedChange = { viewModel.setCaffeineEnabled(it) })
             }
 
             if (s.enabled) {

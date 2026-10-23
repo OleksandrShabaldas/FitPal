@@ -1,6 +1,11 @@
 package com.fitpal.app.ui.screen.settings
 
 import android.os.Build
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -14,6 +19,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -22,16 +28,20 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,14 +52,20 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
+import com.fitpal.app.ui.component.GlassButton
 import com.fitpal.app.ui.component.SegmentedPills
+import com.fitpal.app.ui.component.kit.FpSwitch
 import com.fitpal.app.ui.theme.Appearance
+import com.fitpal.app.ui.theme.BackdropPhoto
 import com.fitpal.app.ui.theme.Cream
+import com.fitpal.app.ui.theme.CreamFaint
 import com.fitpal.app.ui.theme.CreamMuted
 import com.fitpal.app.ui.theme.GoldLight
 import com.fitpal.app.ui.theme.Look
@@ -57,6 +73,8 @@ import com.fitpal.app.ui.theme.LookMode
 import com.fitpal.app.ui.theme.LookPalette
 import com.fitpal.app.ui.theme.LookState
 import com.fitpal.app.ui.theme.LookStyle
+import com.fitpal.app.ui.theme.MaterialPalette
+import com.fitpal.app.ui.theme.MaterialSchemes
 import com.fitpal.app.ui.theme.accentGlass
 import com.fitpal.app.ui.theme.glass
 import com.fitpal.app.ui.theme.glassSoft
@@ -111,17 +129,9 @@ internal fun AppearanceLookSection(viewModel: SettingsViewModel) {
             Spacer(Modifier.height(12.dp))
         }
 
-        val dynamicAvailable = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-        if (appearance.style == LookStyle.MATERIAL && dynamicAvailable) {
-            ToggleRow(
-                title = "Colours from your wallpaper",
-                blurb = "Material You picks the accent from your home-screen wallpaper.",
-                checked = appearance.dynamicColor,
-                onChange = { on -> viewModel.updateAppearance { it.copy(dynamicColor = on) } }
-            )
-        }
-        val paletteMatters = !(appearance.style == LookStyle.MATERIAL && appearance.dynamicColor && dynamicAvailable)
-        if (paletteMatters) {
+        if (appearance.style == LookStyle.MATERIAL) {
+            MaterialColours(appearance, systemDark, onPick = { change -> viewModel.updateAppearance(change) })
+        } else {
             Text("Colours", style = MaterialTheme.typography.labelMedium, color = GoldLight)
             Spacer(Modifier.height(8.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -137,6 +147,168 @@ internal fun AppearanceLookSection(viewModel: SettingsViewModel) {
     }
 }
 
+/**
+ * Material You's colours, the way a Pixel offers them: your wallpaper's (Android 12+), or one of
+ * the basic colours — each a full Material scheme. Every swatch is drawn from its own scheme.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun MaterialColours(appearance: Appearance, systemDark: Boolean, onPick: ((Appearance) -> Appearance) -> Unit) {
+    val context = LocalContext.current
+    val light = when (appearance.mode) {
+        LookMode.LIGHT -> true
+        LookMode.DARK -> false
+        LookMode.SYSTEM -> !systemDark
+    }
+    val dynamicAvailable = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val wallpaperOn = appearance.dynamicColor && dynamicAvailable
+    Text("Colours", style = MaterialTheme.typography.labelMedium, color = GoldLight)
+    Spacer(Modifier.height(8.dp))
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        if (dynamicAvailable) {
+            val wall = remember(light) { LookState.materialScheme(appearance.copy(dynamicColor = true), context, light) }
+            SchemeDot("Wallpaper", wall, selected = wallpaperOn) { onPick { it.copy(dynamicColor = true) } }
+        }
+        MaterialPalette.entries.forEach { p ->
+            val scheme = remember(p, light) { MaterialSchemes.scheme(p, light) }
+            SchemeDot(p.label, scheme, selected = !wallpaperOn && appearance.materialPalette == p) {
+                onPick { it.copy(dynamicColor = false, materialPalette = p) }
+            }
+        }
+    }
+}
+
+/** A Material colour choice: the scheme's primary, secondary and tertiary in one circle. */
+@Composable
+private fun SchemeDot(label: String, scheme: androidx.compose.material3.ColorScheme, selected: Boolean, onClick: () -> Unit) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable(onClick = onClick)) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(scheme.surfaceContainerHigh)
+                .border(if (selected) 2.5.dp else 1.dp, if (selected) Cream else Cream.copy(alpha = 0.2f), RoundedCornerShape(14.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Canvas(Modifier.size(30.dp)) {
+                drawArc(scheme.primary, 180f, 180f, true)
+                drawArc(scheme.secondaryContainer, 0f, 90f, true)
+                drawArc(scheme.tertiaryContainer, 90f, 90f, true)
+            }
+            if (selected) Icon(Icons.Default.Check, contentDescription = null, tint = scheme.onPrimary, modifier = Modifier.size(16.dp).padding(bottom = 6.dp))
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(label, style = MaterialTheme.typography.labelSmall, color = if (selected) Cream else CreamMuted)
+    }
+}
+
+/**
+ * Settings → Appearance → Background (Glow and Liquid glass): the look's own glow / colour, or a
+ * photo of the user's — copied into the app and dimmed so the cards stay readable.
+ */
+@Composable
+internal fun AppearanceBackgroundSection(viewModel: SettingsViewModel) {
+    val appearance by viewModel.appearance.collectAsStateWithLifecycle()
+    val style = appearance.style
+    if (style != LookStyle.GLOW && style != LookStyle.LIQUID) return
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var busy by remember { mutableStateOf(false) }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        busy = true
+        scope.launch {
+            val ok = BackdropPhoto.import(context, uri)
+            busy = false
+            if (ok) viewModel.updateAppearance { it.copy(photo = true, photoVersion = System.currentTimeMillis()) }
+            else Toast.makeText(context, "Couldn't open that photo", Toast.LENGTH_SHORT).show()
+        }
+    }
+    val pick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+    val photo = BackdropPhoto.image
+    LaunchedEffect(appearance.photoVersion) { BackdropPhoto.ensureLoaded(context, appearance.photoVersion) }
+
+    Column(modifier = Modifier.fillMaxWidth().glass().padding(16.dp)) {
+        Text("Background", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = Cream)
+        Text(
+            if (style == LookStyle.GLOW) "Behind the cards: the warm glow, or a photo of yours." else "Behind the glass: the drifting colour, or a photo of yours.",
+            style = MaterialTheme.typography.bodySmall, color = CreamMuted
+        )
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+            BackgroundTile(
+                label = if (style == LookStyle.GLOW) "Glow" else "Colour",
+                selected = !appearance.photo,
+                onClick = { viewModel.updateAppearance { it.copy(photo = false) } },
+                modifier = Modifier.weight(1f)
+            ) {
+                val look = remember(appearance) { LookState.resolve(appearance.copy(photo = false), context, false) }
+                LookThumbnail(look, Modifier.fillMaxSize())
+            }
+            BackgroundTile(
+                label = "Your photo",
+                selected = appearance.photo,
+                onClick = { if (photo != null && BackdropPhoto.exists(context)) viewModel.updateAppearance { it.copy(photo = true) } else pick() },
+                modifier = Modifier.weight(1f)
+            ) {
+                if (photo != null) {
+                    Image(photo, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(14.dp)))
+                } else {
+                    Box(Modifier.fillMaxSize().clip(RoundedCornerShape(14.dp)).background(Cream.copy(alpha = 0.06f)), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.AddPhotoAlternate, contentDescription = null, tint = CreamMuted, modifier = Modifier.size(28.dp))
+                    }
+                }
+            }
+        }
+        if (busy) {
+            Spacer(Modifier.height(8.dp))
+            Text("Copying your photo…", style = MaterialTheme.typography.bodySmall, color = CreamMuted)
+        }
+        if (appearance.photo) {
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                GlassButton("Choose another", onClick = pick, modifier = Modifier.weight(1f))
+                GlassButton("Remove", onClick = {
+                    BackdropPhoto.delete(context)
+                    viewModel.updateAppearance { it.copy(photo = false) }
+                }, modifier = Modifier.weight(1f))
+            }
+            Spacer(Modifier.height(6.dp))
+            SliderRow(
+                "Dim the photo",
+                if (style == LookStyle.LIQUID && appearance.mode != LookMode.DARK) "Softens it so text on the glass stays easy to read." else "Darkens it so text on the cards stays easy to read.",
+                appearance.photoDim, 0f..0.8f
+            ) { v -> viewModel.updateAppearance { it.copy(photoDim = v) } }
+            Text(
+                "The photo stays on this phone — it isn't part of backups.",
+                style = MaterialTheme.typography.labelSmall, color = CreamFaint
+            )
+        }
+    }
+}
+
+@Composable
+private fun BackgroundTile(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, preview: @Composable () -> Unit) {
+    val shape = RoundedCornerShape(18.dp)
+    Column(
+        modifier = modifier
+            .then(if (selected) Modifier.accentGlass(GoldLight, shape) else Modifier.glassSoft(shape))
+            .clickable(onClick = onClick)
+            .padding(10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(Modifier.fillMaxWidth().aspectRatio(0.9f)) { preview() }
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (selected) {
+                Icon(Icons.Default.Check, contentDescription = null, tint = GoldLight, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+            }
+            Text(label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = if (selected) GoldLight else Cream)
+        }
+    }
+}
+
 /** The fine-tuning knobs — what each look shows depends on what it has (grain, glow…). */
 @Composable
 internal fun AppearanceTuningSection(viewModel: SettingsViewModel) {
@@ -145,7 +317,7 @@ internal fun AppearanceTuningSection(viewModel: SettingsViewModel) {
     Column(modifier = Modifier.fillMaxWidth().glass().padding(16.dp)) {
         Text("Fine-tune", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = Cream)
         Spacer(Modifier.height(8.dp))
-        if (style == LookStyle.GLOW || style == LookStyle.LIQUID) {
+        if ((style == LookStyle.GLOW || style == LookStyle.LIQUID) && !appearance.photo) {
             SliderRow("Glow", "How bright the light behind the cards is.", appearance.glow, 0.4f..1.6f) { v ->
                 viewModel.updateAppearance { it.copy(glow = v) }
             }
@@ -167,7 +339,7 @@ internal fun AppearanceTuningSection(viewModel: SettingsViewModel) {
         ToggleRow("Reduce motion", "No drifting colour, tilt light or wiggling cards.", appearance.reduceMotion) { on ->
             viewModel.updateAppearance { it.copy(reduceMotion = on) }
         }
-        TextButton(onClick = { viewModel.updateAppearance { Appearance(style = it.style, palette = it.palette, mode = it.mode, dynamicColor = it.dynamicColor) } }) {
+        TextButton(onClick = { viewModel.updateAppearance { it.withoutTuning() } }) {
             Text("Reset fine-tuning")
         }
     }
@@ -295,7 +467,7 @@ private fun ToggleRow(title: String, blurb: String, checked: Boolean, onChange: 
             Text(blurb, style = MaterialTheme.typography.bodySmall, color = CreamMuted)
         }
         Spacer(Modifier.width(12.dp))
-        Switch(checked = checked, onCheckedChange = onChange)
+        FpSwitch(checked = checked, onCheckedChange = onChange)
     }
 }
 

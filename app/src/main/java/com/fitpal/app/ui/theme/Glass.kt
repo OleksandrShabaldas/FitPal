@@ -8,14 +8,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.drawOutline
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.fitpal.app.domain.DayScore
@@ -23,7 +19,8 @@ import com.fitpal.app.domain.DayScore
 /*
  * The card surfaces. One set of modifiers, drawn per look:
  *  - Glow: a faint translucent film + hairline over the glowing backdrop (translucency, not blur).
- *  - Liquid glass: a thicker film with a bright rim light that follows how the phone is tilted.
+ *  - Liquid glass: a film with lensing edges, a rim and a specular that follow the phone's tilt,
+ *    frosted over a photo backdrop (see LiquidGlass.kt).
  *  - Paper: an opaque sheet with an ink hairline and a soft shadow.
  *  - Material You: a tonal surface — no border, no film.
  * They stay plain (non-composable) modifiers; the look is read from LookState.
@@ -36,9 +33,10 @@ val CardGap: androidx.compose.ui.unit.Dp get() = if (LookState.appearance.compac
 object LookShapes {
     private fun base(): Float = when (LookState.style) {
         LookStyle.GLOW -> 26f
-        LookStyle.LIQUID -> 30f
+        LookStyle.LIQUID -> 28f
         LookStyle.PAPER -> 16f
-        LookStyle.MATERIAL -> 22f
+        // Material's card corner (its "large" shape); nested rows land on 12, its "medium".
+        LookStyle.MATERIAL -> 16f
     }
     private val scale: Float get() = LookState.appearance.roundness
 
@@ -46,8 +44,13 @@ object LookShapes {
 
     /** A main card. */
     val card: Shape get() = RoundedCornerShape(radius(26.dp))
-    /** A nested row / secondary surface. */
-    val soft: Shape get() = RoundedCornerShape(radius(18.dp))
+    /**
+     * A nested row / secondary surface. Liquid glass makes it concentric with the card it sits in,
+     * the way iOS does: the card's radius minus the usual 8 dp inset (a 28 dp card → 20 dp rows).
+     */
+    val soft: Shape get() =
+        if (LookState.style == LookStyle.LIQUID) RoundedCornerShape((radius(26.dp) - 8.dp).coerceAtLeast(6.dp))
+        else RoundedCornerShape(radius(18.dp))
 }
 
 /**
@@ -62,7 +65,7 @@ object TiltState {
 /** Frosted-glass surface: faint translucent fill + hairline border, clipped to [shape]. */
 fun Modifier.glass(shape: Shape = LookShapes.card): Modifier = when (LookState.style) {
     LookStyle.GLOW -> this.clip(shape).background(GlassFill).border(1.dp, GlassBorder, shape)
-    LookStyle.LIQUID -> this.clip(shape).background(GlassFill).liquidRim(shape, strength = 1f)
+    LookStyle.LIQUID -> this.clip(shape).liquidGlass(shape, strength = 1f, lens = true) { GlassFill }
     LookStyle.PAPER -> this.paperShadow(shape, 2.dp).clip(shape).background(GlassFill).border(1.dp, GlassBorder, shape)
     LookStyle.MATERIAL -> this.clip(shape).background(GlassFill)
 }
@@ -70,7 +73,7 @@ fun Modifier.glass(shape: Shape = LookShapes.card): Modifier = when (LookState.s
 /** A lighter glass for nested rows / secondary surfaces. */
 fun Modifier.glassSoft(shape: Shape = LookShapes.soft): Modifier = when (LookState.style) {
     LookStyle.GLOW -> this.clip(shape).background(GlassFillSoft).border(1.dp, GlassBorderSoft, shape)
-    LookStyle.LIQUID -> this.clip(shape).background(GlassFillSoft).liquidRim(shape, strength = 0.6f)
+    LookStyle.LIQUID -> this.clip(shape).liquidGlass(shape, strength = 0.6f, lens = false) { GlassFillSoft }
     LookStyle.PAPER -> this.clip(shape).background(GlassFillSoft).border(1.dp, GlassBorderSoft, shape)
     LookStyle.MATERIAL -> this.clip(shape).background(GlassFillSoft)
 }
@@ -85,7 +88,7 @@ fun Modifier.glassSoft(shape: Shape = LookShapes.soft): Modifier = when (LookSta
  */
 fun Modifier.glassOverlay(shape: Shape = LookShapes.card): Modifier = when (LookState.style) {
     LookStyle.GLOW -> this.clip(shape).background(OverlaySurface).background(GlassFill).border(1.dp, GlassBorder, shape)
-    LookStyle.LIQUID -> this.clip(shape).background(OverlaySurface).liquidRim(shape, strength = 1f)
+    LookStyle.LIQUID -> this.clip(shape).liquidGlass(shape, strength = 1f, lens = true) { OverlaySurface }
     LookStyle.PAPER -> this.paperShadow(shape, 6.dp).clip(shape).background(OverlaySurface).border(1.dp, GlassBorder, shape)
     LookStyle.MATERIAL -> this.clip(shape).background(OverlaySurface)
 }
@@ -94,12 +97,17 @@ fun Modifier.glassOverlay(shape: Shape = LookShapes.card): Modifier = when (Look
  *  steps/exercise = green) while keeping the look. */
 fun Modifier.accentGlass(accent: Color, shape: Shape = LookShapes.card): Modifier {
     val light = LookState.colors.isLight
+    if (LookState.style == LookStyle.LIQUID) {
+        return this.clip(shape)
+            .liquidGlass(shape, strength = 1f, lens = true) { GlassFill }
+            .background(accent.copy(alpha = if (light) 0.10f else 0.07f))
+            .border(1.dp, accent.copy(alpha = 0.45f), shape)
+    }
     val tinted = this.clip(shape)
         .background(GlassFill)
         .background(accent.copy(alpha = if (light) 0.10f else 0.07f))
     return when (LookState.style) {
         LookStyle.MATERIAL -> tinted
-        LookStyle.LIQUID -> tinted.border(1.dp, accent.copy(alpha = 0.45f), shape)
         else -> tinted.border(1.dp, accent.copy(alpha = if (light) 0.45f else 0.32f), shape)
     }
 }
@@ -108,39 +116,6 @@ fun Modifier.accentGlass(accent: Color, shape: Shape = LookShapes.card): Modifie
 private fun Modifier.paperShadow(shape: Shape, elevation: Dp): Modifier =
     if (!LookState.colors.isLight) this
     else this.shadow(elevation, shape, clip = false, ambientColor = Color(0x332B211B), spotColor = Color(0x402B211B))
-
-/**
- * Liquid glass's edge: a bright rim whose light sits on the side the phone is tilted towards,
- * plus a soft inner sheen along the top. Drawn from [TiltState] in the draw phase.
- */
-private fun Modifier.liquidRim(shape: Shape, strength: Float): Modifier = this.drawWithCache {
-    val outline = shape.createOutline(size, layoutDirection, this)
-    val stroke = Stroke(width = 1.2.dp.toPx())
-    val light = LookState.colors.isLight
-    onDrawWithContent {
-        drawContent()
-        val t = TiltState.tilt
-        // The bright end of the rim follows the tilt; the opposite edge stays faint.
-        val cx = size.width * (0.5f - t.x * 0.45f)
-        val cy = size.height * (0.0f - t.y * 0.25f).coerceIn(-0.3f, 0.3f)
-        val rim = Brush.linearGradient(
-            colors = listOf(
-                Color.White.copy(alpha = (if (light) 0.95f else 0.85f) * strength),
-                Color.White.copy(alpha = 0.18f * strength),
-                Color.White.copy(alpha = 0.45f * strength)
-            ),
-            start = Offset(cx, cy),
-            end = Offset(size.width - cx, size.height)
-        )
-        drawOutline(outline, rim, style = stroke)
-        // A sheen just inside the top edge — what makes it read as thick glass.
-        val sheen = Brush.verticalGradient(
-            colors = listOf(Color.White.copy(alpha = 0.16f * strength), Color.Transparent),
-            startY = 0f, endY = size.height * 0.35f
-        )
-        drawOutline(outline, sheen)
-    }
-}
 
 /** Colour for a daily-score tier (gold → green → blue → red). */
 fun scoreColor(tier: DayScore.Tier): Color = when (tier) {

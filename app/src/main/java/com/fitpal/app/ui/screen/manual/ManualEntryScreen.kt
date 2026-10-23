@@ -23,7 +23,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.AlertDialog
+import com.fitpal.app.ui.component.kit.FpAlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -83,7 +83,7 @@ fun ManualEntryScreen(
     LaunchedEffect(state.saved) { if (state.saved) onLogged() }
 
     foodToHide?.let { food ->
-        AlertDialog(
+        FpAlertDialog(
             onDismissRequest = { foodToHide = null },
             title = { Text("Hide from search?") },
             text = { Text("\"${food.description}\" won't show up in food search again. You can restore hidden foods in Settings → Data & about.") },

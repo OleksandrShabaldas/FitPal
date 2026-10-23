@@ -77,7 +77,7 @@ import com.fitpal.app.ui.theme.Cream
 import com.fitpal.app.ui.theme.CreamFaint
 import com.fitpal.app.ui.theme.CreamMuted
 import com.fitpal.app.ui.theme.GoldLight
-import com.fitpal.app.ui.theme.InterFamily
+import com.fitpal.app.ui.theme.NumberFamily
 import com.fitpal.app.ui.theme.MacroOver
 import com.fitpal.app.ui.theme.OnGold
 import com.fitpal.app.ui.theme.accentGlass
@@ -332,7 +332,7 @@ private fun WaterRing(drinkMl: Float, foodMl: Float, totalMl: Float, goalMl: Int
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 "%,d".format(totalMl.roundToInt()),
-                style = TextStyle(fontFamily = InterFamily, fontWeight = FontWeight.ExtraBold, fontSize = 22.sp, fontFeatureSettings = "tnum"),
+                style = TextStyle(fontFamily = NumberFamily, fontWeight = FontWeight.ExtraBold, fontSize = 22.sp, fontFeatureSettings = "tnum"),
                 color = Cream
             )
             Text(

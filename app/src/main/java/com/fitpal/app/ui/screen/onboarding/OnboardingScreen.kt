@@ -68,7 +68,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
+import com.fitpal.app.ui.component.kit.FpSwitch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -123,7 +123,7 @@ import com.fitpal.app.ui.theme.CreamMuted
 import com.fitpal.app.ui.theme.DessertColor
 import com.fitpal.app.ui.theme.GoldLight
 import com.fitpal.app.ui.theme.InkBlack
-import com.fitpal.app.ui.theme.InterFamily
+import com.fitpal.app.ui.theme.NumberFamily
 import com.fitpal.app.ui.theme.ScoreFair
 import com.fitpal.app.ui.theme.accentGlass
 import com.fitpal.app.ui.theme.glass
@@ -646,7 +646,7 @@ private fun PlanStep(draft: OnboardingDraft) {
             ) {
                 Text(
                     "%,d".format(kcal),
-                    style = TextStyle(fontFamily = InterFamily, fontWeight = FontWeight.ExtraBold, fontSize = 52.sp, fontFeatureSettings = "tnum"),
+                    style = TextStyle(fontFamily = NumberFamily, fontWeight = FontWeight.ExtraBold, fontSize = 52.sp, fontFeatureSettings = "tnum"),
                     color = GoldLight
                 )
                 Text("kcal a day", style = MaterialTheme.typography.bodyMedium, color = CreamMuted)
@@ -780,7 +780,7 @@ private fun TimeTile(icon: ImageVector, label: String, minutes: Int, modifier: M
         Text(label, style = MaterialTheme.typography.labelLarge, color = CreamMuted)
         Text(
             fastingClockLabel(minutes),
-            style = TextStyle(fontFamily = InterFamily, fontWeight = FontWeight.ExtraBold, fontSize = 30.sp, fontFeatureSettings = "tnum"),
+            style = TextStyle(fontFamily = NumberFamily, fontWeight = FontWeight.ExtraBold, fontSize = 30.sp, fontFeatureSettings = "tnum"),
             color = Cream
         )
     }
@@ -887,7 +887,7 @@ private fun SwitchRow(title: String, subtitle: String, checked: Boolean, onChang
             Text(title, style = MaterialTheme.typography.bodyLarge, color = Cream)
             Text(subtitle, style = MaterialTheme.typography.labelSmall, color = CreamFaint)
         }
-        Switch(checked = checked, onCheckedChange = onChange)
+        FpSwitch(checked = checked, onCheckedChange = onChange)
     }
 }
 

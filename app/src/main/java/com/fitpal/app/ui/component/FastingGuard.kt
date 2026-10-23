@@ -4,7 +4,7 @@ import android.widget.Toast
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
-import androidx.compose.material3.AlertDialog
+import com.fitpal.app.ui.component.kit.FpAlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -202,7 +202,7 @@ private fun FastingWarningDialog(
 ) {
     val opens = "Your eating window opens at ${fastingClockLabel(prompt.now.nextChangeMin)} — " +
         "${fastingCountdownLabel(prompt.now.minutesLeftInPhase)} to go."
-    AlertDialog(
+    FpAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("You're fasting") },
         text = {

@@ -33,7 +33,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.SwapHoriz
-import androidx.compose.material3.AlertDialog
+import com.fitpal.app.ui.component.kit.FpAlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -420,7 +420,7 @@ fun EntryDetailScreen(
     }
 
     if (showDeleteDialog) {
-        AlertDialog(
+        FpAlertDialog(
             onDismissRequest = { showDeleteDialog = false },
             title = { Text("Delete entry?") },
             text = { Text("This will remove \"${state.item?.name}\" from your log.") },

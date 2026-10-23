@@ -15,7 +15,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material3.AlertDialog
+import com.fitpal.app.ui.component.kit.FpAlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -49,7 +49,7 @@ fun AddIngredientDialog(
     /** Verb for the AI escape-hatch button, e.g. "Add" or "Use". */
     aiVerb: String = "Add"
 ) {
-    AlertDialog(
+    FpAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {

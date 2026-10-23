@@ -39,7 +39,7 @@ import androidx.compose.ui.unit.sp
 import com.fitpal.app.ui.theme.Cream
 import com.fitpal.app.ui.theme.CreamFaint
 import com.fitpal.app.ui.theme.GoldLight
-import com.fitpal.app.ui.theme.InterFamily
+import com.fitpal.app.ui.theme.NumberFamily
 import com.fitpal.app.ui.theme.glassSoft
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -80,7 +80,7 @@ fun GlassNumberField(
         onText(format((current + delta).coerceIn(min, max)))
     }
     val style = TextStyle(
-        fontFamily = InterFamily,
+        fontFamily = NumberFamily,
         fontWeight = FontWeight.ExtraBold,
         fontSize = fontSize,
         fontFeatureSettings = "tnum",

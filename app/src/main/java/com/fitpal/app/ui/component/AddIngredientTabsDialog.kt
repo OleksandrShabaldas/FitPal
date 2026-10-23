@@ -22,7 +22,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.QrCodeScanner
-import androidx.compose.material3.AlertDialog
+import com.fitpal.app.ui.component.kit.FpAlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -81,7 +81,7 @@ fun AddIngredientTabsDialog(
     // Common
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
+    FpAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Add ingredient") },
         text = {

@@ -1,6 +1,6 @@
 package com.fitpal.app.ui.component
 
-import androidx.compose.material3.AlertDialog
+import com.fitpal.app.ui.component.kit.FpAlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -19,7 +19,7 @@ fun DietaryWarningDialog(
     onDismiss: () -> Unit
 ) {
     val noun = dietaryNoun(warning.kind)
-    AlertDialog(
+    FpAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (warning.alreadyOver) "Over your $noun limit" else "Close to your $noun limit") },
         text = {

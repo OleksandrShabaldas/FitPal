@@ -27,7 +27,9 @@ fun FitPalTheme(
     content: @Composable () -> Unit
 ) {
     val look = LookState.look
-    val colorScheme = remember(look) { colorSchemeFor(look.colors) }
+    // Material You hands Material its real scheme (every component then looks like a Pixel app's);
+    // the other looks build one from their own tokens.
+    val colorScheme = remember(look) { look.scheme ?: colorSchemeFor(look.colors) }
 
     val view = LocalView.current
     if (!view.isInEditMode) {
@@ -47,7 +49,7 @@ fun FitPalTheme(
     MaterialTheme(
         colorScheme = colorScheme,
         typography = remember(look.style) { typographyFor(look.style) },
-        shapes = remember(look) { fitPalShapes() },
+        shapes = remember(look) { fitPalShapes(look.style) },
         content = content
     )
 }

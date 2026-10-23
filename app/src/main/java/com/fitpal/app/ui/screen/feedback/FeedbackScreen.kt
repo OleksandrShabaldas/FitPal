@@ -36,7 +36,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
+import com.fitpal.app.ui.component.kit.FpSwitch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -145,7 +145,7 @@ fun FeedbackScreen(onBack: () -> Unit) {
                         Text(details, style = MaterialTheme.typography.labelSmall, color = CreamFaint)
                     }
                     Spacer(Modifier.width(10.dp))
-                    Switch(checked = includeDetails, onCheckedChange = { includeDetails = it })
+                    FpSwitch(checked = includeDetails, onCheckedChange = { includeDetails = it })
                 }
 
                 Button(

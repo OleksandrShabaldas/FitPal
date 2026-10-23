@@ -23,7 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
+import com.fitpal.app.ui.component.kit.FpSwitch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -142,7 +142,7 @@ private fun CardRow(
                 card.def.label, style = MaterialTheme.typography.titleSmall,
                 color = if (card.enabled) Cream else CreamFaint, modifier = Modifier.weight(1f)
             )
-            Switch(checked = card.enabled, onCheckedChange = { onToggle() })
+            FpSwitch(checked = card.enabled, onCheckedChange = { onToggle() })
         }
         if (card.enabled && (card.def.isTracker || card.def.sizes.size > 1 || card.def.variants.size > 1)) {
             Spacer(Modifier.height(6.dp))

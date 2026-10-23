@@ -43,7 +43,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.SwapHoriz
-import androidx.compose.material3.AlertDialog
+import com.fitpal.app.ui.component.kit.FpAlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -751,7 +751,7 @@ internal fun FastingDayDialog(
     onDismiss: () -> Unit
 ) {
     val breaks = mealMinutes?.filter { !schedule.isEatingAt(it) }.orEmpty()
-    AlertDialog(
+    FpAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(day.format(DateTimeFormatter.ofPattern("EEE, d MMM"))) },
         text = {
@@ -828,7 +828,7 @@ internal fun DayScoreDialog(
     onDismiss: () -> Unit
 ) {
     val dateLabel = day.format(DateTimeFormatter.ofPattern("EEEE, d MMM"))
-    AlertDialog(
+    FpAlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = { TextButton(onClick = onJump) { Text("Jump to this day") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
@@ -923,7 +923,7 @@ internal fun MaintenanceDialog(
     val gap = formulaBurn - estimate.maintenanceKcal
     val phantomKcal = gap * estimate.loggedDays
     val phantomKg = kotlin.math.abs(phantomKcal) / 7700f
-    AlertDialog(
+    FpAlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = { TextButton(onClick = onDismiss) { Text("Got it") } },
         title = { Text("How this is worked out") },
@@ -1074,7 +1074,7 @@ internal fun IntakeDetailDialog(
     }
     val minDay = days.minByOrNull { it.calories }
     val maxDay = days.maxByOrNull { it.calories }
-    AlertDialog(
+    FpAlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = { TextButton(onClick = onBack) { Text("Back") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
@@ -1137,7 +1137,7 @@ internal fun WeightTrendDetailDialog(
     val maxW = sorted.maxByOrNull { it.weightKg }
     val net = (current?.weightKg ?: 0f) - (start?.weightKg ?: 0f)
     val steady = kotlin.math.abs(ratePerWeekKg) < 0.05f
-    AlertDialog(
+    FpAlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = { TextButton(onClick = onBack) { Text("Back") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },

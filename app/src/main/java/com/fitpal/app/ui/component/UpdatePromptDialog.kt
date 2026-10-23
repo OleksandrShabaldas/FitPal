@@ -9,7 +9,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
+import com.fitpal.app.ui.component.kit.FpAlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -42,7 +42,7 @@ fun UpdatePromptDialog(
         state.phase == UpdatePhase.DOWNLOADING_WATCH ||
         state.phase == UpdatePhase.SENDING_WATCH
 
-    AlertDialog(
+    FpAlertDialog(
         onDismissRequest = { if (!downloading) onDismiss() },
         title = { Text("FitPal ${update.version} is available") },
         text = {

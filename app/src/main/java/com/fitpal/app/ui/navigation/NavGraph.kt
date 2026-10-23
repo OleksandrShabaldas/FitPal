@@ -36,6 +36,8 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
+import com.fitpal.app.ui.theme.LookState
+import com.fitpal.app.ui.theme.LookStyle
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.compose.ui.window.DialogProperties
@@ -184,11 +186,19 @@ fun FitPalNavHost(
     ) { innerPadding ->
         // How much of the bottom the bar covers on this screen, for screens that weren't built as tabs.
         androidx.compose.runtime.CompositionLocalProvider(LocalBottomBarInset provides (if (showBottomBar) 110.dp else 0.dp)) {
-        Box(modifier = Modifier.fillMaxSize()) {
+        // Material You grows a new page out of what was tapped, so it watches where taps land.
+        val tapWatch = if (LookState.style == LookStyle.MATERIAL) with(LookTransitions) { Modifier.watchTaps() } else Modifier
+        val tabRouteSet = tabRoutes.toSet()
+        Box(modifier = Modifier.fillMaxSize().then(tapWatch)) {
         NavHost(
             navController = navController,
             startDestination = if (startOnboarding) Screen.Onboarding.route else Screen.Home.route,
-            modifier = Modifier.padding(innerPadding).hazeSource(hazeState)
+            modifier = Modifier.padding(innerPadding).hazeSource(hazeState),
+            // Per look (LookTransitions): Glow and Paper keep Navigation's own 700 ms cross-fade.
+            enterTransition = { LookTransitions.enter(this, tabRouteSet, pop = false) },
+            exitTransition = { LookTransitions.exit(this, tabRouteSet, pop = false) },
+            popEnterTransition = { LookTransitions.enter(this, tabRouteSet, pop = true) },
+            popExitTransition = { LookTransitions.exit(this, tabRouteSet, pop = true) }
         ) {
             composable(
                 route = Screen.Onboarding.route,

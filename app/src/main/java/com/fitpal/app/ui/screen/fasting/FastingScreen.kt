@@ -60,7 +60,7 @@ import com.fitpal.app.ui.theme.CreamFaint
 import com.fitpal.app.ui.theme.CreamMuted
 import com.fitpal.app.ui.theme.FastingColor
 import com.fitpal.app.ui.theme.GoldLight
-import com.fitpal.app.ui.theme.InterFamily
+import com.fitpal.app.ui.theme.NumberFamily
 import com.fitpal.app.ui.theme.MacroOver
 import com.fitpal.app.ui.theme.ScoreFair
 import com.fitpal.app.ui.theme.filmColor
@@ -160,7 +160,7 @@ fun FastingScreen(
                         FastingDayResult.BROKE -> "Broken"
                         null -> "Nothing logged"
                     },
-                    style = TextStyle(fontFamily = InterFamily, fontWeight = FontWeight.ExtraBold, fontSize = 36.sp),
+                    style = TextStyle(fontFamily = NumberFamily, fontWeight = FontWeight.ExtraBold, fontSize = 36.sp),
                     color = when (result) { FastingDayResult.HELD -> ScoreFair; FastingDayResult.BROKE -> MacroOver; null -> CreamMuted }
                 )
                 firstBreak?.let { StatusPill(TrackerStatus(StatusKind.CLOSE, "Broken at ${clock(it.timestamp)}")) }
@@ -208,7 +208,7 @@ fun FastingScreen(
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
                     if (history.streak > 0) "${history.streak}" else "—",
-                    style = TextStyle(fontFamily = InterFamily, fontWeight = FontWeight.ExtraBold, fontSize = 34.sp, fontFeatureSettings = "tnum"),
+                    style = TextStyle(fontFamily = NumberFamily, fontWeight = FontWeight.ExtraBold, fontSize = 34.sp, fontFeatureSettings = "tnum"),
                     color = FastingColor
                 )
                 Spacer(Modifier.width(8.dp))

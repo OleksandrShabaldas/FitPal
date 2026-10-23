@@ -15,10 +15,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material3.AlertDialog
+import com.fitpal.app.ui.component.kit.FpAlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
+import com.fitpal.app.ui.component.kit.FpSwitch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -80,7 +80,7 @@ internal fun NavBarSection(viewModel: SettingsViewModel) {
                 if (locked) {
                     Icon(Icons.Default.Lock, contentDescription = "Always shown", tint = CreamFaint, modifier = Modifier.padding(horizontal = 14.dp).size(18.dp))
                 } else {
-                    Switch(
+                    FpSwitch(
                         checked = on,
                         enabled = on || shown.size < NavConfig.MAX_TABS,
                         onCheckedChange = { add ->
@@ -97,7 +97,7 @@ internal fun NavBarSection(viewModel: SettingsViewModel) {
                 Text("Show labels", style = MaterialTheme.typography.bodyLarge, color = Cream)
                 Text("Names under the icons.", style = MaterialTheme.typography.bodySmall, color = CreamMuted)
             }
-            Switch(checked = config.labels, onCheckedChange = { viewModel.setNavConfig(config.copy(labels = it)) })
+            FpSwitch(checked = config.labels, onCheckedChange = { viewModel.setNavConfig(config.copy(labels = it)) })
         }
         Spacer(Modifier.height(12.dp))
         Text("The + button opens", style = MaterialTheme.typography.labelMedium, color = GoldLight)
@@ -146,7 +146,7 @@ internal fun LayoutPresetsSection(viewModel: SettingsViewModel) {
         }
     }
     confirm?.let { p ->
-        AlertDialog(
+        FpAlertDialog(
             onDismissRequest = { confirm = null },
             title = { Text("Use “${p.label}”?") },
             text = { Text("This replaces your current Home, Add food and bottom-bar layout.") },

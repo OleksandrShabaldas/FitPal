@@ -41,7 +41,7 @@ import com.fitpal.app.ui.theme.CreamFaint
 import com.fitpal.app.ui.theme.CreamMuted
 import com.fitpal.app.ui.theme.FatColor
 import com.fitpal.app.ui.theme.FiberColor
-import com.fitpal.app.ui.theme.InterFamily
+import com.fitpal.app.ui.theme.NumberFamily
 import com.fitpal.app.ui.theme.MacroOver
 import com.fitpal.app.ui.theme.ProteinColor
 import com.fitpal.app.ui.theme.ScorePoor
@@ -76,13 +76,15 @@ fun CalorieRing(
     val ringColor = if (over) ScorePoor else CalorieColor
     val frac = if (goal > 0) consumed.toFloat() / goal else 0f
     val left = goal - consumed
-    val trackColor = com.fitpal.app.ui.theme.filmColor(0.08f)
+    // Material You draws the ring the Pixel way: a thicker track in the scheme's highest surface.
+    val material = com.fitpal.app.ui.theme.LookState.style == com.fitpal.app.ui.theme.LookStyle.MATERIAL
+    val trackColor = if (material) com.fitpal.app.ui.theme.TrackColor else com.fitpal.app.ui.theme.filmColor(0.08f)
     val animFrac by animateFloatAsState(targetValue = frac, animationSpec = tween(700), label = "calFrac")
     val animNum by animateIntAsState(targetValue = if (goal > 0) abs(left) else consumed, animationSpec = tween(700), label = "calNum")
 
     // Scale the stroke + centre number with the ring's size so it stays balanced when made compact.
     // The number sits a little smaller than the ring (0.225·d) so the centre reads calm, not crammed.
-    val strokeDp = diameter * 0.077f
+    val strokeDp = diameter * (if (material) 0.096f else 0.077f)
     val numberSp = (diameter.value * 0.225f).sp
     Box(modifier.size(diameter), contentAlignment = Alignment.Center) {
         Canvas(Modifier.fillMaxSize()) {
@@ -104,7 +106,7 @@ fun CalorieRing(
                 Text(
                     text = balanceScore.toString(),
                     style = TextStyle(
-                        fontFamily = InterFamily,
+                        fontFamily = NumberFamily,
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = numberSp,
                         fontFeatureSettings = "tnum"
@@ -129,7 +131,7 @@ fun CalorieRing(
                 Text(
                     text = animNum.toString(),
                     style = TextStyle(
-                        fontFamily = InterFamily,
+                        fontFamily = NumberFamily,
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = numberSp,
                         fontFeatureSettings = "tnum"

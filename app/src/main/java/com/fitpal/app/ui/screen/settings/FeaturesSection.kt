@@ -15,7 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
+import com.fitpal.app.ui.component.kit.FpSwitch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -68,7 +68,7 @@ internal fun FeaturesSection(viewModel: SettingsViewModel, onOpenCategory: (Stri
                         Text(feature.line, style = MaterialTheme.typography.bodySmall, color = CreamMuted)
                     }
                     Spacer(Modifier.width(8.dp))
-                    Switch(
+                    FpSwitch(
                         checked = isOn,
                         onCheckedChange = { turnOn ->
                             // The Trail has nothing to set up; the rest open their setup first.
