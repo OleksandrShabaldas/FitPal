@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Landscape
@@ -154,6 +155,7 @@ private fun NavItem(tab: NavTab, selected: Boolean, showLabel: Boolean, onClick:
             when (tab) {
                 NavTab.HOME -> Icon(Icons.Default.Home, contentDescription = tab.label, tint = tint)
                 NavTab.ANALYTICS -> Icon(painterResource(R.drawable.ic_bar_chart), contentDescription = tab.label, tint = tint)
+                NavTab.COACH -> Icon(Icons.Default.AutoAwesome, contentDescription = tab.label, tint = tint)
                 NavTab.COLLECTION -> Icon(Icons.Default.Bookmark, contentDescription = tab.label, tint = tint)
                 NavTab.TRAIL -> Icon(Icons.Default.Landscape, contentDescription = tab.label, tint = tint)
                 NavTab.SETTINGS -> Icon(Icons.Default.Settings, contentDescription = tab.label, tint = tint)

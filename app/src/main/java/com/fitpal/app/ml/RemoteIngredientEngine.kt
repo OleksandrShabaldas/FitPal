@@ -152,6 +152,16 @@ class RemoteIngredientEngine @Inject constructor(
 
     override suspend fun generateRawText(prompt: String): String = generateRawText(prompt) {}
 
+    /**
+     * The meal planner (docs/redesign/10): one day's recipes as JSON. Planning is reasoning — deep
+     * thinking, a little warmer than extraction so the ideas vary — and not hedged (nobody's watching
+     * a plate; a day can take a while).
+     */
+    suspend fun generatePlan(prompt: String, onModel: (String) -> Unit, onProgress: (String) -> Unit): String =
+        gemini.generate(
+            prompt, temperature = 0.7f, jsonMode = true, thinkingLevel = DEEP, onProgress = onProgress, onModel = onModel
+        ).trim()
+
     /** Like [generateRawText] but reports which model answered, for the badge. */
     suspend fun generateRawText(prompt: String, onModel: (String) -> Unit): String =
         gemini.generate(

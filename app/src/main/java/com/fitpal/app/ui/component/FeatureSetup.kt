@@ -25,6 +25,8 @@ import androidx.compose.material.icons.filled.Icecream
 import androidx.compose.material.icons.filled.Landscape
 import androidx.compose.material.icons.filled.LocalCafe
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.RestaurantMenu
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -81,6 +83,8 @@ val Feature.color: Color
         Feature.CAFFEINE -> CaffeineColor
         Feature.LIMITS -> DessertColor
         Feature.TRAIL -> AccentGarden
+        Feature.COACH -> GoldLight
+        Feature.PLANNER -> com.fitpal.app.ui.theme.AccentRecords
     }
 
 val Feature.icon: ImageVector
@@ -89,6 +93,8 @@ val Feature.icon: ImageVector
         Feature.CAFFEINE -> Icons.Default.LocalCafe
         Feature.LIMITS -> Icons.Default.Icecream
         Feature.TRAIL -> Icons.Default.Landscape
+        Feature.COACH -> Icons.Default.AutoAwesome
+        Feature.PLANNER -> Icons.Default.RestaurantMenu
     }
 
 /** The one-sentence explanation at the top of a feature's setup. */
@@ -98,6 +104,8 @@ val Feature.setupSentence: String
         Feature.CAFFEINE -> "Every coffee, tea and energy drink you log is counted, so you can see what's still in you at bedtime."
         Feature.LIMITS -> "Pick the treats to keep an eye on and a daily cap for each. You'll get a heads-up as you get close."
         Feature.TRAIL -> "Each day you log grows your garden, and challenges unlock along the way. Nothing to set up."
+        Feature.COACH -> "Your day, week and month read back to you — what stood out, one thing to focus on, and a question about the why."
+        Feature.PLANNER -> "Tell it what you have and what you feel like; it writes complete recipes that fit your day. Allergies are never used."
     }
 
 /** The feature's icon in its colour, on a soft circle. */
@@ -129,7 +137,43 @@ fun FeatureVisual(feature: Feature, setup: FeatureSetup = FeatureSetup(), modifi
                 }
             }
             Feature.TRAIL -> GardenSketch()
+            Feature.COACH -> SampleCard(
+                Icons.Default.AutoAwesome, GoldLight, "Your daily overview",
+                "A steady day — protein landed, and dinner came in lighter than last week. One thing to try tomorrow…"
+            )
+            Feature.PLANNER -> SampleCard(
+                Icons.Default.RestaurantMenu, com.fitpal.app.ui.theme.AccentRecords, "Chicken & chickpea bowl · 580 kcal",
+                "20 min · easy · 45 g protein — uses your spinach and rice"
+            )
         }
+    }
+}
+
+/** A small glass card with a sample line — what the coach or the planner shows. */
+@Composable
+private fun SampleCard(icon: ImageVector, tint: Color, title: String, body: String) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 4.dp).glassSoft().padding(12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(title, style = MaterialTheme.typography.labelLarge, color = Cream, maxLines = 1)
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(body, style = MaterialTheme.typography.bodySmall, color = CreamMuted, maxLines = 2)
+    }
+}
+
+/** A one-line glass text field (gold cursor), for the Gemini key. */
+@Composable
+private fun KeyField(value: String, onChange: (String) -> Unit) {
+    Box(Modifier.fillMaxWidth().glassSoft(RoundedCornerShape(50)).padding(horizontal = 16.dp, vertical = 12.dp)) {
+        if (value.isEmpty()) Text("Paste your key", style = MaterialTheme.typography.bodyMedium, color = CreamFaint)
+        androidx.compose.foundation.text.BasicTextField(
+            value = value, onValueChange = { onChange(it.trim()) }, singleLine = true,
+            textStyle = MaterialTheme.typography.bodyMedium.copy(color = Cream),
+            cursorBrush = androidx.compose.ui.graphics.SolidColor(GoldLight),
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 
@@ -267,6 +311,31 @@ fun FeatureSetupControls(feature: Feature, setup: FeatureSetup, onChange: (Featu
                 }
             }
             Feature.TRAIL -> Unit
+            Feature.COACH -> {
+                SetupLabel("Gemini key (optional)")
+                KeyField(setup.geminiKey) { onChange(setup.copy(geminiKey = it)) }
+                Text(
+                    "Works on your phone without one. With a free key from aistudio.google.com it's sharper and faster; leave it empty to keep the key you have.",
+                    style = MaterialTheme.typography.bodySmall, color = CreamFaint
+                )
+            }
+            Feature.PLANNER -> {
+                SetupLabel("Diet")
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    com.fitpal.app.domain.model.FoodProfile.DIETS.filter { it != com.fitpal.app.domain.model.FoodProfile.DIET_OTHER }.forEach { d ->
+                        SetupPill(d, selected = setup.diet == d) { onChange(setup.copy(diet = d)) }
+                    }
+                }
+                SetupLabel("Allergies — never used")
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    com.fitpal.app.domain.model.FoodProfile.ALLERGIES.forEach { a ->
+                        SetupPill(a, selected = a in setup.allergies) {
+                            onChange(setup.copy(allergies = if (a in setup.allergies) setup.allergies - a else setup.allergies + a))
+                        }
+                    }
+                }
+                Text("The rest of your food profile is on the Coach tab.", style = MaterialTheme.typography.bodySmall, color = CreamFaint)
+            }
         }
     }
 }

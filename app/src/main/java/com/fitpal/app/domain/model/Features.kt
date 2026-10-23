@@ -4,7 +4,7 @@ package com.fitpal.app.domain.model
  * The optional features (docs/redesign/06). Each has one master switch, and a feature that's off
  * shows nothing anywhere but the Features page and its own settings. Calories and macros, meals,
  * water, steps, weight and exercise are core: they can be moved off Home but never turned off.
- * The AI coach and the meal planner join this list with the Coach tab (spec 10).
+ * The AI coach and the meal planner came with the Coach tab (docs/redesign/10); the planner needs the coach.
  */
 enum class Feature(
     val id: String,
@@ -17,7 +17,9 @@ enum class Feature(
     FASTING("fasting", "Fasting", "An eating window, and a timer that keeps you to it", "fasting"),
     CAFFEINE("caffeine", "Caffeine", "What's still in you, and when it'll let you sleep", "caffeine"),
     LIMITS("limits", "Food limits", "A daily cap for treats, with a heads-up as you get close", "rules"),
-    TRAIL("trail", "The Trail", "A garden that grows as you log, with challenges to claim", null);
+    TRAIL("trail", "The Trail", "A garden that grows as you log, with challenges to claim", null),
+    COACH("coach", "AI coach", "Daily and weekly overviews that ask about the why", "ai"),
+    PLANNER("planner", "Meal planner", "Complete recipes that fit your day, to log or schedule", null);
 
     companion object {
         fun byId(id: String): Feature? = entries.firstOrNull { it.id == id }
@@ -36,7 +38,12 @@ data class FeatureSetup(
     val caffeineLimitMg: Int = 400,
     val caffeineHalfLifeHours: Float = 5f,
     /** The food limits to turn on, each with its daily cap (kcal). */
-    val limits: Map<DietaryRuleKind, Int> = DietaryRuleKind.entries.associateWith { it.defaultLimitKcal }
+    val limits: Map<DietaryRuleKind, Int> = DietaryRuleKind.entries.associateWith { it.defaultLimitKcal },
+    /** AI coach: a Gemini key to add (blank = keep what's set; it works on-device without one). */
+    val geminiKey: String = "",
+    /** Meal planner: the food profile's two most important answers. */
+    val diet: String = FoodProfile.DIET_NONE,
+    val allergies: Set<String> = emptySet()
 ) {
     /** Whether this is enough to turn [feature] on (food limits need at least one picked). */
     fun canTurnOn(feature: Feature): Boolean = feature != Feature.LIMITS || limits.isNotEmpty()

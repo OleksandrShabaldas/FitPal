@@ -50,6 +50,7 @@ class CustomizeWidgetsViewModel @Inject constructor(
         key == "fasting" -> settingsRepository.fastingSchedule.value.enabled
         key == "caffeine" -> settingsRepository.caffeineSettings.value.enabled
         key == "limits" -> settingsRepository.dietaryRules.value.any { it.enabled }
+        key == "ai_review" || key == "ai" -> settingsRepository.coachEnabled.value
         key.startsWith("limit_") -> settingsRepository.dietaryRules.value.any { it.enabled && "limit_${it.kind.id}" == key }
         else -> true
     }

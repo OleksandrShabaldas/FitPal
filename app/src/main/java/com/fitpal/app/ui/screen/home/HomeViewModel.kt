@@ -70,6 +70,7 @@ class HomeViewModel @Inject constructor(
     private val appForeground: com.fitpal.app.ml.AppForegroundState,
     private val analyticsFocus: com.fitpal.app.domain.AnalyticsFocus,
     private val featureSwitches: com.fitpal.app.data.repository.FeatureSwitches,
+    private val plannerRepository: com.fitpal.app.data.repository.PlannerRepository,
     @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
@@ -224,6 +225,27 @@ class HomeViewModel @Inject constructor(
             Streaks.current(set)
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    /**
+     * The planner's meals scheduled for the viewed day (docs/redesign/10), by meal type — shown faded
+     * under each meal's logged items and never counted. Nothing while the planner is off.
+     */
+    val plannedMeals: StateFlow<Map<String, List<com.fitpal.app.data.local.entity.PlannedMealEntity>>> =
+        combine(_selectedDate, settingsRepository.plannerEnabled) { d, on -> d to on }
+            .flatMapLatest { (d, on) ->
+                if (!on) flowOf(emptyList()) else plannerRepository.scheduledFor(d)
+            }
+            .map { list -> list.groupBy { it.mealType ?: com.fitpal.app.domain.model.MealTypes.DINNER } }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
+    /** "Remove" on a planned row: off the day, kept as a saved idea. */
+    fun unschedulePlanned(id: Long) { viewModelScope.launch { plannerRepository.unschedule(id) } }
+
+    /** "Move" on a planned row. */
+    fun movePlanned(id: Long, date: LocalDate, mealType: String) { viewModelScope.launch { plannerRepository.schedule(id, date, mealType) } }
+
+    /** The AI coach (Settings → Features): off hides the AI overview card. */
+    val coachEnabled: StateFlow<Boolean> = settingsRepository.coachEnabled
 
     /** The Trail is on (Settings → Features). Off: the streak stays, without the garden's badge. */
     val trailEnabled: StateFlow<Boolean> = settingsRepository.trailEnabled

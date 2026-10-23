@@ -41,6 +41,21 @@ sealed class Screen(val route: String) {
     data object Barcode : Screen("barcode")
     data object Analytics : Screen("analytics")
     data object Collection : Screen("collection")
+    /** The Coach tab (docs/redesign/10): today's overview, reviews and the meal planner. */
+    data object Coach : Screen("coach")
+    /** "Your food profile" — the planner's permanent form. */
+    data object FoodProfile : Screen("food_profile")
+    /** One plan's recipes (a meal, a day or a week); "saved" lists the ideas kept for later. */
+    data object PlanResults : Screen("plan_results/{requestId}") {
+        const val ARG_REQUEST_ID = "requestId"
+        const val SAVED = "saved"
+        fun buildRoute(requestId: String): String = "plan_results/$requestId"
+    }
+    /** A planned meal's recipe — read, adjust the ingredients, cook, log. */
+    data object PlannedMeal : Screen("planned_meal/{id}") {
+        const val ARG_ID = "id"
+        fun buildRoute(id: Long): String = "planned_meal/$id"
+    }
     /** "The Trail" — the motivation game (see GAME_DESIGN.md). Replaced the old garden. */
     data object Trail : Screen("trail")
     data object Settings : Screen("settings")

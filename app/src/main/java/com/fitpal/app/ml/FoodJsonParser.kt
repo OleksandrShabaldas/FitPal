@@ -208,6 +208,61 @@ object FoodJsonParser {
         return DishResult(dishes = dishes)
     }
 
+    /** The planner's answer: the day's recipes and its shopping list (docs/redesign/10). */
+    data class ParsedPlan(
+        val meals: List<com.fitpal.app.domain.model.PlannedRecipe>,
+        val shopping: List<com.fitpal.app.domain.model.ShoppingItem>
+    )
+
+    /**
+     * Read a plan: `{"meals":[{mealType,name,cuisine,timeMinutes,servings,difficulty,whyItFits,
+     * ingredients[],steps[],tips[]}],"shopping":[…]}`. Ingredients go through the same lenient item
+     * reader as food recognition (calories reconciled to the macros, caffeine kept), so a planned
+     * meal's numbers mean what a logged one's do. [fallbackMealType] fills a missing / unknown type.
+     */
+    fun parsePlan(raw: String, fallbackMealType: String, dayOffset: Int = 0): ParsedPlan {
+        val json = extractJsonObject(raw) ?: return ParsedPlan(emptyList(), emptyList())
+        val known = com.fitpal.app.domain.model.MealTypes.ALL
+        val meals = json.optJSONArray("meals")?.let { arr ->
+            (0 until arr.length()).mapNotNull { i ->
+                val o = arr.optJSONObject(i) ?: return@mapNotNull null
+                val name = o.optString("name").trim().takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+                val items = o.optJSONArray("ingredients")
+                val ingredients = (0 until (items?.length() ?: 0)).mapNotNull { j ->
+                    val io = items!!.optJSONObject(j) ?: return@mapNotNull null
+                    parseIngredientObject(io)?.let { com.fitpal.app.domain.model.RecipeIngredient(it, io.optBoolean("have", false)) }
+                }
+                if (ingredients.isEmpty()) return@mapNotNull null
+                fun strings(key: String) = o.optJSONArray(key)?.let { a -> (0 until a.length()).map { a.optString(it).trim() }.filter { it.isNotEmpty() } }.orEmpty()
+                com.fitpal.app.domain.model.PlannedRecipe(
+                    name = name.replaceFirstChar { it.uppercase() },
+                    mealType = o.optString("mealType").lowercase().trim().takeIf { it in known } ?: fallbackMealType,
+                    dayOffset = dayOffset,
+                    cuisine = o.optString("cuisine").trim(),
+                    timeMinutes = o.optInt("timeMinutes", 0).coerceAtLeast(0),
+                    servings = o.optInt("servings", 1).coerceIn(1, 12),
+                    difficulty = o.optString("difficulty").trim(),
+                    whyItFits = o.optString("whyItFits").trim(),
+                    ingredients = ingredients,
+                    // Strip any "1." the model numbered itself — the screen numbers the steps.
+                    steps = strings("steps").map { it.replace(Regex("^\\s*\\d+[.)]\\s*"), "") },
+                    tips = strings("tips")
+                )
+            }
+        }.orEmpty()
+        val shopping = json.optJSONArray("shopping")?.let { arr ->
+            (0 until arr.length()).mapNotNull { i ->
+                val o = arr.optJSONObject(i) ?: return@mapNotNull null
+                val name = o.optString("name").trim().takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+                com.fitpal.app.domain.model.ShoppingItem(
+                    name, o.optString("amount").trim(),
+                    if (o.has("estimatedCost") && !o.isNull("estimatedCost")) o.optDouble("estimatedCost").toFloat().takeIf { !it.isNaN() && it > 0f } else null
+                )
+            }
+        }.orEmpty()
+        return ParsedPlan(meals, shopping)
+    }
+
     private class DishGroup(val name: String, val items: List<String>, val also: List<String>, val missing: JSONArray?)
 
     fun parseInsights(raw: String): MealInsights {

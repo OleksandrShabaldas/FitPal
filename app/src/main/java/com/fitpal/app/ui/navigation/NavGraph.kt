@@ -83,6 +83,7 @@ val LocalBottomBarInset = androidx.compose.runtime.compositionLocalOf { 0.dp }
 private fun com.fitpal.app.domain.model.NavTab.route(): String = when (this) {
     com.fitpal.app.domain.model.NavTab.HOME -> Screen.Home.route
     com.fitpal.app.domain.model.NavTab.ANALYTICS -> Screen.Analytics.route
+    com.fitpal.app.domain.model.NavTab.COACH -> Screen.Coach.route
     com.fitpal.app.domain.model.NavTab.COLLECTION -> Screen.Collection.route
     com.fitpal.app.domain.model.NavTab.TRAIL -> Screen.Trail.route
     com.fitpal.app.domain.model.NavTab.SETTINGS -> Screen.Settings.route
@@ -252,6 +253,7 @@ fun FitPalNavHost(
                     },
                     onOpenTrail = { navController.navigate(Screen.Trail.route) },
                     onOpenAnalytics = { navTo(Screen.Analytics.route) },
+                    onOpenPlannedMeal = { id -> navController.navigate(Screen.PlannedMeal.buildRoute(id)) },
                     onLogExercise = { navController.navigate(Screen.LogExercise.route) },
                     onExerciseClick = { id -> navController.navigate(Screen.ExerciseDetail.buildRoute(id)) },
                     onOpenWater = { date -> navController.navigate(Screen.WaterDetail.buildRoute(date)) },
@@ -305,6 +307,36 @@ fun FitPalNavHost(
                     onSwipeToAnalytics = neighbour(com.fitpal.app.domain.model.NavTab.COLLECTION, -1),
                     onSwipeToSettings = neighbour(com.fitpal.app.domain.model.NavTab.COLLECTION, +1)
                 )
+            }
+
+            // ---- The Coach tab and the meal planner (docs/redesign/10) ----
+            composable(Screen.Coach.route) {
+                com.fitpal.app.ui.screen.coach.CoachScreen(
+                    onOpenReview = { period, key -> navController.navigate(Screen.AiReview.buildRoute(period, key)) },
+                    onOpenPlan = { id -> navController.navigate(Screen.PlanResults.buildRoute(id)) },
+                    onOpenRecipe = { id -> navController.navigate(Screen.PlannedMeal.buildRoute(id)) },
+                    onOpenFoodProfile = { navController.navigate(Screen.FoodProfile.route) },
+                    onSwipeRight = neighbour(com.fitpal.app.domain.model.NavTab.COACH, -1),
+                    onSwipeLeft = neighbour(com.fitpal.app.domain.model.NavTab.COACH, +1)
+                )
+            }
+            composable(Screen.FoodProfile.route) {
+                com.fitpal.app.ui.screen.coach.FoodProfileScreen(onBack = safeBack)
+            }
+            composable(
+                route = Screen.PlanResults.route,
+                arguments = listOf(navArgument(Screen.PlanResults.ARG_REQUEST_ID) { type = NavType.StringType })
+            ) {
+                com.fitpal.app.ui.screen.coach.PlanResultsScreen(
+                    onBack = safeBack,
+                    onOpenRecipe = { id -> navController.navigate(Screen.PlannedMeal.buildRoute(id)) }
+                )
+            }
+            composable(
+                route = Screen.PlannedMeal.route,
+                arguments = listOf(navArgument(Screen.PlannedMeal.ARG_ID) { type = NavType.StringType })
+            ) {
+                com.fitpal.app.ui.screen.coach.RecipeScreen(onBack = safeBack, onLogged = safeBack)
             }
 
             composable(Screen.AddFood.route) {
@@ -437,6 +469,7 @@ fun FitPalNavHost(
                     onCustomizeScreen = { screenId -> navController.navigate(Screen.CustomizeWidgets.buildRoute(screenId)) },
                     onReplayIntro = { navController.navigate(Screen.Onboarding.buildRoute(replay = true)) },
                     onOpenCategory = { cat, focus -> navController.navigate(Screen.SettingsCategory.buildRoute(cat, focus)) },
+                    onOpenFoodProfile = { navController.navigate(Screen.FoodProfile.route) },
                     onBack = safeBack
                 )
             }
@@ -533,7 +566,8 @@ fun FitPalNavHost(
             ) {
                 EntryDetailScreen(
                     onBack = safeBack,
-                    onDeleted = goHome
+                    onDeleted = goHome,
+                    onOpenRecipe = { id -> navController.navigate(Screen.PlannedMeal.buildRoute(id)) }
                 )
             }
 
@@ -547,7 +581,8 @@ fun FitPalNavHost(
             ) {
                 MealGroupScreen(
                     onBack = safeBack,
-                    onDishClick = { entryId -> navController.navigate(Screen.EntryDetail.buildRoute(entryId)) }
+                    onDishClick = { entryId -> navController.navigate(Screen.EntryDetail.buildRoute(entryId)) },
+                    onOpenRecipe = { id -> navController.navigate(Screen.PlannedMeal.buildRoute(id)) }
                 )
             }
 

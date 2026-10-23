@@ -53,7 +53,11 @@ class FeatureSuggestionsTest {
 
     @Test fun neverWhatsOnOrDismissed() {
         val items = (0 until 5).map { Item(day(it), "Espresso", 30f, null) }
-        val s = FeatureSuggestions.pick(items, emptyList(), setOf(Feature.CAFFEINE), setOf("trail"))
+        val s = FeatureSuggestions.pick(items, emptyList(), setOf(Feature.CAFFEINE), setOf("trail", "coach"))
         assertNull(s)
+    }
+
+    @Test fun theCoachComesAfterTheTrail() {
+        assertEquals(Feature.COACH, FeatureSuggestions.pick(emptyList(), emptyList(), setOf(Feature.TRAIL), emptySet())?.feature)
     }
 }

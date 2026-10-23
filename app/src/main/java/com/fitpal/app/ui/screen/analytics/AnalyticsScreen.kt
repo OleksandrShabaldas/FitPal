@@ -203,11 +203,7 @@ fun AnalyticsScreen(
     val iso = DateTimeFormatter.ISO_LOCAL_DATE
     val dayMonth = DateTimeFormatter.ofPattern("d MMM")
     val dayMonthYear = DateTimeFormatter.ofPattern("d MMM yyyy")
-    val dailyKey = today.format(iso)
-    // AI weekly/monthly reviews follow the period you're viewing — except right after one ends, when
-    // "this month" / "this week" means the one just finished (see ReviewPeriods).
-    val weekReview = com.fitpal.app.domain.ReviewPeriods.week(anchor, today)
-    val monthReview = com.fitpal.app.domain.ReviewPeriods.month(anchor, today)
+    // (The AI reviews moved to the Coach tab — docs/redesign/10.)
 
     // One window for every card: the viewed period (the Mon–Sun week, or the 30 days ending at the
     // anchor). Charts span the whole period, with days still to come as gaps; averages use the days so
@@ -383,9 +379,7 @@ fun AnalyticsScreen(
             add("sec_${sec.first}")
             if (sec.first !in collapsed) cards.forEach { add(it.key) }
         }
-        tailCards.forEach { w ->
-            if (w.key == "ai") { add("aihdr"); add("aiToday"); add("aiWeek"); add("aiMonth") } else add(w.key)
-        }
+        tailCards.forEach { w -> add(w.key) }
     }
     val latestItemKeys by androidx.compose.runtime.rememberUpdatedState(itemKeys)
     // Opened at a section (Home's streak with the Trail off → Habits): unfold it and scroll there.
@@ -449,17 +443,6 @@ fun AnalyticsScreen(
                                 modifier = Modifier.size(22.dp).clickable(enabled = canGoNext) { viewModel.goNext() }
                             )
                         }
-                    }
-                    Row(
-                        modifier = Modifier
-                            .glass(RoundedCornerShape(50))
-                            .clickable { jumpTo("aihdr") }
-                            .padding(horizontal = 14.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Icon(Icons.Default.AutoAwesome, contentDescription = "AI reviews", tint = GoldLight, modifier = Modifier.size(16.dp))
-                        Text("AI", style = MaterialTheme.typography.labelLarge, color = Cream)
                     }
                 }
             }
@@ -1113,15 +1096,6 @@ fun AnalyticsScreen(
                         }
                     }
 
-                    // ---- AI reviews ----
-                    "ai" -> {
-                        item {
-                            Text("AI reviews", style = MaterialTheme.typography.headlineSmall, color = Cream, modifier = Modifier.padding(top = 6.dp))
-                        }
-                        item { AiReviewCard("Today", "Tap for a review of today", "ai_today", spotlight, viewModel::toggleSpotlight, highlight = highlight == "aihdr") { onOpenReview("daily", dailyKey) } }
-                        item { AiReviewCard(weekReview.title, weekReview.subtitle, "ai_week", spotlight, viewModel::toggleSpotlight, highlight = highlight == "aihdr") { onOpenReview("weekly", weekReview.key) } }
-                        item { AiReviewCard(monthReview.title, monthReview.subtitle, "ai_month", spotlight, viewModel::toggleSpotlight, highlight = highlight == "aihdr") { onOpenReview("monthly", monthReview.key) } }
-                    }
                 }
             }
 

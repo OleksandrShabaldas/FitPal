@@ -45,6 +45,8 @@ class FitPalApplication : Application() {
         runCatching { entryPoint.settingsRepository().migrateHomeLayoutToStrip() }
         // Analytics' summary tiles went off by default in 2.10 (the takeaways replaced them), once.
         runCatching { entryPoint.settingsRepository().migrateAnalyticsTilesOff() }
+        // The Coach tab takes Collection's place in the bar, once (2.13).
+        runCatching { entryPoint.settingsRepository().migrateNavToCoach() }
         // Re-arm the daily reminder (alarms are cleared on reboot / app update).
         runCatching { entryPoint.reminderManager().reschedule() }
 

@@ -74,8 +74,10 @@ object FeatureSuggestions {
         }
 
         candidates.maxByOrNull { it.first }?.let { return it.second }
-        // No signal: the next feature in line (the AI coach joins this list with spec 10).
-        return if (open(Feature.TRAIL)) Suggestion(Feature.TRAIL, "Want a garden that grows as you keep logging?") else null
+        // No signal: the next feature in line — the Trail, then the AI coach.
+        if (open(Feature.TRAIL)) return Suggestion(Feature.TRAIL, "Want a garden that grows as you keep logging?")
+        if (open(Feature.COACH)) return Suggestion(Feature.COACH, "Want a short read on your day, with one thing to try?")
+        return null
     }
 
     /**

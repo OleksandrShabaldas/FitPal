@@ -53,6 +53,8 @@ data class EntryDetailUiState(
     val eatenAt: com.fitpal.app.domain.model.EatenAt = com.fitpal.app.domain.model.EatenAt(),
     /** A meal-aware coaching note the background worker may attach; null when there's nothing useful. */
     val coachingTip: com.fitpal.app.domain.model.CoachingTip? = null,
+    /** The planner's meal this was logged from, if any — the screen offers its recipe. */
+    val plannedMealId: Long? = null,
     val isLoading: Boolean = true,
     val error: String? = null,
     // AI insights — full detail, cached in the DB so we don't regenerate.
@@ -112,6 +114,7 @@ class EntryDetailViewModel @Inject constructor(
                     it.copy(
                         context = meal?.context,
                         coachingTip = meal?.let { m -> mealRepository.coachingTipFor(m) },
+                        plannedMealId = meal?.plannedMealId,
                         eatenAt = meal?.let { m -> com.fitpal.app.domain.model.eatenAtOf(m.timestamp, m.timeSource) }
                             ?: it.eatenAt
                     )

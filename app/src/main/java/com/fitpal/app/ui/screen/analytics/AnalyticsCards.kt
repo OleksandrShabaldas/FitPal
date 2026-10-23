@@ -897,32 +897,6 @@ internal fun NotEnough() {
     )
 }
 
-@Composable
-internal fun AiReviewCard(
-    title: String,
-    subtitle: String,
-    spotKey: String,
-    spotlight: Set<String>,
-    onToggleSpotlight: (String) -> Unit,
-    highlight: Boolean = false,
-    onOpen: () -> Unit
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth()
-            .cardSurface(spotKey in spotlight)
-            .then(highlightBorder(highlight))
-            .combinedClickable(onClick = onOpen, onLongClick = { onToggleSpotlight(spotKey) })
-            .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, color = Cream)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = CreamMuted)
-        }
-        Text("›", style = MaterialTheme.typography.headlineSmall, color = CreamMuted)
-    }
-}
-
 /**
  * "How is the maintenance estimate worked out?" — shows the same numbers the estimate is built from
  * (average intake, the measured weight trend, and the 7,700-kcal-per-kg conversion) so the headline

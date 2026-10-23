@@ -251,6 +251,18 @@ class FoodAnalysisPipeline @Inject constructor(
         }
     )
 
+    /** The meal planner, online only — throws on failure so the caller can offer on-device. */
+    suspend fun planOnline(prompt: String, onModel: (String) -> Unit, onProgress: (String) -> Unit): String {
+        val r = routing ?: throw GeminiUnavailableException("Online engine unavailable")
+        return r.onlineEngine.generatePlan(prompt, onModel, onProgress)
+    }
+
+    /** The meal planner on the phone. */
+    suspend fun planLocal(prompt: String): String {
+        val engine = routing?.offlineEngine ?: ingredientEngine
+        return (engine as? LlmIngredientEngine)?.generatePlan(prompt) ?: engine.generateRawText(prompt)
+    }
+
     suspend fun generateRawTextWithSource(prompt: String): Pair<String, AiSource> =
         withSource({ engine, reportModel -> engine.generateRawText(prompt, reportModel) }, { it.generateRawText(prompt) })
 

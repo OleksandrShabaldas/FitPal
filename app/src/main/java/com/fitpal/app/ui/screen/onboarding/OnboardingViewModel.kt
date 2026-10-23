@@ -54,7 +54,7 @@ data class OnboardingDraft(
     val targets: DailyTargets? get() = weightKg?.let { BmrCalculator.dailyTargets(profile, it) }
 
     /** The picked features that have something to set up, in the order their setup screens come. */
-    val toSetUp: List<Feature> get() = Feature.entries.filter { it in features && it != Feature.TRAIL }
+    val toSetUp: List<Feature> get() = Feature.entries.filter { it in features && it != Feature.TRAIL && it != Feature.COACH }
 
     /** ~35 ml per kg — the same automatic water goal the app uses. */
     val waterGoalMl: Int? get() = weightKg?.let { SettingsRepository.autoWaterGoal(it) }
@@ -120,7 +120,8 @@ class OnboardingViewModel @Inject constructor(
             Feature.FASTING -> d.setup.copy(eatStartMin = defaults.eatStartMin, eatEndMin = defaults.eatEndMin, intensity = defaults.intensity)
             Feature.CAFFEINE -> d.setup.copy(caffeineLimitMg = defaults.caffeineLimitMg, caffeineHalfLifeHours = defaults.caffeineHalfLifeHours)
             Feature.LIMITS -> d.setup.copy(limits = defaults.limits)
-            Feature.TRAIL -> d.setup
+            Feature.PLANNER -> d.setup.copy(diet = defaults.diet, allergies = defaults.allergies)
+            Feature.TRAIL, Feature.COACH -> d.setup
         })
     }
 

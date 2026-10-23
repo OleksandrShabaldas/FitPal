@@ -60,6 +60,8 @@ class ReminderReceiver : BroadcastReceiver() {
     }
 
     private fun handleKind(context: Context, kind: ReminderKind) {
+        // An alarm armed before the coach was turned off (Settings → Features) stays quiet.
+        if (kind.isOverview && !entryPoint(context).settingsRepository().coachEnabled.value) return
         if (kind.isOverview) {
             val (period, key) = overviewTarget(kind)
             // Post the notification immediately (it always works, generating on open if needed),

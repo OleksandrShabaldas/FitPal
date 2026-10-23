@@ -724,4 +724,65 @@ object FoodPrompts {
         - 3 to 5 options, each a concrete, plausible explanation. No "Other" or "I don't know".
         - Keep each option under 5 words. Neutral, non-judgmental wording.
     """.trimIndent()
+
+    // ---- The meal planner (docs/redesign/10). Online and on-device get their own prompts, as everywhere. ----
+
+    private const val PLAN_ITEM_EXAMPLE =
+        """{"name":"Salmon fillet","grams":150,"have":true,"kcalPer100g":208,"proteinPer100g":20,"fatPer100g":13,"carbsPer100g":0,"fiberPer100g":0,"waterMlPer100":0,"vitA":40,"vitC":0,"vitD":11,"calcium":9,"iron":0.3,"potassium":363,"sodium":59,"b12":3.2,"folate":25,"b6":0.6,"magnesium":27,"zinc":0.4,"vitE":3.6,"caffeine":0}"""
+
+    private fun planShape(mealTypes: List<String>) = """
+        Reply with ONLY this JSON:
+        {"meals":[{"mealType":"<${mealTypes.joinToString("|")}>","name":"<dish name>","cuisine":"<cuisine>","timeMinutes":<total minutes>,"servings":<number>,"difficulty":"easy|medium|hard","whyItFits":"<one short sentence with numbers on why it suits this person today>","ingredients":[ item objects ],"steps":["<step>"],"tips":["<tip>"]}],
+         "shopping":[{"name":"<thing to buy>","amount":"<e.g. 200 g>","estimatedCost":<number or null>}]}
+    """.trimIndent()
+
+    private fun planAvoidLine(avoid: List<String>) =
+        if (avoid.isEmpty()) "" else "Don't repeat these meals: ${avoid.joinToString("; ")}."
+
+    /** Online: one day's meals (or one meal), lean — the facts are in [context]. */
+    fun plannerOnline(context: String, dayLabel: String, mealTypes: List<String>, avoid: List<String>): String = """
+        You are this person's meal planner. Plan ${if (mealTypes.size == 1) "ONE ${mealTypes.first()}" else "the meals for $dayLabel: ${mealTypes.joinToString(", ")}"} as complete recipes.
+        ${planAvoidLine(avoid)}
+
+        $context
+
+        Rules (all are hard rules):
+        - NEVER use anything the person is allergic to, or anything their diet excludes. Respect "won't eat".
+        - If they said ONLY use what they have, use nothing else (salt, pepper, oil and water are always there).
+        - Fit their cooking time, skill and kitchen. Keep within their budget, in their currency.
+        - Meals go inside the eating window when fasting is on; never plan food outside it or right before bed.
+        - Aim the day at their targets: what's left today for today's plan, the full targets for another day.
+        - Real, appetising dishes they'd actually like (use what they love and eat often; vary from recent meals).
+        - Ingredients are for the portion ONE person eats ("servings" says how many portions the recipe makes).
+          Each item: real grams for that portion and honest per-100 g nutrition; "have": true when it's from
+          what they have. List cooking oil with its grams. Sauces and dressings bought ready-made stay one item.
+        - Steps: short, numbered in order, practical. Tips: 0-2 swaps or shortcuts.
+        - shopping: what to buy for these meals (not what they have), with rough cost when there's a budget.
+        Example item: $PLAN_ITEM_EXAMPLE
+
+        ${planShape(mealTypes)}
+    """.trimIndent()
+
+    /** On-device: the same job, spelled out more for a smaller model. */
+    fun planner(context: String, dayLabel: String, mealTypes: List<String>, avoid: List<String>): String = """
+        You plan meals. Make ${if (mealTypes.size == 1) "exactly ONE ${mealTypes.first()} recipe" else "one recipe for each of: ${mealTypes.joinToString(", ")} (for $dayLabel)"}.
+        ${planAvoidLine(avoid)}
+
+        About the person and their day:
+        $context
+
+        Follow these rules exactly:
+        1. Never use an ingredient they are allergic to. Never break their diet. Skip foods they won't eat.
+        2. If they only want to use what they have, use only those foods plus salt, pepper, oil and water.
+        3. Keep the total cooking time at or under their limit. Keep it simple for their skill.
+        4. Pick normal, tasty dishes with real names (for example "Chicken and rice bowl", "Greek omelette").
+        5. Ingredient amounts are for ONE person's portion. Give each ingredient its grams and its
+           nutrition per 100 g (kcal, protein, fat, carbs, fibre, and the vitamins and minerals).
+           Mark "have": true for ingredients from their list, false for ones to buy.
+        6. Steps: 3 to 8 short steps in order.
+        7. Write numbers, not words, in the JSON. Use the exact keys shown.
+        Example item: $PLAN_ITEM_EXAMPLE
+
+        ${planShape(mealTypes)}
+    """.trimIndent()
 }

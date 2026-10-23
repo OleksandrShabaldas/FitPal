@@ -5,6 +5,8 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.fitpal.app.data.local.dao.AiReviewDao
+import com.fitpal.app.data.local.dao.PlannedMealDao
+import com.fitpal.app.data.local.entity.PlannedMealEntity
 import com.fitpal.app.data.local.dao.ChallengeDao
 import com.fitpal.app.data.local.dao.ContextNoteDao
 import com.fitpal.app.data.local.dao.ExerciseDao
@@ -48,6 +50,7 @@ import com.fitpal.app.data.local.entity.WeightEntryEntity
         GalleryIngredientEntity::class,
         MealLogEntity::class,
         MealLogItemEntity::class,
+        PlannedMealEntity::class,
         SavedWorkoutEntity::class,
         StepEntryEntity::class,
         TrailProjectEntity::class,
@@ -56,7 +59,7 @@ import com.fitpal.app.data.local.entity.WeightEntryEntity
         UsdaFoodEntity::class,
         WeightEntryEntity::class
     ],
-    version = 33,
+    version = 34,
     exportSchema = true
 )
 abstract class FitPalDatabase : RoomDatabase() {
@@ -69,6 +72,7 @@ abstract class FitPalDatabase : RoomDatabase() {
     abstract fun insightsCacheDao(): InsightsCacheDao
     abstract fun mealLogDao(): MealLogDao
     abstract fun nutritionDao(): NutritionDao
+    abstract fun plannedMealDao(): PlannedMealDao
     abstract fun stepDao(): StepDao
     abstract fun trailDao(): TrailDao
     abstract fun weightDao(): WeightDao
@@ -549,6 +553,25 @@ abstract class FitPalDatabase : RoomDatabase() {
         val MIGRATION_32_33 = object : Migration(32, 33) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE meal_log_items ADD COLUMN ruleParts TEXT")
+            }
+        }
+
+        /**
+         * 33 → 34 (docs/redesign/10): the meal planner's `planned_meals` (kept apart from meal_logs so
+         * nothing planned ever counts) and `meal_logs.plannedMealId`, linking a logged meal to its recipe.
+         */
+        val MIGRATION_33_34 = object : Migration(33, 34) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS planned_meals (" +
+                        "id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, createdAt INTEGER NOT NULL, " +
+                        "requestId TEXT NOT NULL, status TEXT NOT NULL, date TEXT, mealType TEXT, name TEXT NOT NULL, " +
+                        "recipeJson TEXT NOT NULL, kcalPerServing REAL NOT NULL, proteinPerServing REAL NOT NULL, " +
+                        "servings INTEGER NOT NULL, aiSource TEXT, aiModel TEXT, loggedMealLogId INTEGER)"
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_planned_meals_requestId ON planned_meals (requestId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_planned_meals_date ON planned_meals (date)")
+                db.execSQL("ALTER TABLE meal_logs ADD COLUMN plannedMealId INTEGER")
             }
         }
     }

@@ -29,13 +29,16 @@ class FeatureSwitches @Inject constructor(
 
     /** The features that are on right now. */
     val on: Flow<Set<Feature>> = combine(
-        settings.fastingSchedule, settings.caffeineSettings, settings.dietaryRules, settings.trailEnabled
-    ) { fasting, caffeine, rules, trail ->
+        settings.fastingSchedule, settings.caffeineSettings, settings.dietaryRules, settings.trailEnabled,
+        combine(settings.coachEnabled, settings.plannerEnabled) { c, p -> c to (c && p) }
+    ) { fasting, caffeine, rules, trail, (coach, planner) ->
         buildSet {
             if (fasting.enabled) add(Feature.FASTING)
             if (caffeine.enabled) add(Feature.CAFFEINE)
             if (rules.any { it.enabled }) add(Feature.LIMITS)
             if (trail) add(Feature.TRAIL)
+            if (coach) add(Feature.COACH)
+            if (planner) add(Feature.PLANNER)
         }
     }
 
@@ -44,6 +47,8 @@ class FeatureSwitches @Inject constructor(
         Feature.CAFFEINE -> settings.caffeineSettings.value.enabled
         Feature.LIMITS -> settings.dietaryRules.value.any { it.enabled }
         Feature.TRAIL -> settings.trailEnabled.value
+        Feature.COACH -> settings.coachEnabled.value
+        Feature.PLANNER -> settings.coachEnabled.value && settings.plannerEnabled.value
     }
 
     /** The setup as things stand — what a setup sheet starts from. */
@@ -59,7 +64,9 @@ class FeatureSwitches @Inject constructor(
             caffeineLimitMg = caffeine.dailyLimitMg,
             caffeineHalfLifeHours = caffeine.halfLifeHours,
             // None on yet: offer every limit at its saved cap.
-            limits = (enabled.ifEmpty { rules }).associate { it.kind to it.dailyLimitKcal }
+            limits = (enabled.ifEmpty { rules }).associate { it.kind to it.dailyLimitKcal },
+            diet = settings.foodProfile.value.diet,
+            allergies = settings.foodProfile.value.allergies
         )
     }
 
@@ -85,6 +92,20 @@ class FeatureSwitches @Inject constructor(
                 settings.setDietaryRuleEnabled(kind, kind in setup.limits)
             }
             Feature.TRAIL -> settings.setTrailEnabled(true)
+            Feature.COACH -> {
+                setup.geminiKey.trim().takeIf { it.isNotEmpty() }?.let {
+                    settings.setGeminiApiKey(it)
+                    settings.setOnlineAiEnabled(true)
+                }
+                settings.setCoachEnabled(true)
+                reminders.reschedule()
+            }
+            Feature.PLANNER -> {
+                settings.setFoodProfile(settings.foodProfile.value.copy(diet = setup.diet, allergies = setup.allergies))
+                // The planner lives inside the coach.
+                if (!settings.coachEnabled.value) { settings.setCoachEnabled(true); reminders.reschedule() }
+                settings.setPlannerEnabled(true)
+            }
         }
     }
 
@@ -97,6 +118,12 @@ class FeatureSwitches @Inject constructor(
             Feature.CAFFEINE -> settings.setCaffeineEnabled(false)
             Feature.LIMITS -> DietaryRuleKind.entries.forEach { settings.setDietaryRuleEnabled(it, false) }
             Feature.TRAIL -> settings.setTrailEnabled(false)
+            Feature.COACH -> {
+                // Off with it go the planner, the tab, Home's overview card and the overview notifications.
+                settings.setCoachEnabled(false)
+                reminders.reschedule()
+            }
+            Feature.PLANNER -> settings.setPlannerEnabled(false)
         }
     }
 }

@@ -61,7 +61,9 @@ internal fun NavBarSection(viewModel: SettingsViewModel) {
         )
         Spacer(Modifier.height(10.dp))
         val trailOn by viewModel.trailEnabled.collectAsStateWithLifecycle()
-        NavTab.entries.filter { it != NavTab.TRAIL || trailOn }.forEach { tab ->
+        val featuresOn by viewModel.featuresOn.collectAsStateWithLifecycle()
+        val coachOn = com.fitpal.app.domain.model.Feature.COACH in featuresOn
+        NavTab.entries.filter { (it != NavTab.TRAIL || trailOn) && (it != NavTab.COACH || coachOn) }.forEach { tab ->
             val on = tab in shown
             val locked = tab == NavTab.HOME || tab == NavTab.SETTINGS
             val index = shown.indexOf(tab)

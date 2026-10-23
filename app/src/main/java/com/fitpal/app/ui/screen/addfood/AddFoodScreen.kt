@@ -129,7 +129,7 @@ fun AddFoodScreen(
                             "gallery" -> Triple(Icons.Default.PhotoLibrary, "From gallery", "Pick a photo")
                             "describe" -> Triple(Icons.Default.ChatBubble, "Describe to AI", "Just type what you ate")
                             "barcode" -> Triple(Icons.Default.QrCodeScanner, "Scan barcode", "Packaged product")
-                            "saved" -> Triple(Icons.Default.Bookmark, "Saved foods", "Your bookmarked collection")
+                            "saved" -> Triple(Icons.Default.Bookmark, "Collection", "Your saved foods")
                             "search" -> Triple(Icons.Default.Search, "Search foods", "Find any food — online & imported")
                             "custom" -> Triple(Icons.Default.Edit, "Custom food", "Type in your own calories & macros")
                             "exercise" -> Triple(Icons.Default.FitnessCenter, "Exercise", "Calories burned")

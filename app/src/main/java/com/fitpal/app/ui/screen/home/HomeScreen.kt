@@ -115,6 +115,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -177,6 +179,8 @@ fun HomeScreen(
     onOpenTrail: () -> Unit = {},
     /** Open the Analytics tab (the streak's target while the Trail is off). */
     onOpenAnalytics: () -> Unit = {},
+    /** A planned meal's recipe (docs/redesign/10). */
+    onOpenPlannedMeal: (Long) -> Unit = {},
     onLogExercise: () -> Unit = {},
     onExerciseClick: (Long) -> Unit = {},
     onOpenWater: (String) -> Unit = {},
@@ -201,7 +205,11 @@ fun HomeScreen(
     val dailyStreak by viewModel.dailyStreak.collectAsStateWithLifecycle()
     val trailPending by viewModel.trailPending.collectAsStateWithLifecycle()
     val trailOn by viewModel.trailEnabled.collectAsStateWithLifecycle()
+    val coachOn by viewModel.coachEnabled.collectAsStateWithLifecycle()
     val suggestion by viewModel.suggestion.collectAsStateWithLifecycle()
+    val plannedMeals by viewModel.plannedMeals.collectAsStateWithLifecycle()
+    var plannedAction by remember { mutableStateOf<com.fitpal.app.data.local.entity.PlannedMealEntity?>(null) }
+    var movingPlanned by remember { mutableStateOf<com.fitpal.app.ui.screen.coach.PlannedItem?>(null) }
     var suggestionSetup by remember { mutableStateOf<com.fitpal.app.domain.model.Feature?>(null) }
     val exerciseCalories by viewModel.exerciseCalories.collectAsStateWithLifecycle()
     val exerciseEntries by viewModel.exerciseEntries.collectAsStateWithLifecycle()
@@ -376,6 +384,7 @@ fun HomeScreen(
         when {
             key == "fasting" -> fastingSchedule.enabled
             key == "caffeine" -> caffeineView != null
+            key == "ai_review" -> coachOn
             key.startsWith("limit_") -> key in trackers
             else -> true
         }
@@ -651,6 +660,9 @@ fun HomeScreen(
                                     MealCategorySection(
                                         section = section,
                                         compact = compactEmptyMeals,
+                                        planned = plannedMeals[section.type].orEmpty(),
+                                        onPlannedClick = onOpenPlannedMeal,
+                                        onPlannedLongClick = { plannedAction = it },
                                         onAdd = { viewModel.startAddTo(section.type); onAddFood() },
                                         onItemClick = { onEntryClick(it) },
                                         onItemLongClick = { logged -> editingItem = logged; editingType = section.type },
@@ -759,6 +771,32 @@ fun HomeScreen(
             onChangeMealType = { type -> viewModel.setItemMealType(item, type); editingItem = null },
             onDismiss = { editingItem = null }
         )
+    }
+
+    // Long-press on a planned meal: move it, or take it off the day (it stays a saved idea).
+    plannedAction?.let { p ->
+        com.fitpal.app.ui.component.TrackerSheet(title = p.name, onDismiss = { plannedAction = null }) {
+            com.fitpal.app.ui.component.GlassButton(
+                "Move to another day or meal",
+                onClick = {
+                    plannedAction = null
+                    com.fitpal.app.data.local.MealJson.decodeRecipe(p.recipeJson)?.let { movingPlanned = com.fitpal.app.ui.screen.coach.PlannedItem(p, it) }
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(Modifier.height(8.dp))
+            com.fitpal.app.ui.component.GlassButton(
+                "Remove from the day",
+                onClick = { viewModel.unschedulePlanned(p.id); plannedAction = null },
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
+    movingPlanned?.let { item ->
+        com.fitpal.app.ui.screen.coach.ScheduleSheet(item, onDismiss = { movingPlanned = null }) { date, type ->
+            viewModel.movePlanned(item.entity.id, date, type)
+            movingPlanned = null
+        }
     }
 
     suggestionSetup?.let { feature ->
@@ -1178,11 +1216,15 @@ private fun MealCategorySection(
     onItemClick: (Long) -> Unit,
     onItemLongClick: (MealLogItemEntity) -> Unit,
     onGroupClick: (Long) -> Unit,
-    compact: Boolean = false
+    compact: Boolean = false,
+    /** The planner's meals for this slot — faded, under the logged ones, never counted. */
+    planned: List<com.fitpal.app.data.local.entity.PlannedMealEntity> = emptyList(),
+    onPlannedClick: (Long) -> Unit = {},
+    onPlannedLongClick: (com.fitpal.app.data.local.entity.PlannedMealEntity) -> Unit = {}
 ) {
     val accent = MealAccent
     // Compact mode: an empty meal shrinks to a one-line "add" row instead of a full panel.
-    if (compact && section.items.isEmpty()) {
+    if (compact && section.items.isEmpty() && planned.isEmpty()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1230,7 +1272,7 @@ private fun MealCategorySection(
                 }
             }
         }
-        if (section.items.isEmpty()) {
+        if (section.items.isEmpty() && planned.isEmpty()) {
             Text(
                 text = "Nothing yet",
                 style = MaterialTheme.typography.bodySmall,
@@ -1260,6 +1302,43 @@ private fun MealCategorySection(
                 }
             }
         }
+        planned.forEach { p -> PlannedMealRow(p, onClick = { onPlannedClick(p.id) }, onLongClick = { onPlannedLongClick(p) }) }
+    }
+}
+
+/**
+ * A planned meal on its day (docs/redesign/10): a dashed outline, faded, "Planned" — or "Not logged"
+ * once its day has passed. Tap opens the recipe (to adjust and log); long-press moves or removes it.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun PlannedMealRow(meal: com.fitpal.app.data.local.entity.PlannedMealEntity, onClick: () -> Unit, onLongClick: () -> Unit) {
+    val past = meal.date?.let { runCatching { LocalDate.parse(it) }.getOrNull() }?.isBefore(LocalDate.now()) == true
+    val outline = com.fitpal.app.ui.theme.GlassBorder
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .drawBehind {
+                drawRoundRect(
+                    outline,
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(16.dp.toPx()),
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(
+                        width = 1.5.dp.toPx(),
+                        pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 8f))
+                    )
+                )
+            }
+            .padding(horizontal = 14.dp, vertical = 12.dp)
+            .graphicsLayer { alpha = 0.5f },
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(if (past) "Not logged" else "Planned", style = MaterialTheme.typography.labelSmall, color = GoldLight)
+            Text(meal.name, style = MaterialTheme.typography.bodyLarge, color = Cream, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Text("${meal.kcalPerServing.toInt()} kcal", style = MaterialTheme.typography.labelLarge, color = CreamMuted)
     }
 }
 

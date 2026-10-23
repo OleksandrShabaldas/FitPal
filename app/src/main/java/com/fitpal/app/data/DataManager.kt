@@ -36,7 +36,9 @@ class DataManager @Inject constructor(
         "trail_state", "trail_projects", "trail_unlocks", "challenges", "ai_reviews",
         // The coach's memory: your check-in answers and your answers to its end-of-overview questions.
         // (Older backups don't have it — restore skips a table the file doesn't contain.)
-        "context_notes"
+        "context_notes",
+        // The meal planner's ideas and scheduled meals (2.13).
+        "planned_meals"
     )
 
     /** Write all user data as JSON to [uri]. Returns true on success. */
@@ -67,6 +69,11 @@ class DataManager @Inject constructor(
             settings.homeStripBigger.value?.let { root.put("home_strip_bigger", it) }
             root.put("analytics_collapsed", JSONArray(settings.analyticsCollapsed.value.toList()))
             root.put("trail_enabled", settings.trailEnabled.value)
+            // The coach and the meal planner (docs/redesign/10).
+            root.put("coach_enabled", settings.coachEnabled.value)
+            root.put("planner_enabled", settings.plannerEnabled.value)
+            root.put("food_profile", JSONObject(settings.foodProfile.value.toJson()))
+            settings.lastPlanRequest.takeIf { it.isNotBlank() }?.let { root.put("last_plan_request", JSONObject(it)) }
             root.put("dismissed_suggestions", JSONArray(settings.dismissedSuggestions.value.toList()))
             context.contentResolver.openOutputStream(uri)?.use { out ->
                 out.write(root.toString().toByteArray(Charsets.UTF_8))
@@ -121,6 +128,10 @@ class DataManager @Inject constructor(
             root.optJSONObject("nav_config")?.let { settings.setNavConfig(com.fitpal.app.domain.model.NavConfig.fromJson(it.toString())) }
             if (root.has("step_goal")) settings.setStepGoalManual(root.optInt("step_goal", 0))
             if (root.has("trail_enabled")) settings.setTrailEnabled(root.optBoolean("trail_enabled", true))
+            if (root.has("coach_enabled")) settings.setCoachEnabled(root.optBoolean("coach_enabled", true))
+            if (root.has("planner_enabled")) settings.setPlannerEnabled(root.optBoolean("planner_enabled", true))
+            root.optJSONObject("food_profile")?.let { settings.setFoodProfile(com.fitpal.app.domain.model.FoodProfile.fromJson(it.toString())) }
+            root.optJSONObject("last_plan_request")?.let { settings.lastPlanRequest = it.toString() }
             root.optJSONArray("dismissed_suggestions")?.let { arr ->
                 settings.setDismissedSuggestions((0 until arr.length()).mapNotNull { arr.optString(it).takeIf { s -> s.isNotBlank() } }.toSet())
             }

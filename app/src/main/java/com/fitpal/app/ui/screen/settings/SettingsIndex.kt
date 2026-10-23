@@ -106,6 +106,8 @@ val SETTINGS_SEARCH_INDEX = listOf(
     SettingsSearchEntry("Your profile", "profile", "profile", "sex age height weight current weight fitness goal lose gain maintain muscle"),
     SettingsSearchEntry("Daily calorie goal", "profile", "calorie_goal", "calorie target override budget kcal limit"),
     SettingsSearchEntry("Macro targets", "profile", "macros", "protein fat carbs carbohydrates fibre fiber target grams"),
+    SettingsSearchEntry("Your food profile", "profile", "food-profile", "food profile allergies allergy intolerance diet vegetarian vegan pescatarian keto halal kosher cooking skill kitchen cuisines budget won't eat love meal planner"),
+    SettingsSearchEntry("AI coach and meal planner", "features", "features", "coach meal planner recipes plan week day turn on off reviews overview"),
     SettingsSearchEntry("Your day", "profile", "your_day", "wake up waking bedtime bed time sleep morning night day starts ends pace"),
     SettingsSearchEntry("About your situation", "profile", "situation", "personal context limitations allergies vegetarian vegan halal budget parents school work coach ai overview"),
     // Logging & meal times

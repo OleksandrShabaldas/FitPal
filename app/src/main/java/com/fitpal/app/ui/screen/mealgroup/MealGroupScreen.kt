@@ -1,5 +1,13 @@
 package com.fitpal.app.ui.screen.mealgroup
 
+import androidx.compose.foundation.layout.padding
+
+import com.fitpal.app.ui.theme.CreamMuted
+
+import com.fitpal.app.ui.theme.GoldLight
+
+import androidx.compose.material.icons.filled.RestaurantMenu
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -57,6 +65,7 @@ import java.time.LocalDate
 fun MealGroupScreen(
     onBack: () -> Unit,
     onDishClick: (Long) -> Unit,
+    onOpenRecipe: (Long) -> Unit = {},
     viewModel: MealGroupViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -211,6 +220,7 @@ fun MealGroupScreen(
                                 }
                             }
                         }
+                        state.plannedMealId?.let { pid -> item { ViewRecipeRow { onOpenRecipe(pid) } } }
                         state.coachingTip?.let { tip ->
                             item { CoachingTipCard(tip) }
                         }
@@ -249,3 +259,17 @@ private fun MealGroupDish.toMealItemContent(): MealItemContent = MealItemContent
     servings = 1,
     ingredients = ingredients
 )
+
+/** "View recipe ›" on a meal logged from the planner (docs/redesign/10). */
+@androidx.compose.runtime.Composable
+internal fun ViewRecipeRow(onClick: () -> Unit) {
+    androidx.compose.foundation.layout.Row(
+        modifier = Modifier.fillMaxWidth().glass().clickable(onClick = onClick).padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(Icons.Default.RestaurantMenu, contentDescription = null, tint = GoldLight, modifier = Modifier.size(18.dp))
+        androidx.compose.foundation.layout.Spacer(Modifier.width(10.dp))
+        Text("View recipe", style = MaterialTheme.typography.bodyLarge, color = Cream, modifier = Modifier.weight(1f))
+        Text("›", style = MaterialTheme.typography.titleLarge, color = CreamMuted)
+    }
+}

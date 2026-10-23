@@ -210,6 +210,21 @@ class LlmIngredientEngine(
         }
     }
 
+    /** The meal planner on the phone: one day's recipes as JSON (simpler than online's, and slower). */
+    suspend fun generatePlan(prompt: String): String {
+        ensureLoaded()
+        val engine = llm ?: throw IllegalStateException("Model not loaded")
+        return mutex.withLock {
+            withContext(Dispatchers.Default) {
+                val options = LlmInferenceSessionOptions.builder().setTopK(40).setTemperature(0.6f).build()
+                LlmInferenceSession.createFromOptions(engine, options).use { session ->
+                    session.addQueryChunk(prompt)
+                    session.generateResponse()
+                }
+            }
+        }
+    }
+
     override fun close() {
         llm?.close()
         llm = null

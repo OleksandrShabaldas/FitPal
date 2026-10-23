@@ -112,6 +112,7 @@ import kotlinx.coroutines.withContext
 fun EntryDetailScreen(
     onBack: () -> Unit,
     onDeleted: () -> Unit,
+    onOpenRecipe: (Long) -> Unit = {},
     viewModel: EntryDetailViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -291,6 +292,7 @@ fun EntryDetailScreen(
                             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 24.dp),
                             verticalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
+                            state.plannedMealId?.let { pid -> item { com.fitpal.app.ui.screen.mealgroup.ViewRecipeRow { onOpenRecipe(pid) } } }
                             if (!item.photoPath.isNullOrBlank()) {
                                 item {
                                     AsyncImage(

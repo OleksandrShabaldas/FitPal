@@ -112,6 +112,8 @@ fun SettingsCategoryScreen(
     focus: String? = null,
     /** Open another settings category at a section (category id, section anchor). */
     onOpenCategory: (String, String?) -> Unit = { _, _ -> },
+    /** "Your food profile" — the meal planner's permanent form (docs/redesign/10). */
+    onOpenFoodProfile: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     GradientBackdrop(theme = BackdropTheme.TODAY) {
@@ -131,6 +133,7 @@ fun SettingsCategoryScreen(
                     SettingsAnchor("calorie_goal", focus) { CalorieGoalSection(viewModel) }
                     SettingsAnchor("macros", focus) { MacroTargetsSection(viewModel) }
                     SettingsAnchor("situation", focus) { PersonalContextSection(viewModel) }
+                    SettingsAnchor("food-profile", focus) { FoodProfileLink(viewModel, onOpenFoodProfile) }
                 }
                 "presets" -> {
                     SettingsAnchor("presets", focus) { PresetsSection(viewModel) }
@@ -866,6 +869,25 @@ private fun PersonalizeSection(onCustomizeScreen: (String) -> Unit) {
                 }
             }
         }
+    }
+}
+
+/** Profile & goals → "Your food profile ›" — what the meal planner cooks around. */
+@Composable
+private fun FoodProfileLink(viewModel: SettingsViewModel, onOpen: () -> Unit) {
+    val profile by viewModel.foodProfile.collectAsStateWithLifecycle()
+    Row(
+        modifier = Modifier.fillMaxWidth().glass().clickable(onClick = onOpen).padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text("Your food profile", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(
+                "Diet, allergies, what you love, cooking skill — the meal planner cooks around it. ${profile.summary}",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

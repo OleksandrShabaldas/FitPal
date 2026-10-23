@@ -210,7 +210,7 @@ object ScreenWidgets {
             )
         ),
         // Analytics (docs/redesign/07): the summary tiles (off unless picked) above four fixed
-        // sections; cards reorder within their section. The AI reviews stay last until the Coach tab.
+        // sections; cards reorder within their section. (The AI reviews moved to the Coach tab, 2.13.)
         ANALYTICS to listOf(
             WidgetDef("tiles", "Summary tiles", defaultOn = false),
             WidgetDef("balance", "Calorie balance", section = SECTION_ENERGY),
@@ -226,8 +226,7 @@ object ScreenWidgets {
             WidgetDef("heatmap", "Logged days", section = SECTION_HABITS),
             WidgetDef("fasting", "Fasting", section = SECTION_HABITS),
             WidgetDef("caffeine", "Caffeine", section = SECTION_HABITS),
-            WidgetDef("limits", "Food limits", section = SECTION_HABITS),
-            WidgetDef("ai", "AI reviews")
+            WidgetDef("limits", "Food limits", section = SECTION_HABITS)
         ),
         ADD_FOOD to listOf(
             WidgetDef("usuals", "Your usuals"),
@@ -235,7 +234,7 @@ object ScreenWidgets {
             WidgetDef("gallery", "Choose photo", sizes = listOf(CardSize.S, CardSize.M)),
             WidgetDef("describe", "Describe to AI", sizes = listOf(CardSize.S, CardSize.M)),
             WidgetDef("barcode", "Scan barcode", sizes = listOf(CardSize.S, CardSize.M)),
-            WidgetDef("saved", "Saved foods", sizes = listOf(CardSize.M, CardSize.S)),
+            WidgetDef("saved", "Collection", sizes = listOf(CardSize.M, CardSize.S)),
             WidgetDef("search", "Search foods", sizes = listOf(CardSize.M, CardSize.S)),
             WidgetDef("custom", "Custom food", sizes = listOf(CardSize.M, CardSize.S)),
             WidgetDef("exercise", "Exercise", sizes = listOf(CardSize.S, CardSize.M)),

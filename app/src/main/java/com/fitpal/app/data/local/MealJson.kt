@@ -22,6 +22,43 @@ import org.json.JSONObject
  */
 object MealJson {
 
+    // ---------------- Planned recipes (docs/redesign/10) ----------------
+
+    /** A planned recipe as stored in `planned_meals.recipeJson`: ingredients via [encodeIngredients]. */
+    fun encodeRecipe(r: com.fitpal.app.domain.model.PlannedRecipe): String = JSONObject()
+        .put("name", r.name).put("mealType", r.mealType).put("dayOffset", r.dayOffset)
+        .put("cuisine", r.cuisine).put("timeMinutes", r.timeMinutes).put("servings", r.servings)
+        .put("difficulty", r.difficulty).put("whyItFits", r.whyItFits)
+        .put("ingredients", JSONArray(encodeIngredients(r.ingredients.map { it.ingredient })))
+        .put("have", JSONArray(r.ingredients.map { it.have }))
+        .put("steps", JSONArray(r.steps)).put("tips", JSONArray(r.tips))
+        .put("allergens", JSONArray(r.allergens.toList()))
+        .toString()
+
+    fun decodeRecipe(json: String?): com.fitpal.app.domain.model.PlannedRecipe? {
+        if (json.isNullOrBlank()) return null
+        return runCatching {
+            val o = JSONObject(json)
+            fun strings(key: String) = o.optJSONArray(key)?.let { a -> (0 until a.length()).map { a.optString(it) }.filter { it.isNotBlank() } }.orEmpty()
+            val ingredients = decodeIngredients(o.optJSONArray("ingredients")?.toString())
+            val have = o.optJSONArray("have")
+            com.fitpal.app.domain.model.PlannedRecipe(
+                name = o.optString("name"),
+                mealType = o.optString("mealType"),
+                dayOffset = o.optInt("dayOffset"),
+                cuisine = o.optString("cuisine"),
+                timeMinutes = o.optInt("timeMinutes"),
+                servings = o.optInt("servings", 1),
+                difficulty = o.optString("difficulty"),
+                whyItFits = o.optString("whyItFits"),
+                ingredients = ingredients.mapIndexed { i, ing -> com.fitpal.app.domain.model.RecipeIngredient(ing, have?.optBoolean(i, false) ?: false) },
+                steps = strings("steps"),
+                tips = strings("tips"),
+                allergens = strings("allergens").toSet()
+            )
+        }.getOrNull()
+    }
+
     // ---------------- Ingredients ----------------
 
     fun encodeIngredients(ingredients: List<Ingredient>): String {

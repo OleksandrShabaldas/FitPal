@@ -17,11 +17,12 @@ class AnalyticsLayoutTest {
     }
 
     @Test fun sectionsKeepTheirOrderWhateverTheSavedOrder() {
-        // An old layout with habits first and the AI reviews in the middle.
+        // An old layout with habits first and the AI reviews (now on the Coach tab) in the middle.
         val saved = listOf("heatmap", "ai", "water", "tiles", "calories", "macros", "balance").map { WidgetSetting(it) }
         val keys = ScreenWidgets.bySection(cards(saved)).map { it.key }
         assertEquals("tiles", keys.first())
-        assertEquals("ai", keys.last())
+        assertFalse("ai" in keys)
+        assertEquals("habits", ScreenWidgets.bySection(cards(saved)).last().def.section)
         // Within Energy the user's order stays: calories before balance.
         assertEquals(listOf("calories", "balance", "maintenance"), keys.filter { it in setOf("calories", "balance", "maintenance") })
         val sectionOrder = ScreenWidgets.bySection(cards(saved)).mapNotNull { it.def.section }.distinct()

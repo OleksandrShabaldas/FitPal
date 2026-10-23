@@ -519,6 +519,77 @@ class SettingsRepository @Inject constructor(
         _navConfig.value = config
     }
 
+    // --- The coach and the meal planner (docs/redesign/10) ---
+
+    private val _coachEnabled = MutableStateFlow(prefs.getBoolean(KEY_COACH_ENABLED, true))
+    /** The AI coach: the Coach tab, Home's AI overview card and the overview notifications. */
+    val coachEnabled: StateFlow<Boolean> = _coachEnabled
+
+    fun setCoachEnabled(on: Boolean) {
+        prefs.edit().putBoolean(KEY_COACH_ENABLED, on).apply()
+        _coachEnabled.value = on
+        // The planner lives inside the coach.
+        if (!on) setPlannerEnabled(false)
+    }
+
+    private val _plannerEnabled = MutableStateFlow(prefs.getBoolean(KEY_PLANNER_ENABLED, true))
+    /** The meal planner (inside Coach), and planned meals on Home. Needs the coach. */
+    val plannerEnabled: StateFlow<Boolean> = _plannerEnabled
+
+    fun setPlannerEnabled(on: Boolean) {
+        prefs.edit().putBoolean(KEY_PLANNER_ENABLED, on).apply()
+        _plannerEnabled.value = on
+    }
+
+    private val _foodProfile = MutableStateFlow(com.fitpal.app.domain.model.FoodProfile.fromJson(prefs.getString(KEY_FOOD_PROFILE, null)))
+    /** "Your food profile" — the planner's permanent form. */
+    val foodProfile: StateFlow<com.fitpal.app.domain.model.FoodProfile> = _foodProfile
+
+    fun setFoodProfile(profile: com.fitpal.app.domain.model.FoodProfile) {
+        prefs.edit().putString(KEY_FOOD_PROFILE, profile.toJson()).apply()
+        _foodProfile.value = profile
+    }
+
+    private val _seenReviews = MutableStateFlow(prefs.getStringSet(KEY_SEEN_REVIEWS, emptySet())?.toSet() ?: emptySet())
+    /** Reviews opened since they were written, as "<period>|<key>|<generatedAt>" — drives the Coach's "ready" dot. */
+    val seenReviews: StateFlow<Set<String>> = _seenReviews
+
+    fun markReviewSeen(id: String) {
+        // Only the latest few matter; keep the set small.
+        val next = (_seenReviews.value + id).toList().takeLast(60).toSet()
+        prefs.edit().putStringSet(KEY_SEEN_REVIEWS, next).apply()
+        _seenReviews.value = next
+    }
+
+    /** The last plan request (JSON), to prefill the next one. */
+    var lastPlanRequest: String
+        get() = prefs.getString(KEY_LAST_PLAN_REQUEST, "") ?: ""
+        set(v) { prefs.edit().putString(KEY_LAST_PLAN_REQUEST, v).apply() }
+
+    private val _shoppingChecked = MutableStateFlow(prefs.getStringSet(KEY_SHOPPING_CHECKED, emptySet())?.toSet() ?: emptySet())
+    /** Ticked shopping-list lines, as "<requestId>|<item name>". */
+    val shoppingChecked: StateFlow<Set<String>> = _shoppingChecked
+
+    fun setShoppingChecked(keys: Set<String>) {
+        prefs.edit().putStringSet(KEY_SHOPPING_CHECKED, keys).apply()
+        _shoppingChecked.value = keys
+    }
+
+    /**
+     * Once per install: the Coach tab takes Collection's place in the bottom bar (docs/redesign/10).
+     * Collection stays available as a tab in the bar editor and through + → Collection.
+     */
+    fun migrateNavToCoach() {
+        if (prefs.getBoolean(KEY_NAV_COACH_MIGRATED, false)) return
+        val config = _navConfig.value
+        val tabs = config.tabs
+        if (com.fitpal.app.domain.model.NavTab.COACH !in tabs) {
+            val i = tabs.indexOf(com.fitpal.app.domain.model.NavTab.COLLECTION)
+            if (i >= 0) setNavConfig(config.copy(tabs = tabs.toMutableList().apply { set(i, com.fitpal.app.domain.model.NavTab.COACH) }))
+        }
+        prefs.edit().putBoolean(KEY_NAV_COACH_MIGRATED, true).apply()
+    }
+
     // --- Optional features (docs/redesign/06) ---
 
     private val _trailEnabled = MutableStateFlow(prefs.getBoolean(KEY_TRAIL_ENABLED, true))
@@ -1156,6 +1227,13 @@ class SettingsRepository @Inject constructor(
         private const val KEY_ANALYTICS_TILES_MIGRATED = "analytics_tiles_off_migrated"
         private const val KEY_ANALYTICS_COLLAPSED = "analytics_collapsed"
         private const val KEY_TRAIL_ENABLED = "trail_enabled"
+        private const val KEY_COACH_ENABLED = "coach_enabled"
+        private const val KEY_PLANNER_ENABLED = "planner_enabled"
+        private const val KEY_FOOD_PROFILE = "food_profile"
+        private const val KEY_LAST_PLAN_REQUEST = "last_plan_request"
+        private const val KEY_SHOPPING_CHECKED = "shopping_checked"
+        private const val KEY_NAV_COACH_MIGRATED = "nav_coach_migrated"
+        private const val KEY_SEEN_REVIEWS = "seen_reviews"
         private const val KEY_DISMISSED_SUGGESTIONS = "dismissed_suggestions"
         private const val KEY_SUGGESTION_SHOWN = "suggestion_shown_on"
         private const val KEY_SUGGESTION_HIDDEN = "suggestion_hidden_on"

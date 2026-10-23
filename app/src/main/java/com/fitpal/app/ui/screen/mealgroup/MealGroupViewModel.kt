@@ -36,6 +36,8 @@ data class MealGroupUiState(
     val eatenAt: com.fitpal.app.domain.model.EatenAt = com.fitpal.app.domain.model.EatenAt(),
     /** A meal-aware coaching note the background worker may attach; null when there's nothing useful. */
     val coachingTip: CoachingTip? = null,
+    /** The planner's meal this was logged from, if any — the screen offers its recipe. */
+    val plannedMealId: Long? = null,
     /** The day this meal is logged on — so "copy to date" can center on it. */
     val date: LocalDate = LocalDate.now(),
     val isLoading: Boolean = true,
@@ -97,6 +99,7 @@ class MealGroupViewModel @Inject constructor(
                     it.copy(
                         context = meal?.context,
                         coachingTip = meal?.let { m -> mealRepository.coachingTipFor(m) },
+                        plannedMealId = meal?.plannedMealId,
                         eatenAt = meal?.let { m -> com.fitpal.app.domain.model.eatenAtOf(m.timestamp, m.timeSource) }
                             ?: it.eatenAt
                     )

@@ -81,9 +81,15 @@ class FitPalActivity : ComponentActivity() {
                 ) {
                     val navConfig by settingsRepository.navConfig.collectAsStateWithLifecycle()
                     val trailOn by settingsRepository.trailEnabled.collectAsStateWithLifecycle()
+                    val coachOn by settingsRepository.coachEnabled.collectAsStateWithLifecycle()
                     FitPalNavHost(
-                        // The Trail's tab goes with the Trail (Settings → Features), and comes back with it.
-                        navConfig = if (trailOn) navConfig else navConfig.copy(tabs = navConfig.tabs - com.fitpal.app.domain.model.NavTab.TRAIL),
+                        // A feature's tab goes with the feature (Settings → Features), and comes back with it.
+                        navConfig = navConfig.copy(
+                            tabs = navConfig.tabs.filter {
+                                (it != com.fitpal.app.domain.model.NavTab.TRAIL || trailOn) &&
+                                    (it != com.fitpal.app.domain.model.NavTab.COACH || coachOn)
+                            }
+                        ),
                         pendingRoute = pendingRoute,
                         onPendingRouteHandled = { pendingRoute = null },
                         startOnboarding = startOnboarding

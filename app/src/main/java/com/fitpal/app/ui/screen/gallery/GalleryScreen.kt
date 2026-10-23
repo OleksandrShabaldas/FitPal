@@ -77,7 +77,7 @@ fun GalleryScreen(
 
     GradientBackdrop(theme = BackdropTheme.TODAY) {
         Column(modifier = Modifier.fillMaxSize()) {
-            GlassTopBar(title = "Saved foods", onBack = onBack)
+            GlassTopBar(title = "Collection", onBack = onBack)
 
             OutlinedTextField(
                 value = searchQuery,

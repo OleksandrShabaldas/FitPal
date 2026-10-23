@@ -51,5 +51,7 @@ data class MealLogEntity(
      * pass. See [com.fitpal.app.domain.model.adherenceByDay].
      */
     @ColumnInfo(defaultValue = "0")
-    val loggedDuringFast: Boolean = false
+    val loggedDuringFast: Boolean = false,
+    /** The planner's meal this was logged from (docs/redesign/10), so its screen can show the recipe. */
+    val plannedMealId: Long? = null
 )

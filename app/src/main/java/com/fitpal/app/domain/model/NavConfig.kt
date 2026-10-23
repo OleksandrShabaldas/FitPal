@@ -5,7 +5,7 @@ import org.json.JSONObject
 
 /** A main destination that can sit in the bottom bar. */
 enum class NavTab(val label: String) {
-    HOME("Home"), ANALYTICS("Analytics"), COLLECTION("Collection"), TRAIL("Trail"), SETTINGS("Settings")
+    HOME("Home"), ANALYTICS("Analytics"), COACH("Coach"), COLLECTION("Collection"), TRAIL("Trail"), SETTINGS("Settings")
 }
 
 /** What the big "+" in the middle of the bar does (a long press always opens the full menu). */
@@ -49,7 +49,7 @@ data class NavConfig(
 
     companion object {
         const val MAX_TABS = 4
-        val DEFAULT_TABS = listOf(NavTab.HOME, NavTab.ANALYTICS, NavTab.COLLECTION, NavTab.SETTINGS)
+        val DEFAULT_TABS = listOf(NavTab.HOME, NavTab.ANALYTICS, NavTab.COACH, NavTab.SETTINGS)
 
         fun fromJson(json: String?): NavConfig {
             if (json.isNullOrBlank()) return NavConfig()

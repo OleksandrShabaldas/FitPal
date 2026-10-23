@@ -72,7 +72,9 @@ class ReminderManager @Inject constructor(
             val pi = kindPendingIntent(context, kind)
             am.cancel(pi)
             val state = settings.reminderStateFor(kind)
-            if (state.enabled && state.days.isNotEmpty()) {
+            // The overviews are the coach's: off with it (Settings → Features).
+            val allowed = !kind.isOverview || settings.coachEnabled.value
+            if (allowed && state.enabled && state.days.isNotEmpty()) {
                 val at = if (kind.weekly) nextWeekly(state.minutes, Calendar.SUNDAY) else nextOnDays(state.minutes, state.days)
                 scheduleOneShot(am, at, pi)
             }

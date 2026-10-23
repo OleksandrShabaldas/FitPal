@@ -57,7 +57,9 @@ data class MealLogMeta(
     /** "Log anyway" during a fast — see [MealLogEntity.loggedDuringFast]. */
     val loggedDuringFast: Boolean = false,
     /** The whole meal's own name, when the user gave it one before logging ([MealLogEntity.name]). */
-    val name: String? = null
+    val name: String? = null,
+    /** The planner's meal this log comes from ([MealLogEntity.plannedMealId]). */
+    val plannedMealId: Long? = null
 )
 
 /**
@@ -412,7 +414,8 @@ class MealRepository @Inject constructor(
         timestamp = meta.eatenAt ?: defaultTimestamp(logDate),
         timeSource = if (meta.eatenAt == null) null else meta.timeSource.dbValue,
         loggedDuringFast = meta.loggedDuringFast,
-        name = meta.name?.trim()?.takeIf { it.isNotEmpty() }
+        name = meta.name?.trim()?.takeIf { it.isNotEmpty() },
+        plannedMealId = meta.plannedMealId
     )
 
     // ---- Filling database foods' gaps (fibre, vitamins, caffeine…) — see NutrientFiller ----

@@ -66,7 +66,8 @@ object DatabaseModule {
                 FitPalDatabase.MIGRATION_29_30,
                 FitPalDatabase.MIGRATION_30_31,
                 FitPalDatabase.MIGRATION_31_32,
-                FitPalDatabase.MIGRATION_32_33
+                FitPalDatabase.MIGRATION_32_33,
+                FitPalDatabase.MIGRATION_33_34
             )
             .build()
         // TODO: When USDA database is ready, use .createFromAsset("usda_foods.db")
@@ -75,6 +76,9 @@ object DatabaseModule {
 
     @Provides
     fun provideAiReviewDao(db: FitPalDatabase): AiReviewDao = db.aiReviewDao()
+
+    @Provides
+    fun providePlannedMealDao(db: FitPalDatabase): com.fitpal.app.data.local.dao.PlannedMealDao = db.plannedMealDao()
 
     @Provides
     fun provideChallengeDao(db: FitPalDatabase): ChallengeDao = db.challengeDao()
