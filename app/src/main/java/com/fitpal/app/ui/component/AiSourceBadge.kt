@@ -67,10 +67,7 @@ fun AiSourceBadge(source: AiSource?, modifier: Modifier = Modifier, reason: Stri
     val expandable = hasReason || source.model != null
     var expanded by remember { mutableStateOf(false) }
 
-    val label = when {
-        source.isOffline -> "On-device"
-        else -> AiSource.slotOf(source.model, slots)?.let { AiSource.slotLabel(it) } ?: source.modelLabel
-    }
+    val label = aiSourceLabel(source, slots)
 
     Column(modifier = modifier) {
         Row(
@@ -111,18 +108,20 @@ fun AiSourceBadge(source: AiSource?, modifier: Modifier = Modifier, reason: Stri
             Spacer(Modifier.height(4.dp))
             // The engine in plain words plus the raw model id — the id is exactly what the user
             // typed in Settings (or would type to change it).
-            Text(
-                text = source.engineLabel + (source.model?.let { " · $it" } ?: ""),
-                style = MaterialTheme.typography.labelSmall,
-                color = CreamMuted
-            )
-            if (hasReason) {
-                Text(
-                    text = "Online AI unavailable — $reason",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = CreamMuted
-                )
+            aiSourceDetail(source, reason).forEach { line ->
+                Text(text = line, style = MaterialTheme.typography.labelSmall, color = CreamMuted)
             }
         }
     }
+}
+
+/** Who answered, in two words: the slot ("Main model", "Fallback 2"), or "On-device". */
+fun aiSourceLabel(source: AiSource, slots: List<String>): String =
+    if (source.isOffline) "On-device"
+    else AiSource.slotOf(source.model, slots)?.let { AiSource.slotLabel(it) } ?: source.modelLabel
+
+/** The engine and the exact model id, and why it ran on the phone when online couldn't. */
+fun aiSourceDetail(source: AiSource, reason: String?): List<String> = buildList {
+    add(source.engineLabel + (source.model?.let { " · $it" } ?: ""))
+    if (source.isOffline && !reason.isNullOrBlank()) add("Online AI unavailable — $reason")
 }

@@ -295,6 +295,17 @@ class AnalysisViewModel @Inject constructor(
         _uiState.update { it.copy(onlineFailedReason = null, isAnalyzing = false, cancelled = true) }
     }
 
+    /**
+     * Cancel while the AI works (docs/redesign/16): the request stops and the screen goes back to
+     * before Analyse, with the photo, note and details as they were — ready to try again.
+     */
+    fun stopAnalysis() {
+        jobManager.discard()
+        _uiState.update {
+            it.copy(isAnalyzing = false, onlineFailedReason = null, error = null, progressMessage = "", readyToAnalyze = true)
+        }
+    }
+
     /** Hand the photo to the background service; it survives leaving the screen/app. */
     fun startAnalysis() {
         val uri = sourceImageUri ?: return
@@ -676,6 +687,16 @@ class AnalysisViewModel @Inject constructor(
             val foods = state.detectedFoods.toMutableList()
             val food = foods.getOrNull(foodIndex) ?: return@update state
             foods[foodIndex] = food.asDrink(drink)
+            state.copy(detectedFoods = foods)
+        }
+    }
+
+    /** The cup on one ingredient (docs/redesign/16): that part is a drink (ml, counts as drinks) or food. */
+    fun setIngredientDrink(foodIndex: Int, ingredientIndex: Int, drink: Boolean) {
+        _uiState.update { state ->
+            val foods = state.detectedFoods.toMutableList()
+            val food = foods.getOrNull(foodIndex) ?: return@update state
+            foods[foodIndex] = food.withIngredientDrink(ingredientIndex, drink)
             state.copy(detectedFoods = foods)
         }
     }

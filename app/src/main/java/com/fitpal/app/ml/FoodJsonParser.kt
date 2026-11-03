@@ -471,11 +471,14 @@ object FoodJsonParser {
         )
     }
 
+    // A drink's parts are drinks and a food's are food (docs/redesign/16: the flag lives on each
+    // ingredient, and a dish is a drink when all of them are); a drink part with no water gets an estimate.
     private fun withDrinkWater(ingredients: List<Ingredient>, drink: Boolean): List<Ingredient> =
-        if (!drink) ingredients
+        if (!drink) ingredients.map { it.copy(isDrink = false) }
         else ingredients.map { ing ->
-            if (ing.waterMlPer100g > 0f) ing
+            if (ing.waterMlPer100g > 0f) ing.copy(isDrink = true)
             else ing.copy(
+                isDrink = true,
                 waterMlPer100g = com.fitpal.app.domain.Drinks.estimateWaterPer100(ing.carbsPer100g, ing.proteinPer100g, ing.fatPer100g)
             )
         }

@@ -111,6 +111,8 @@ data class WaterTimelineRow(
     val mealLogId: Long,
     val name: String,
     val waterMl: Float,
+    /** The part of [waterMl] from drink ingredients; the rest came from food. */
+    val drinkWaterMl: Float,
     val isDrink: Boolean,
     val calories: Float,
     val mealType: String,
@@ -376,8 +378,8 @@ interface MealLogDao {
     suspend fun updateInsights(id: Long, insightsJson: String?, generatedAt: Long)
 
     /** Food / Drink switch on a logged item: the flag plus the water it now counts toward the day. */
-    @Query("UPDATE meal_log_items SET isDrink = :isDrink, waterMl = :waterMl WHERE id = :id")
-    suspend fun updateItemDrink(id: Long, isDrink: Boolean, waterMl: Float)
+    @Query("UPDATE meal_log_items SET isDrink = :isDrink, waterMl = :waterMl, drinkWaterMl = :drinkWaterMl WHERE id = :id")
+    suspend fun updateItemDrink(id: Long, isDrink: Boolean, waterMl: Float, drinkWaterMl: Float)
 
     /** Rename a logged item — the user can, and "Edit with AI" can re-identify the dish. */
     @Query("UPDATE meal_log_items SET name = :name WHERE id = :id")
@@ -419,6 +421,7 @@ interface MealLogDao {
         """UPDATE meal_log_items SET ingredientsJson = :ingredientsJson,
            grams = :grams, calories = :calories, protein = :protein, fat = :fat,
            carbs = :carbs, fiber = :fiber, waterMl = :waterMl,
+           isDrink = :isDrink, drinkWaterMl = :drinkWaterMl,
            vitaminA = :vitaminA, vitaminC = :vitaminC, vitaminD = :vitaminD,
            calcium = :calcium, iron = :iron, potassium = :potassium, sodium = :sodium,
            vitaminB12 = :vitaminB12, folate = :folate, vitaminB6 = :vitaminB6,
@@ -436,6 +439,8 @@ interface MealLogDao {
         carbs: Float,
         fiber: Float,
         waterMl: Float,
+        isDrink: Boolean,
+        drinkWaterMl: Float,
         vitaminA: Float,
         vitaminC: Float,
         vitaminD: Float,
@@ -455,7 +460,7 @@ interface MealLogDao {
     @Query(
         """UPDATE meal_log_items SET grams = :grams, calories = :calories,
            protein = :protein, fat = :fat, carbs = :carbs, fiber = :fiber,
-           waterMl = :waterMl,
+           waterMl = :waterMl, drinkWaterMl = :drinkWaterMl,
            vitaminA = :vitaminA, vitaminC = :vitaminC, vitaminD = :vitaminD,
            calcium = :calcium, iron = :iron, potassium = :potassium, sodium = :sodium,
            vitaminB12 = :vitaminB12, folate = :folate, vitaminB6 = :vitaminB6,
@@ -472,6 +477,7 @@ interface MealLogDao {
         carbs: Float,
         fiber: Float,
         waterMl: Float,
+        drinkWaterMl: Float,
         vitaminA: Float,
         vitaminC: Float,
         vitaminD: Float,
@@ -543,7 +549,7 @@ interface MealLogDao {
     /** Every item that added water on [date], newest first, with its meal's eaten time. */
     @Query("""
         SELECT i.id AS itemId, i.mealLogId AS mealLogId, i.name AS name, i.waterMl AS waterMl,
-               i.isDrink AS isDrink, i.calories AS calories, m.mealType AS mealType, m.timestamp AS timestamp
+               i.drinkWaterMl AS drinkWaterMl, i.isDrink AS isDrink, i.calories AS calories, m.mealType AS mealType, m.timestamp AS timestamp
         FROM meal_log_items i
         JOIN meal_logs m ON i.mealLogId = m.id
         WHERE m.date = :date AND i.waterMl > 0
@@ -615,8 +621,8 @@ interface MealLogDao {
     /** Per-day water split into clear drinks vs. water from food — analytics breakdown. */
     @Query("""
         SELECT m.date AS date,
-               COALESCE(SUM(CASE WHEN i.isDrink THEN i.waterMl ELSE 0 END), 0) AS drinkWater,
-               COALESCE(SUM(CASE WHEN i.isDrink THEN 0 ELSE i.waterMl END), 0) AS foodWater
+               COALESCE(SUM(i.drinkWaterMl), 0) AS drinkWater,
+               COALESCE(SUM(i.waterMl - i.drinkWaterMl), 0) AS foodWater
         FROM meal_logs m
         JOIN meal_log_items i ON i.mealLogId = m.id
         WHERE m.date BETWEEN :from AND :to

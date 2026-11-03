@@ -62,6 +62,7 @@ fun rememberFastingGuard(): FastingGuard {
     val backdate = LocalFastingBackdate.current
     val context = LocalContext.current
     val guard = remember(schedule, backdate) { FastingGuard(schedule, backdate) }
+    val timePicker = com.fitpal.app.ui.component.kit.rememberTimePicker()
     guard.promptForDialog?.let { prompt ->
         FastingWarningDialog(
             prompt = prompt,
@@ -72,26 +73,21 @@ fun rememberFastingGuard(): FastingGuard {
             onEatenEarlier = {
                 // Default the picker to the middle of the eating window — always a valid "in window" time.
                 val mid = (schedule.eatStartMin + schedule.eatingLengthMin() / 2).mod(24 * 60)
-                android.app.TimePickerDialog(
-                    context,
-                    { _, h, m ->
-                        val minute = h * 60 + m
-                        if (guard.applyBackdate(minute)) {
-                            Toast.makeText(
-                                context,
-                                "Logged as eaten at ${fastingClockLabel(minute)} — your fast stays kept.",
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        } else {
-                            Toast.makeText(
-                                context,
-                                "That time is still inside your fasting window — pick a time you were allowed to eat.",
-                                Toast.LENGTH_LONG
-                            ).show()
-                        }
-                    },
-                    mid / 60, mid % 60, false
-                ).show()
+                timePicker.open(mid, title = "When did you eat?") { minute ->
+                    if (guard.applyBackdate(minute)) {
+                        Toast.makeText(
+                            context,
+                            "Logged as eaten at ${fastingClockLabel(minute)} — your fast stays kept.",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    } else {
+                        Toast.makeText(
+                            context,
+                            "That time is still inside your fasting window — pick a time you were allowed to eat.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
             }
         )
     }
@@ -249,13 +245,8 @@ fun fastingCountdownLabel(minutes: Int): String {
     }
 }
 
-/** 12-hour clock label for a minute-of-day, matching Settings' own time formatting. */
-fun fastingClockLabel(minutes: Int): String {
-    val mm = minutes.mod(24 * 60)
-    val h = mm / 60
-    val hr12 = ((h + 11) % 12) + 1
-    return "$hr12:${"%02d".format(mm % 60)} ${if (h < 12) "AM" else "PM"}"
-}
+/** Clock label for a minute-of-day, on the user's 12- or 24-hour clock ([com.fitpal.app.domain.ClockFormat]). */
+fun fastingClockLabel(minutes: Int): String = com.fitpal.app.domain.ClockFormat.minuteOfDay(minutes)
 
 /** The same 12-hour label for a clock time. */
 fun clockLabel(time: LocalTime): String = fastingClockLabel(time.hour * 60 + time.minute)

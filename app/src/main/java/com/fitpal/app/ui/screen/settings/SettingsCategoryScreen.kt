@@ -179,6 +179,7 @@ fun SettingsCategoryScreen(
                     SettingsAnchor("background", focus) { AppearanceBackgroundSection(viewModel) }
                     SettingsAnchor("app_icon", focus) { AppIconSection() }
                     SettingsAnchor("look_tuning", focus) { AppearanceTuningSection(viewModel) }
+                    SettingsAnchor("clock", focus) { ClockSection(viewModel) }
                 }
                 "features" -> {
                     SettingsAnchor("features", focus) { FeaturesSection(viewModel, onOpenCategory) }
@@ -1136,12 +1137,10 @@ private fun weekdaySummary(days: Set<java.time.DayOfWeek>, locale: java.util.Loc
 /** Tap-to-pick-a-time row, showing the current time formatted. */
 @Composable
 private fun TimePickRow(label: String, minutes: Int, onPick: (Int) -> Unit) {
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val timePicker = com.fitpal.app.ui.component.kit.rememberTimePicker()
     Row(
         modifier = Modifier.fillMaxWidth().clickable {
-            android.app.TimePickerDialog(
-                context, { _, hh, mm -> onPick(hh * 60 + mm) }, minutes / 60, minutes % 60, false
-            ).show()
+            timePicker.open(minutes, title = label) { m -> onPick(m) }
         }.padding(vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -1151,12 +1150,7 @@ private fun TimePickRow(label: String, minutes: Int, onPick: (Int) -> Unit) {
     }
 }
 
-private fun minutesToLabel(minutes: Int): String {
-    val h = minutes / 60
-    val m = minutes % 60
-    val hr12 = ((h + 11) % 12) + 1
-    return "$hr12:${"%02d".format(m)} ${if (h < 12) "AM" else "PM"}"
-}
+private fun minutesToLabel(minutes: Int): String = com.fitpal.app.domain.ClockFormat.minuteOfDay(minutes)
 
 /** The fast:eat ratio label, e.g. "16:8" or "13:11" (whole hours; one decimal only when needed). */
 private fun fastEatRatio(schedule: com.fitpal.app.domain.model.FastingSchedule): String {

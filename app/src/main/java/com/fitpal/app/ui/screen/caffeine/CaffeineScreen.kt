@@ -419,7 +419,7 @@ private fun Planner(
     onToggleStar: (String) -> Boolean,
     onChange: (CaffeineDose?) -> Unit
 ) {
-    val context = LocalContext.current
+    val timePicker = com.fitpal.app.ui.component.kit.rememberTimePicker()
     var open by remember { mutableStateOf(false) }
     var label by remember { mutableStateOf<String?>(null) }
     var mg by remember { mutableIntStateOf(0) }
@@ -462,7 +462,7 @@ private fun Planner(
                     Row(
                         modifier = Modifier.glassSoft(CircleShape).clickable {
                             val m = atMinute ?: LocalDateTime.now().let { it.hour * 60 + it.minute }
-                            android.app.TimePickerDialog(context, { _, h, min -> atMinute = h * 60 + min }, m / 60, m % 60, false).show()
+                            timePicker.open(m, title = "When would you have it?") { picked -> atMinute = picked }
                         }.padding(horizontal = 12.dp, vertical = 7.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {

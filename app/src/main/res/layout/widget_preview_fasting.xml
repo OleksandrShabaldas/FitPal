@@ -23,7 +23,7 @@
             android:layout_height="wrap_content"
             android:layout_gravity="center_horizontal"
             android:text="Fasting"
-            android:textColor="#FF6FA8FF"
+            android:textColor="#FFA592FF"
             android:textSize="11sp"
             android:fontFamily="sans-serif-medium" />
         <TextView

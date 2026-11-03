@@ -682,31 +682,29 @@ object FoodPrompts {
     /**
      * ONE meal-aware coaching tip for a just-logged meal, judged against the day so far — or nothing
      * if the meal is fine. Deliberately returns "null" often: a card only appears when it's useful.
-     * Reads what's *left* in the day's budget, so it never nags about a big meal there's room for.
+     * [dayFacts] is [com.fitpal.app.domain.MealBudgetCheck.factsBlock] (before / this meal / after, and
+     * the calorie verdict worked out in code) plus when it was eaten: the model judges, it never sums.
      */
-    fun mealCoachingTip(
-        mealFoods: String,
-        todayBeforeMeal: String,
-        remainingTargets: String,
-        userGoal: String
-    ): String = """
-        A user just logged this meal. Give ONE short coaching tip about THIS meal, or nothing.
-        MEAL (as eaten): $mealFoods
-        TODAY BEFORE THIS MEAL: $todayBeforeMeal
-        REMAINING TODAY (target minus what's already eaten): $remainingTargets
-        GOAL: $userGoal
-
+    fun mealCoachingTip(mealFoods: String, dayFacts: String, userGoal: String): String =
+        "A user just logged this meal. Give ONE short coaching tip about THIS meal, or nothing.\n" +
+            "MEAL (as eaten): $mealFoods\n" +
+            dayFacts + "\n" +
+            "GOAL: $userGoal\n\n" + """
         Reply with ONLY a JSON object, or the single word null if the meal is fine as-is:
         {"type":"<portion|swap|addition|timing|goal|balance>","message":"<one sentence>"}
 
         Rules:
         - Return null unless the tip is genuinely useful — a balanced meal that fits the day gets no tip.
+        - The CALORIE CHECK was worked out by the app from the numbers above and is correct; don't redo
+          the sums. Unless it says the day is OVER, never say the meal is too big, exceeds the budget,
+          or should be cut, shared or saved for later.
         - Be specific to THIS meal and culturally sensible (never "add a salad to pelmeni/pasta/sushi").
-        - Weigh the REMAINING budget: if there's plenty of room, don't warn about portion or calories.
+        - If the day's eating is done (the eating window has closed, or bedtime is near), never suggest
+          eating more that day: point at the next meal or the next day instead.
         - Recommend a STRATEGY, not a branded product or an exact clock-time.
         - Neutral tone, no moral words ("bad", "cheat", "guilty"). One sentence, under 25 words.
-        - type: portion=too big for the budget, swap=replace a component, addition=round it out,
-          timing=when to eat it, goal=how it serves their goal, balance=macro/plate balance.
+        - type: portion=too big for the budget (only when the CHECK says OVER), swap=replace a component,
+          addition=round it out, timing=when to eat it, goal=how it serves their goal, balance=macro/plate balance.
     """.trimIndent()
 
     /**

@@ -177,11 +177,15 @@ fun GalleryFoodDetailScreen(
                     ) {
                         if (!state.photoPath.isNullOrBlank()) {
                             item {
+                                // Tap for the whole photo, uncropped (docs/redesign/16).
+                                var viewing by remember { mutableStateOf(false) }
                                 AsyncImage(
                                     model = state.photoPath, contentDescription = state.name,
-                                    modifier = Modifier.fillMaxWidth().height(210.dp).clip(RoundedCornerShape(20.dp)),
+                                    modifier = Modifier.fillMaxWidth().height(210.dp).clip(RoundedCornerShape(20.dp))
+                                        .clickable { viewing = true },
                                     contentScale = ContentScale.Crop
                                 )
+                                if (viewing) com.fitpal.app.ui.component.PhotoViewer(state.photoPath) { viewing = false }
                             }
                         }
                         item {

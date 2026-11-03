@@ -5,11 +5,16 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.fitpal.app.data.local.MealJson
 import com.fitpal.app.data.local.entity.MealLogItemEntity
+import com.fitpal.app.data.repository.SettingsRepository
 import com.fitpal.app.domain.BmrCalculator
+import com.fitpal.app.domain.MealBudgetCheck
+import com.fitpal.app.domain.WaterPace
 import com.fitpal.app.wear.WearWorkerEntryPoint
 import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
+import java.time.Instant
+import java.time.ZoneId
 import kotlin.math.roundToInt
 
 /**
@@ -85,6 +90,8 @@ class InsightsWorker(
      * Generate ONE meal-level coaching tip for [mealLogId] and cache it on the meal. Deliberately
      * conservative: only for a real meal (>200 kcal) and only online (the tip needs the capable
      * model to be specific and safe); the prompt itself returns nothing for a meal that's fine.
+     * The day's numbers and the calorie verdict come from [MealBudgetCheck], against Home's budget
+     * (base + that day's steps and workouts), so the model never does the sums.
      */
     private suspend fun generateCoachingTip(mealLogId: Long, items: List<MealLogItemEntity>) {
         val mealRepo = entry.mealRepository()
@@ -106,36 +113,55 @@ class InsightsWorker(
             BmrCalculator.dailyTargets(profile, it, settings.dailyCalorieGoal.value, settings.macroSelection.value)
         }
 
+        // What came before this meal that day, and Home's budget for that day: base + its steps
+        // (after the over-count trim) and workouts.
         val before = mealRepo.macrosBefore(meal.date, meal.timestamp)
-
-        fun macroStr(kcal: Float, p: Float, f: Float, c: Float, fib: Float) =
-            "${kcal.roundToInt()} kcal, P${p.roundToInt()}g F${f.roundToInt()}g C${c.roundToInt()}g Fiber ${fib.roundToInt()}g"
+        val activity = (entry.stepRepository().getCaloriesBurned(meal.date).first() +
+            entry.exerciseRepository().getTotalBurnedForDate(meal.date).first()).roundToInt()
 
         val mealFoods = items.joinToString("; ") {
             "${it.name} (${it.calories.roundToInt()} kcal, P${it.protein.roundToInt()} F${it.fat.roundToInt()} C${it.carbs.roundToInt()} Fiber ${it.fiber.roundToInt()})"
         }
-        val todayBefore = if (before.calories < 50f) "nothing substantial logged earlier today"
-            else macroStr(before.calories, before.protein, before.fat, before.carbs, before.fiber)
-        val mealP = items.sumOf { it.protein.toDouble() }.toFloat()
-        val mealF = items.sumOf { it.fat.toDouble() }.toFloat()
-        val mealC = items.sumOf { it.carbs.toDouble() }.toFloat()
-        val mealFib = items.sumOf { it.fiber.toDouble() }.toFloat()
-        val remaining = if (targets != null) {
-            macroStr(
-                targets.calories - before.calories - mealKcal,
-                targets.proteinG - before.protein - mealP,
-                targets.fatG - before.fat - mealF,
-                targets.carbsG - before.carbs - mealC,
-                targets.fiberG - before.fiber - mealFib
-            ) + " remaining"
-        } else "daily targets not set"
+        val facts = MealBudgetCheck.factsBlock(
+            baseKcal = targets?.calories,
+            activityKcal = activity,
+            targets = targets?.let { MealBudgetCheck.MacroTargets(it.proteinG, it.fatG, it.carbsG, it.fiberG) },
+            before = MealBudgetCheck.Totals(before.calories, before.protein, before.fat, before.carbs, before.fiber),
+            meal = MealBudgetCheck.Totals(
+                mealKcal,
+                items.sumOf { it.protein.toDouble() }.toFloat(),
+                items.sumOf { it.fat.toDouble() }.toFloat(),
+                items.sumOf { it.carbs.toDouble() }.toFloat(),
+                items.sumOf { it.fiber.toDouble() }.toFloat()
+            )
+        )
         val goal = "${profile.fitnessGoal.label} — ${profile.fitnessGoal.description}"
 
-        val prompt = FoodPrompts.mealCoachingTip(mealFoods, todayBefore, remaining, goal)
+        val prompt = FoodPrompts.mealCoachingTip(mealFoods, facts + "\n" + whenEaten(meal.timestamp, settings), goal)
         val response = aux.generate(prompt, jsonMode = true) ?: return
         val tip = FoodJsonParser.parseCoachingTip(response)
         // Save the result (a tip, or null when the model declined — leaving no card).
         mealRepo.saveCoachingTip(mealLogId, tip)
+    }
+
+    /**
+     * When the meal was eaten, the eating window and bedtime, and a plain statement when it's clearly
+     * the day's last meal (the window closes within the hour, or it's close to or after bedtime), so
+     * the coach never suggests eating more that night.
+     */
+    private fun whenEaten(timestamp: Long, settings: SettingsRepository): String {
+        val t = Instant.ofEpochMilli(timestamp).atZone(ZoneId.systemDefault()).toLocalTime()
+        val m = t.hour * 60 + t.minute
+        val schedule = settings.fastingSchedule.value
+        val bed = settings.bedMinutes.value
+        val window = schedule.enabled && schedule.eatEndMin > schedule.eatStartMin
+        val parts = mutableListOf("EATEN AT: ${WaterPace.clockLabel(m)}")
+        if (window) parts += "eating window ${WaterPace.clockLabel(schedule.eatStartMin)} to ${WaterPace.clockLabel(schedule.eatEndMin)}"
+        parts += "bedtime about ${WaterPace.clockLabel(bed)}"
+        val lastMeal = (window && schedule.eatEndMin - m <= LAST_MEAL_WINDOW_MIN) ||
+            (bed - m).mod(DAY_MIN) <= LAST_MEAL_BED_MIN || (m - bed).mod(DAY_MIN) <= AFTER_BED_MIN
+        return parts.joinToString(" · ") +
+            if (lastMeal) "\nTHIS IS MOST LIKELY THE DAY'S LAST MEAL: the day's eating is done after it." else ""
     }
 
     /** Portion-independent key: name + per-100 g macros, so the same food matches at any amount. */
@@ -148,5 +174,12 @@ class InsightsWorker(
 
     companion object {
         const val KEY_MEAL_LOG_ID = "meal_log_id"
+
+        /** A meal this close to the eating window's end (or after it) is the day's last. */
+        private const val LAST_MEAL_WINDOW_MIN = 60
+        /** …and so is one within three hours of bedtime, or up to four hours after it. */
+        private const val LAST_MEAL_BED_MIN = 180
+        private const val AFTER_BED_MIN = 240
+        private const val DAY_MIN = 24 * 60
     }
 }

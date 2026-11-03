@@ -354,12 +354,8 @@ private fun CountFix(
     }
 }
 
-/** "5 PM". */
-private fun hourLabel(hour: Int): String {
-    val h = hour % 24
-    val h12 = ((h + 11) % 12) + 1
-    return "$h12 ${if (h < 12) "AM" else "PM"}"
-}
+/** "5 PM" (or "17:00"). */
+private fun hourLabel(hour: Int): String = com.fitpal.app.domain.ClockFormat.hour(hour)
 
 /** A Health Connect writer's package as a name people recognise. */
 internal fun friendlyStepSource(pkg: String): String = when {

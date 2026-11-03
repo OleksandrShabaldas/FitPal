@@ -17,14 +17,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.BookmarkBorder
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -39,15 +37,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.fitpal.app.domain.model.DetectedFood
 import com.fitpal.app.domain.model.ChoiceGroup
+import com.fitpal.app.domain.model.DetectedFood
 import com.fitpal.app.domain.model.Ingredient
 import com.fitpal.app.domain.model.ServingPreset
+import com.fitpal.app.domain.model.weightLabel
 import com.fitpal.app.ui.theme.CalorieColor
 import com.fitpal.app.ui.theme.Cream
 import com.fitpal.app.ui.theme.CreamFaint
 import com.fitpal.app.ui.theme.CreamMuted
-import com.fitpal.app.ui.theme.GoldLight
 import com.fitpal.app.ui.theme.glass
 import com.fitpal.app.ui.theme.glassSoft
 
@@ -66,7 +64,7 @@ data class MealItemContent(
     val fiber: Float,
     val isDrink: Boolean,
     val waterMl: Float,
-    /** Number of servings (pre-log photo only); 1 when it doesn't apply. */
+    /** Number of servings (the amount stepper); 1 when it doesn't apply. */
     val servings: Int,
     val ingredients: List<Ingredient>,
     /** What the AI couldn't tell, as choices that replace an ingredient (pre-log only). */
@@ -85,27 +83,32 @@ fun DetectedFood.toMealItemContent(): MealItemContent = MealItemContent(
     isDrink = isDrink,
     waterMl = totalWaterMl,
     servings = servings,
-    ingredients = ingredients,
+    ingredients = drinkAwareIngredients,
     choices = choices
 )
 
 /**
- * The one card that renders a food/dish everywhere it appears — the photo review, the describe
- * review, and the saved-meal screen. Every action is an optional slot: pass the callbacks a given
- * screen supports and the matching controls appear. The shared skeleton (name, macros, total
- * weight, ingredient rows) is identical in all three, so "before logging" and "after logging"
- * finally look the same and live in one file.
+ * The one card that renders a dish everywhere it appears — the photo review, the describe review and
+ * the Meal page (docs/redesign/16). Every action is an optional slot: pass the callbacks a screen
+ * supports and the matching controls appear.
  *
- * It owns the per-item rename dialog (via [onRename]); everything else is wired by the caller to
- * either draft edits or database writes.
+ * Open by default (the user folds what they like). Its header is the dish's name, kcal, a ⋯ with the
+ * dish's own actions and the fold chevron; a meal's only dish ([showName] false) is just "What's in
+ * it", since its name is the page's title and its numbers are in the nutrition card above. Each
+ * ingredient row has its own food/drink cup.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun MealItemCard(
     content: MealItemContent,
     modifier: Modifier = Modifier,
+    showName: Boolean = true,
     onIngredientGramsChanged: (index: Int, grams: Float) -> Unit = { _, _ -> },
     onIngredientRemoved: (index: Int) -> Unit = {},
+    /** The cup on an ingredient: [drink] = it becomes a drink (ml, counts as drinks), else food. */
+    onIngredientDrinkChanged: ((index: Int, drink: Boolean) -> Unit)? = null,
+    /** Tap an ingredient's name to swap it for another, keeping the amount (a logged meal). */
+    onReplaceIngredient: ((index: Int) -> Unit)? = null,
     onTotalGramsChanged: ((grams: Float) -> Unit)? = null,
     onServingsChanged: ((servings: Int) -> Unit)? = null,
     onWaterChanged: ((ml: Float) -> Unit)? = null,
@@ -117,23 +120,28 @@ fun MealItemCard(
     onRemove: (() -> Unit)? = null,
     onToggleSave: (() -> Unit)? = null,
     saved: Boolean = false,
-    onOpenDetails: (() -> Unit)? = null,
-    /** The Food / Drink switch — when the AI (or a database name) got it wrong. */
-    onSetDrink: ((Boolean) -> Unit)? = null,
+    /** Copy just this dish to another day (a logged meal with several dishes). */
+    onCopy: (() -> Unit)? = null,
     mealPresets: List<ServingPreset> = emptyList(),
     drinkPresets: List<ServingPreset> = emptyList(),
-    /**
-     * Folded (docs/redesign/08): name · kcal · one line of what's in it; tap → [onExpand]. The screen
-     * keeps one dish open at a time. [onExpand] also gets a chevron on the open card to fold it again.
-     */
+    /** Folded: name · kcal · one line of what's in it; tap → [onExpand], which also folds it again. */
     collapsed: Boolean = false,
     onExpand: (() -> Unit)? = null,
     /** Other likely names for this dish ("Not fish & chips? Fish tacos · Fish burger"), and the pick. */
     alternatives: List<String> = emptyList(),
     onPickAlternative: ((Int) -> Unit)? = null
 ) {
-    val unit = if (content.isDrink) "ml" else "g"
     var renaming by remember { mutableStateOf(false) }
+    if (renaming && onRename != null) {
+        RenameDialog(
+            currentName = content.name,
+            title = "Rename this dish",
+            label = "Dish name",
+            hint = "Only the name changes — the amount and nutrition stay as they are.",
+            onConfirm = { onRename(it); renaming = false },
+            onDismiss = { renaming = false }
+        )
+    }
 
     if (collapsed) {
         Column(
@@ -153,7 +161,7 @@ fun MealItemCard(
                 }
             }
             Text(
-                itemSummary(content, unit), style = MaterialTheme.typography.bodySmall, color = CreamMuted,
+                itemSummary(content), style = MaterialTheme.typography.bodySmall, color = CreamMuted,
                 maxLines = 1, overflow = TextOverflow.Ellipsis
             )
             AlternativesLine(content.name, alternatives, onPickAlternative)
@@ -161,124 +169,61 @@ fun MealItemCard(
         return
     }
 
-    if (renaming && onRename != null) {
-        RenameDialog(
-            currentName = content.name,
-            title = "Rename this dish",
-            label = "Dish name",
-            hint = "Only the name changes — the amount and nutrition stay as they are.",
-            onConfirm = { onRename(it); renaming = false },
-            onDismiss = { renaming = false }
-        )
-    }
-
     Column(modifier = modifier.fillMaxWidth().glass().padding(16.dp)) {
-        // Header — name (tap to rename), amount subtitle, calories, save, remove.
+        // Header — the dish's name, kcal, its ⋯ and the fold chevron.
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .then(if (onRename != null) Modifier.clickable { renaming = true } else Modifier)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        content.name,
-                        style = MaterialTheme.typography.titleLarge,
-                        color = Cream,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false)
-                    )
-                    if (onRename != null) {
-                        Spacer(Modifier.width(6.dp))
-                        Icon(
-                            Icons.Default.Edit,
-                            contentDescription = "Rename ${content.name}",
-                            tint = CreamMuted,
-                            modifier = Modifier.size(15.dp)
-                        )
-                    }
-                }
+            if (showName) {
                 Text(
-                    text = "${content.grams.toInt()} $unit" +
-                        if (content.isDrink && content.waterMl > 0f) " + ${content.waterMl.toInt()} ml water" else "",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = CreamMuted
+                    content.name, style = MaterialTheme.typography.titleMedium, color = Cream,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
                 )
+                Spacer(Modifier.width(8.dp))
+                Text("${content.calories.toInt()} kcal", style = MaterialTheme.typography.titleSmall, color = CalorieColor)
+            } else {
+                Text("What's in it", style = MaterialTheme.typography.titleSmall, color = Cream, modifier = Modifier.weight(1f))
             }
-            Text("${content.calories.toInt()} kcal", style = MaterialTheme.typography.titleMedium, color = CalorieColor)
-            if (onToggleSave != null) {
-                CardIcon(
-                    if (saved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
-                    if (saved) "${content.name} saved to collection" else "Save ${content.name} to collection",
-                    if (saved) GoldLight else CreamMuted, onToggleSave
-                )
-            }
-            if (onRemove != null) CardIcon(Icons.Default.Close, "Remove ${content.name}", CreamMuted, onRemove)
+            DishMenu(
+                name = content.name,
+                onRename = if (showName && onRename != null) ({ renaming = true }) else null,
+                onToggleSave = onToggleSave, saved = saved, onCopy = onCopy, onRemove = onRemove
+            )
             if (onExpand != null) CardIcon(Icons.Default.KeyboardArrowUp, "Fold ${content.name}", CreamMuted, onExpand)
         }
         AlternativesLine(content.name, alternatives, onPickAlternative)
 
-        Spacer(Modifier.height(12.dp))
-        MacroBar(protein = content.protein, fat = content.fat, carbs = content.carbs, fiber = content.fiber)
-        Spacer(Modifier.height(16.dp))
-
-        // Food or drink — a drink is measured in ml, counts toward water and the fasting drink rule.
-        if (onSetDrink != null) {
-            Row(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("It's a", style = MaterialTheme.typography.titleSmall, color = Cream, modifier = Modifier.weight(1f))
-                SegmentedPills(
-                    labels = listOf("Food", "Drink"),
-                    selectedIndex = if (content.isDrink) 1 else 0,
-                    accent = GoldLight,
-                    onSelect = { onSetDrink(it == 1) },
-                    modifier = Modifier.width(170.dp)
-                )
-            }
-        }
-
-        // Amount (servings) — pre-log photo only.
-        if (onServingsChanged != null) {
-            Row(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Amount", style = MaterialTheme.typography.titleSmall, color = Cream, modifier = Modifier.weight(1f))
+        // Its weight ("320 g", "170 g + 200 ml") and how many of it. A meal's only dish has its weight in
+        // the nutrition card above, so its row is just the amount.
+        if (showName || onServingsChanged != null) Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                if (showName) weightLabel(content.ingredients, content.grams, content.isDrink) else "Amount",
+                style = if (showName) MaterialTheme.typography.bodySmall else MaterialTheme.typography.titleSmall,
+                color = if (showName) CreamMuted else Cream, modifier = Modifier.weight(1f)
+            )
+            if (onServingsChanged != null) {
                 RoundStepButton(Icons.Default.Remove, "One fewer", enabled = content.servings > 1) { onServingsChanged(content.servings - 1) }
                 Text(
                     "${content.servings}",
                     style = MaterialTheme.typography.titleMedium, color = Cream,
-                    textAlign = TextAlign.Center, modifier = Modifier.width(40.dp)
+                    textAlign = TextAlign.Center, modifier = Modifier.width(36.dp)
                 )
                 RoundStepButton(Icons.Default.Add, "One more") { onServingsChanged(content.servings + 1) }
             }
         }
+        Spacer(Modifier.height(6.dp))
 
-        // Water the AI identified — editable, counts toward hydration (pre-log photo only).
-        if (onWaterChanged != null) {
-            Row(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("💧 Water", style = MaterialTheme.typography.titleSmall, color = Cream, modifier = Modifier.weight(1f))
-                GramsField(grams = content.waterMl, onGramsChanged = onWaterChanged, modifier = Modifier.width(110.dp), unit = "ml", commitZero = true)
-            }
-        }
-
-        // Whole-dish weight — scales every ingredient at once (only for real multi-item dishes).
-        if (content.ingredients.size > 1 && onTotalGramsChanged != null) {
-            Row(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Total weight", style = MaterialTheme.typography.titleSmall, color = Cream, modifier = Modifier.weight(1f))
-                GramsField(grams = content.grams, onGramsChanged = onTotalGramsChanged, modifier = Modifier.width(100.dp), unit = unit)
-            }
-        }
-
-        Text("Ingredients", style = MaterialTheme.typography.titleSmall, color = Cream, modifier = Modifier.padding(bottom = 4.dp))
         // Presets only make sense for a single-item food/drink (under a dish's ingredients they'd be noise).
-        val rowPresets = if (content.ingredients.size == 1) (if (content.isDrink) drinkPresets else mealPresets) else emptyList()
+        val single = content.ingredients.size == 1
         content.ingredients.forEachIndexed { index, ingredient ->
             EditableFoodItemRow(
                 ingredient = ingredient,
                 onGramsChanged = { onIngredientGramsChanged(index, it) },
                 onRemove = { onIngredientRemoved(index) },
-                presets = rowPresets,
-                unit = unit,
-                // Edits may hit the database (saved-meal screen) — don't write a phantom 0 on clear.
-                commitZero = false
+                presets = if (single) (if (ingredient.isDrink) drinkPresets else mealPresets) else emptyList(),
+                unit = if (ingredient.isDrink) "ml" else "g",
+                // Edits may hit the database (the Meal page) — don't write a phantom 0 on clear.
+                commitZero = false,
+                onToggleDrink = onIngredientDrinkChanged?.let { change -> { change(index, !ingredient.isDrink) } },
+                onReplace = onReplaceIngredient?.let { replace -> { replace(index) } }
             )
         }
 
@@ -311,7 +256,6 @@ fun MealItemCard(
             }
         }
 
-        // Add ingredient / Edit with AI — pre-log only.
         if (onAddIngredient != null || onEditWithAi != null) {
             FlowRow(
                 modifier = Modifier.padding(top = 8.dp),
@@ -322,26 +266,61 @@ fun MealItemCard(
             }
         }
 
-        // Open details & AI insights — saved-meal screen only.
-        if (onOpenDetails != null) {
-            Spacer(Modifier.height(12.dp))
-            Row(
-                modifier = Modifier.glassSoft(CircleShape).clickable(onClick = onOpenDetails).padding(horizontal = 14.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = GoldLight, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("Open details & AI insights", style = MaterialTheme.typography.labelLarge, color = Cream)
+        // The whole dish's weight (scales every ingredient) and the water the AI found, side by side.
+        val total = content.ingredients.size > 1 && onTotalGramsChanged != null
+        if (total || onWaterChanged != null) {
+            Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (total) {
+                    Text("Total", style = MaterialTheme.typography.labelLarge, color = CreamMuted)
+                    Spacer(Modifier.width(8.dp))
+                    GramsField(
+                        grams = content.grams, onGramsChanged = onTotalGramsChanged!!, modifier = Modifier.width(100.dp),
+                        unit = if (content.ingredients.all { it.isDrink }) "ml" else "g"
+                    )
+                }
+                Spacer(Modifier.weight(1f))
+                if (onWaterChanged != null) {
+                    Text("💧", style = MaterialTheme.typography.labelLarge)
+                    Spacer(Modifier.width(6.dp))
+                    GramsField(grams = content.waterMl, onGramsChanged = onWaterChanged, modifier = Modifier.width(100.dp), unit = "ml", commitZero = true)
+                }
+            }
+        }
+    }
+}
+
+/** The dish's own actions behind a ⋯: rename, save to collection, copy, remove. Nothing to show → no ⋯. */
+@Composable
+private fun DishMenu(
+    name: String,
+    onRename: (() -> Unit)?,
+    onToggleSave: (() -> Unit)?,
+    saved: Boolean,
+    onCopy: (() -> Unit)?,
+    onRemove: (() -> Unit)?
+) {
+    val items = buildList<Pair<String, () -> Unit>> {
+        onRename?.let { add("Rename" to it) }
+        onToggleSave?.let { add((if (saved) "Saved to collection ✓" else "Save to collection") to it) }
+        onCopy?.let { add("Copy to another day" to it) }
+        onRemove?.let { add("Remove" to it) }
+    }
+    if (items.isEmpty()) return
+    var open by remember { mutableStateOf(false) }
+    Box {
+        CardIcon(Icons.Default.MoreHoriz, "More for $name", CreamMuted) { open = true }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            items.forEach { (label, action) ->
+                DropdownMenuItem(text = { Text(label) }, onClick = { open = false; action() })
             }
         }
     }
 }
 
 /** The folded card's one line: what's in it ("Cod in batter · fries · tartar sauce"), or its amount. */
-private fun itemSummary(content: MealItemContent, unit: String): String = when {
-    content.isDrink -> "${content.grams.toInt()} ml · drink"
+private fun itemSummary(content: MealItemContent): String = when {
     content.ingredients.size > 1 -> content.ingredients.joinToString(" · ") { it.name }
-    else -> "${content.grams.toInt()} $unit"
+    else -> weightLabel(content.ingredients, content.grams, content.isDrink) + if (content.isDrink) " · drink" else ""
 }
 
 /** "Not {current}? alt1 · alt2" — the other likely names, each a gold link that switches to it. */
@@ -353,7 +332,7 @@ private fun AlternativesLine(current: String, alternatives: List<String>, onPick
         alternatives.forEachIndexed { i, name ->
             if (i > 0) Text(" · ", style = MaterialTheme.typography.bodySmall, color = CreamMuted)
             Text(
-                name, style = MaterialTheme.typography.bodySmall, color = GoldLight, maxLines = 1,
+                name, style = MaterialTheme.typography.bodySmall, color = com.fitpal.app.ui.theme.GoldLight, maxLines = 1,
                 modifier = Modifier.clickable { onPick(i) }
             )
         }
@@ -371,7 +350,7 @@ private fun CardIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, desc
 @Composable
 private fun RoundStepButton(icon: androidx.compose.ui.graphics.vector.ImageVector, description: String, enabled: Boolean = true, onClick: () -> Unit) {
     Box(
-        Modifier.size(36.dp).glassSoft(CircleShape).then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier),
+        Modifier.size(34.dp).glassSoft(CircleShape).then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier),
         contentAlignment = Alignment.Center
     ) {
         Icon(icon, contentDescription = description, tint = if (enabled) Cream else CreamMuted, modifier = Modifier.size(18.dp))

@@ -622,6 +622,27 @@ class SettingsRepository @Inject constructor(
         prefs.edit().putBoolean(KEY_NAV_COACH_MIGRATED, true).apply()
     }
 
+    // --- Clock: 12- or 24-hour (docs/redesign/16). Unset = the phone's own format. ---
+
+    private val appContext = context.applicationContext
+    private val _clock24h = MutableStateFlow(if (prefs.contains(KEY_CLOCK_24H)) prefs.getBoolean(KEY_CLOCK_24H, false) else null)
+    /** The user's clock choice, or null while they haven't made one (then the phone decides). */
+    val clock24h: StateFlow<Boolean?> = _clock24h
+
+    fun setClock24h(on: Boolean) {
+        prefs.edit().putBoolean(KEY_CLOCK_24H, on).apply()
+        _clock24h.value = on
+        applyClockFormat()
+    }
+
+    /** Points every clock label at the user's choice, or the phone's format until they make one. */
+    fun applyClockFormat() {
+        com.fitpal.app.domain.ClockFormat.use24h =
+            _clock24h.value ?: android.text.format.DateFormat.is24HourFormat(appContext)
+    }
+
+    init { applyClockFormat() }
+
     // --- Optional features (docs/redesign/06) ---
 
     private val _trailEnabled = MutableStateFlow(prefs.getBoolean(KEY_TRAIL_ENABLED, true))
@@ -1261,6 +1282,7 @@ class SettingsRepository @Inject constructor(
         private const val KEY_ANALYTICS_TILES_MIGRATED = "analytics_tiles_off_migrated"
         private const val KEY_ANALYTICS_COLLAPSED = "analytics_collapsed"
         private const val KEY_TRAIL_ENABLED = "trail_enabled"
+        private const val KEY_CLOCK_24H = "clock_24h"
         private const val KEY_COACH_ENABLED = "coach_enabled"
         private const val KEY_PLANNER_ENABLED = "planner_enabled"
         private const val KEY_FOOD_PROFILE = "food_profile"

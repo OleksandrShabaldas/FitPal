@@ -29,6 +29,7 @@ interface WearWorkerEntryPoint {
     fun exerciseAnalysisJobManager(): ExerciseAnalysisJobManager
     fun mealRepository(): MealRepository
     fun exerciseRepository(): ExerciseRepository
+    fun stepRepository(): com.fitpal.app.data.repository.StepRepository
     fun weightRepository(): WeightRepository
     fun settingsRepository(): SettingsRepository
     fun appForegroundState(): AppForegroundState

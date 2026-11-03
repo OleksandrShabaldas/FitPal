@@ -347,6 +347,22 @@ internal fun AppearanceTuningSection(viewModel: SettingsViewModel) {
     }
 }
 
+/** The 12- or 24-hour clock for every time in the app; until it's touched, FitPal follows the phone. */
+@Composable
+internal fun ClockSection(viewModel: SettingsViewModel) {
+    // The resolved value (the choice, or the phone's format), so the switch shows what the app uses now.
+    viewModel.clock24h.collectAsStateWithLifecycle().value
+    Column(modifier = Modifier.fillMaxWidth().glass().padding(16.dp)) {
+        Text("Clock", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = Cream)
+        Spacer(Modifier.height(4.dp))
+        ToggleRow(
+            "24-hour clock",
+            "19:48 instead of 7:48 PM, everywhere in FitPal. Until you choose, it follows your phone.",
+            com.fitpal.app.domain.ClockFormat.use24h
+        ) { on -> viewModel.setClock24h(on) }
+    }
+}
+
 @Composable
 private fun StyleTile(look: Look, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val shape = RoundedCornerShape(18.dp)

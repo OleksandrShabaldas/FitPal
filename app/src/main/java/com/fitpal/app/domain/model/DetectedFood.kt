@@ -50,6 +50,30 @@ data class DetectedFood(
     val totalWaterMl: Float
         get() = ingredients.sumOf { it.waterMl.toDouble() }.toFloat()
 
+    /**
+     * The ingredients with their food/drink flags made consistent with the dish (docs/redesign/16): a
+     * drink whose parts were never flagged one by one (a single database or typed-in drink) counts
+     * every part as a drink.
+     */
+    val drinkAwareIngredients: List<Ingredient>
+        get() = if (isDrink && ingredients.none { it.isDrink }) ingredients.map { it.copy(isDrink = true) } else ingredients
+
+    /** Water from the drink ingredients (ml) — "drinks"; the rest of [totalWaterMl] is "from food". */
+    val drinkWaterMl: Float
+        get() = drinkAwareIngredients.filter { it.isDrink }.sumOf { it.waterMl.toDouble() }.toFloat()
+
+    /**
+     * The cup on one ingredient: it becomes a drink (in ml, its water counting as drinks — with an
+     * estimate when it had none) or food again. The dish is a drink only when every part is.
+     */
+    fun withIngredientDrink(index: Int, drink: Boolean): DetectedFood {
+        val list = drinkAwareIngredients.toMutableList()
+        val ing = list.getOrNull(index) ?: return this
+        if (ing.isDrink == drink) return this
+        list[index] = ing.asDrinkPart(drink)
+        return copy(ingredients = list, isDrink = list.all { it.isDrink })
+    }
+
     /** Caffeine across all ingredients (mg), or null while any of them is unknown. */
     val totalCaffeineMg: Float?
         get() = totalCaffeineOf(ingredients)
@@ -60,18 +84,30 @@ data class DetectedFood(
      * water it had (food water still counts, as "from food").
      */
     fun asDrink(drink: Boolean): DetectedFood =
-        if (drink == isDrink) this
-        else copy(
-            isDrink = drink,
-            ingredients = if (!drink) ingredients else ingredients.map { ing ->
-                if (ing.waterMlPer100g > 0f) ing
-                else ing.copy(
-                    waterMlPer100g = com.fitpal.app.domain.Drinks.estimateWaterPer100(
-                        ing.carbsPer100g, ing.proteinPer100g, ing.fatPer100g
-                    )
-                )
-            }
-        )
+        if (drink == isDrink && ingredients.all { it.isDrink == drink }) this
+        else copy(isDrink = drink, ingredients = ingredients.map { it.asDrinkPart(drink) })
+}
+
+/** This ingredient as a drink part (with a water estimate when it had none) or as food. */
+fun Ingredient.asDrinkPart(drink: Boolean): Ingredient = when {
+    !drink -> copy(isDrink = false)
+    waterMlPer100g > 0f -> copy(isDrink = true)
+    else -> copy(
+        isDrink = true,
+        waterMlPer100g = com.fitpal.app.domain.Drinks.estimateWaterPer100(carbsPer100g, proteinPer100g, fatPer100g)
+    )
+}
+
+/** "370 g", "250 ml", or "170 g + 200 ml" for a dish with both. */
+fun weightLabel(ingredients: List<Ingredient>, fallbackGrams: Float = 0f, fallbackDrink: Boolean = false): String {
+    if (ingredients.isEmpty()) return "${fallbackGrams.toInt()} ${if (fallbackDrink) "ml" else "g"}"
+    val g = ingredients.filterNot { it.isDrink }.sumOf { it.grams.toDouble() }.toInt()
+    val ml = ingredients.filter { it.isDrink }.sumOf { it.grams.toDouble() }.toInt()
+    return when {
+        ml == 0 -> "$g g"
+        g == 0 -> "$ml ml"
+        else -> "$g g + $ml ml"
+    }
 }
 
 /**

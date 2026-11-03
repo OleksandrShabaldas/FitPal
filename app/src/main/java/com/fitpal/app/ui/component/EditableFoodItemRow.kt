@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.LocalCafe
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.Icon
@@ -39,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import com.fitpal.app.domain.model.Ingredient
 import com.fitpal.app.domain.model.ServingPreset
 import com.fitpal.app.ui.theme.CalorieColor
+import com.fitpal.app.ui.theme.AccentTrends
 import com.fitpal.app.ui.theme.GoldLight
 
 /**
@@ -110,7 +112,14 @@ fun EditableFoodItemRow(
     /** When given, the name is tappable and can be rewritten before the meal is logged. */
     onRename: ((String) -> Unit)? = null,
     /** Whether clearing the field commits 0 live. Safe (true) for drafts; false when edits hit the DB. */
-    commitZero: Boolean = true
+    commitZero: Boolean = true,
+    /**
+     * The cup (docs/redesign/16): is this part a drink — in ml, its water counting as drinks? Water
+     * blue when it is; tap to flip.
+     */
+    onToggleDrink: (() -> Unit)? = null,
+    /** Tap the name to swap this ingredient for another, keeping the amount (a logged meal). */
+    onReplace: (() -> Unit)? = null
 ) {
     var renaming by remember { mutableStateOf(false) }
     if (renaming && onRename != null) {
@@ -129,7 +138,13 @@ fun EditableFoodItemRow(
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .then(if (onRename != null) Modifier.clickable { renaming = true } else Modifier)
+                    .then(
+                        when {
+                            onRename != null -> Modifier.clickable { renaming = true }
+                            onReplace != null -> Modifier.clickable(onClick = onReplace)
+                            else -> Modifier
+                        }
+                    )
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
@@ -193,7 +208,17 @@ fun EditableFoodItemRow(
                 }
             }
 
-            IconButton(onClick = onRemove) {
+            if (onToggleDrink != null) {
+                IconButton(onClick = onToggleDrink, modifier = Modifier.size(34.dp)) {
+                    Icon(
+                        Icons.Default.LocalCafe,
+                        contentDescription = if (ingredient.isDrink) "${ingredient.name} is a drink — make it food" else "Make ${ingredient.name} a drink",
+                        tint = if (ingredient.isDrink) AccentTrends else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+            IconButton(onClick = onRemove, modifier = if (onToggleDrink != null) Modifier.size(34.dp) else Modifier) {
                 Icon(
                     Icons.Default.Close,
                     contentDescription = "Remove ${ingredient.name}",

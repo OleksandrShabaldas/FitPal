@@ -746,10 +746,8 @@ private fun MiniInfoCard(icon: ImageVector, title: String, body: String, modifie
 
 @Composable
 private fun YourDayStep(draft: OnboardingDraft, viewModel: OnboardingViewModel) {
-    val context = LocalContext.current
-    fun pick(minutes: Int, onPick: (Int) -> Unit) {
-        android.app.TimePickerDialog(context, { _, hh, mm -> onPick(hh * 60 + mm) }, minutes / 60, minutes % 60, false).show()
-    }
+    val timePicker = com.fitpal.app.ui.component.kit.rememberTimePicker()
+    fun pick(minutes: Int, onPick: (Int) -> Unit) = timePicker.open(minutes) { m -> onPick(m) }
     StepColumn {
         Staggered(0) {
             StepTitle("Your day", "We use these to pace your water and to tell you if caffeine will keep you up.")

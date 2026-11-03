@@ -35,12 +35,18 @@ import com.fitpal.app.ui.component.AnalysisPhase
 import com.fitpal.app.ui.component.InlineMessageCard
 import com.fitpal.app.ui.component.LogBar
 import com.fitpal.app.ui.component.MealDetailsPanel
-import com.fitpal.app.ui.component.MealDetailsRow
 import com.fitpal.app.ui.component.MealDetailsSheet
-import com.fitpal.app.ui.component.MealHeader
+import com.fitpal.app.ui.component.MealTimeLine
+import com.fitpal.app.ui.component.MealTypePills
 import com.fitpal.app.ui.component.NoteLine
-import com.fitpal.app.ui.component.SkeletonCard
-import com.fitpal.app.ui.component.AnalysingStrip
+import com.fitpal.app.ui.component.NutritionCard
+import com.fitpal.app.ui.component.AnalysingStatus
+import com.fitpal.app.ui.component.ScanSweep
+import com.fitpal.app.ui.component.dishesTitle
+import com.fitpal.app.domain.model.weightLabel
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
 import com.fitpal.app.ui.component.BackdropTheme
 import com.fitpal.app.ui.component.DatePickerDialog
 import com.fitpal.app.ui.component.GlassTopBar
@@ -119,42 +125,64 @@ fun DescribeFoodScreen(
         )
     }
 
-    // The same page as the photo analysis (docs/redesign/08): the description sits where the photo
-    // would, then the details line, the phase's content, and the log bar — nothing moves between phases.
+    // The same page as the photo analysis (docs/redesign/16): the description sits where the photo
+    // would, then the time line, the phase's content, and the meal pills + log bar at the bottom.
     val phase = state.phase
     val reduceMotion = com.fitpal.app.ui.theme.LookState.appearance.reduceMotion
     var showDetails by remember { mutableStateOf(false) }
-    var renamingMeal by remember { mutableStateOf(false) }
-    var expanded by remember { mutableStateOf<Int?>(null) }
+    var renaming by remember { mutableStateOf(false) }
+    // Every dish starts open; these are the ones folded by hand.
+    var folded by remember { mutableStateOf(emptySet<Int>()) }
     // After results, tapping the description edits it again; the bar then offers "Analyse again".
     var editingDescription by remember { mutableStateOf(false) }
     val editing = phase == AnalysisPhase.READY || editingDescription
+    val results = (phase == AnalysisPhase.RESULTS || phase == AnalysisPhase.SAVING) && state.foods.isNotEmpty()
+    val oneDish = state.foods.size == 1
 
     if (showDetails) {
         MealDetailsSheet(
-            mealType = mealType, onMealType = viewModel::setMealType,
             logDate = logDate, onPickDay = { showDatePicker = true },
             eatenAt = eatenAt, onPickTime = viewModel::pickEatenTime,
             tags = tags, onToggleTag = viewModel::toggleTag,
             onDismiss = { showDetails = false }
         )
     }
-    if (renamingMeal) {
-        com.fitpal.app.ui.component.RenameDialog(
-            currentName = state.mealName.orEmpty(),
-            title = "Name this meal",
-            label = "Meal name",
-            placeholder = "e.g. Sunday roast",
-            hint = "Names the whole meal on your day. Leave it empty to show the meal type instead.",
-            allowEmpty = true,
-            onConfirm = { viewModel.renameMeal(it); renamingMeal = false },
-            onDismiss = { renamingMeal = false }
-        )
+    if (renaming) {
+        if (oneDish) {
+            com.fitpal.app.ui.component.RenameDialog(
+                currentName = state.foods.firstOrNull()?.label.orEmpty(),
+                title = "Rename this meal",
+                label = "Name",
+                hint = "Only the name changes — the amount and nutrition stay as they are.",
+                onConfirm = { viewModel.renameFood(0, it); renaming = false },
+                onDismiss = { renaming = false }
+            )
+        } else {
+            com.fitpal.app.ui.component.RenameDialog(
+                currentName = state.mealName.orEmpty(),
+                title = "Name this meal",
+                label = "Meal name",
+                placeholder = "e.g. Sunday roast",
+                hint = "Names the whole meal on your day. Leave it empty to name it by its dishes.",
+                allowEmpty = true,
+                onConfirm = { viewModel.renameMeal(it); renaming = false },
+                onDismiss = { renaming = false }
+            )
+        }
     }
 
     GradientBackdrop(theme = BackdropTheme.TODAY) {
         Column(modifier = Modifier.fillMaxSize()) {
-            GlassTopBar(title = "Describe to AI", onBack = onBack)
+            GlassTopBar(
+                title = when {
+                    !results -> "Describe to AI"
+                    oneDish -> state.foods.first().label
+                    else -> state.mealName ?: dishesTitle(state.foods.map { it.label })
+                },
+                onBack = onBack,
+                titleMaxLines = 2,
+                onTitleClick = if (results) ({ renaming = true }) else null
+            )
 
             LazyColumn(
                 modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -175,34 +203,48 @@ fun DescribeFoodScreen(
                             minHeight = 90.dp
                         )
                     } else {
-                        // The description as a quote — tap to change it.
-                        Row(
-                            Modifier.fillMaxWidth().glass().clickable { editingDescription = true }.padding(16.dp),
-                            verticalAlignment = Alignment.Top
-                        ) {
-                            Text(
-                                "“${state.description.trim()}”",
-                                style = MaterialTheme.typography.titleLarge.copy(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic),
-                                color = Cream, modifier = Modifier.weight(1f)
-                            )
-                            Icon(Icons.Default.Edit, contentDescription = "Change the description", tint = CreamMuted, modifier = Modifier.size(16.dp))
+                        // The description as a quote — tap to change it. While the AI reads it, the
+                        // gold light sweeps over it (as over a photo).
+                        Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))) {
+                            Row(
+                                Modifier.fillMaxWidth().glass().clickable(enabled = phase != AnalysisPhase.WORKING) { editingDescription = true }.padding(16.dp),
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Text(
+                                    "“${state.description.trim()}”",
+                                    style = MaterialTheme.typography.titleLarge.copy(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic),
+                                    color = Cream, modifier = Modifier.weight(1f)
+                                )
+                                Icon(Icons.Default.Edit, contentDescription = "Change the description", tint = CreamMuted, modifier = Modifier.size(16.dp))
+                            }
+                            if (phase == AnalysisPhase.WORKING) ScanSweep(Modifier.matchParentSize())
                         }
                     }
                 }
 
-                item(key = "details") {
-                    if (phase == AnalysisPhase.WORKING) {
-                        Column(Modifier.fillMaxWidth().glass().padding(16.dp)) {
-                            MealDetailsPanel(
-                                mealType = mealType, onMealType = viewModel::setMealType,
-                                logDate = logDate, onPickDay = { showDatePicker = true },
-                                eatenAt = eatenAt, onPickTime = viewModel::pickEatenTime,
-                                tags = tags, onToggleTag = viewModel::toggleTag
-                            )
-                        }
-                    } else {
-                        MealDetailsRow(mealType, logDate, eatenAt, tags, onClick = { showDetails = true })
+                // No photo to carry it, so the model's badge sits under the description.
+                if (results) state.aiSource?.let { source ->
+                    item(key = "source") { com.fitpal.app.ui.component.AiSourceBadge(source, reason = state.onlineError) }
+                }
+
+                if (phase == AnalysisPhase.WORKING) {
+                    item(key = "status") {
+                        AnalysingStatus(
+                            message = state.progressMessage.ifBlank { "Thinking… online can take a moment, and the first on-device run is slower." },
+                            source = state.aiSource,
+                            modifier = fade()
+                        )
                     }
+                    item(key = "details") {
+                        MealDetailsPanel(
+                            logDate = logDate, onPickDay = { showDatePicker = true },
+                            eatenAt = eatenAt, onPickTime = viewModel::pickEatenTime,
+                            tags = tags, onToggleTag = viewModel::toggleTag,
+                            modifier = fade()
+                        )
+                    }
+                } else {
+                    item(key = "time") { MealTimeLine(logDate, eatenAt, tags, onClick = { showDetails = true }) }
                 }
 
                 when {
@@ -223,18 +265,7 @@ fun DescribeFoodScreen(
                         )
                     }
 
-                    phase == AnalysisPhase.WORKING -> {
-                        item(key = "progress") {
-                            AnalysingStrip(
-                                message = state.progressMessage.ifBlank {
-                                    "Thinking… online can take a moment, and the first on-device run is slower."
-                                },
-                                source = state.aiSource,
-                                modifier = fade()
-                            )
-                        }
-                        items(2, key = { "skeleton_$it" }) { SkeletonCard(fade()) }
-                    }
+                    phase == AnalysisPhase.WORKING -> Unit
 
                     phase == AnalysisPhase.FAILED -> item(key = "failed") {
                         if (state.onlineFailedReason != null) {
@@ -257,37 +288,40 @@ fun DescribeFoodScreen(
                     }
 
                     else -> {
-                        item(key = "header") {
-                            MealHeader(
-                                title = state.mealName ?: com.fitpal.app.domain.model.MealTypes.label(mealType),
+                        item(key = "nutrition") {
+                            NutritionCard(
+                                weight = weightLabel(state.foods.flatMap { it.drinkAwareIngredients }) +
+                                    if (state.foods.size > 1) " · ${state.foods.size} dishes" else "",
                                 kcal = state.totalCalories.toInt(),
-                                onRename = { renamingMeal = true },
+                                protein = state.foods.sumOf { it.totalProtein.toDouble() }.toFloat(),
+                                fat = state.foods.sumOf { it.totalFat.toDouble() }.toFloat(),
+                                carbs = state.foods.sumOf { it.totalCarbs.toDouble() }.toFloat(),
+                                fiber = state.foods.sumOf { it.totalFiber.toDouble() }.toFloat(),
                                 modifier = fade()
                             )
-                        }
-                        // No photo to carry it, so the model's badge sits under the header.
-                        state.aiSource?.let { source ->
-                            item(key = "source") { com.fitpal.app.ui.component.AiSourceBadge(source, reason = state.onlineError) }
                         }
                         itemsIndexed(state.foods, key = { i, _ -> "dish_$i" }) { index, food ->
                             MealItemCard(
                                 content = food.toMealItemContent(),
                                 modifier = fade(),
-                                collapsed = expanded != index,
-                                onExpand = { expanded = if (expanded == index) null else index },
+                                showName = !oneDish,
+                                collapsed = !oneDish && index in folded,
+                                onExpand = if (oneDish) null else ({
+                                    folded = if (index in folded) folded - index else folded + index
+                                }),
                                 onIngredientGramsChanged = { ii, g -> viewModel.updateIngredientGrams(index, ii, g) },
                                 onIngredientRemoved = { ii -> viewModel.removeIngredient(index, ii) },
+                                onIngredientDrinkChanged = { ii, drink -> viewModel.setIngredientDrink(index, ii, drink) },
                                 onPickChoice = { g, o -> viewModel.pickChoice(index, g, o) },
-                                onRemove = { expanded = null; viewModel.removeFood(index) },
-                                onSetDrink = { viewModel.setFoodDrink(index, it) },
+                                onRemove = if (oneDish) null else ({ folded = emptySet(); viewModel.removeFood(index) }),
                                 onTotalGramsChanged = { g -> viewModel.scaleFoodToGrams(index, g) },
                                 onAddIngredient = { addIngredientFor = index },
                                 mealPresets = mealPresets,
                                 drinkPresets = drinkPresets,
-                                onToggleSave = {
+                                onToggleSave = if (oneDish) null else ({
                                     viewModel.saveToGallery(index)
                                     Toast.makeText(context, "Saved to collection", Toast.LENGTH_SHORT).show()
-                                },
+                                }),
                                 saved = food.label in state.savedLabels,
                                 onRename = { viewModel.renameFood(index, it) }
                             )
@@ -296,28 +330,27 @@ fun DescribeFoodScreen(
                 }
             }
 
+            MealTypePills(mealType, viewModel::setMealType, Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp))
+            val analyse = editing || (phase == AnalysisPhase.FAILED && state.onlineFailedReason == null)
             LogBar(
                 totalKcal = state.totalCalories.toInt().takeIf { phase == AnalysisPhase.RESULTS && !editingDescription },
-                status = when (phase) {
-                    AnalysisPhase.WORKING -> "Working…"
-                    AnalysisPhase.SAVING -> "Saving…"
-                    else -> null
-                },
+                status = if (phase == AnalysisPhase.SAVING) "Saving…" else null,
                 actionLabel = when {
                     phase == AnalysisPhase.SAVING -> "Saving…"
-                    editingDescription && phase != AnalysisPhase.READY -> "Analyse again"
-                    phase == AnalysisPhase.READY || phase == AnalysisPhase.FAILED && state.onlineFailedReason == null -> "Analyse"
+                    editingDescription && phase != AnalysisPhase.READY -> "✦ Analyse again"
+                    analyse -> "✦ Analyse"
                     else -> "Log meal"
                 },
                 actionEnabled = when {
-                    editing || (phase == AnalysisPhase.FAILED && state.onlineFailedReason == null) ->
-                        state.description.isNotBlank() && phase != AnalysisPhase.WORKING
+                    analyse -> state.description.isNotBlank() && phase != AnalysisPhase.WORKING
                     else -> phase == AnalysisPhase.RESULTS
                 },
+                wideAction = analyse && phase != AnalysisPhase.WORKING,
+                onCancel = if (phase == AnalysisPhase.WORKING) viewModel::stopAnalysis else null,
                 onAction = {
-                    if (editing || (phase == AnalysisPhase.FAILED && state.onlineFailedReason == null)) {
+                    if (analyse) {
                         editingDescription = false
-                        expanded = null
+                        folded = emptySet()
                         viewModel.analyze()
                     } else {
                         fastingGuard.attempt(

@@ -51,7 +51,7 @@ import com.fitpal.app.ui.theme.glassSoft
 
 /**
  * The cards a "food detail" screen is made of, shared by the logged-item detail
- * ([com.fitpal.app.ui.screen.entrydetail.EntryDetailScreen]) and the saved-food detail
+ * ([com.fitpal.app.ui.screen.meal.MealScreen]) and the saved-food detail
  * ([com.fitpal.app.ui.screen.gallery.GalleryFoodDetailScreen]). The two screens differ (a logged
  * item's edits hit your log; a saved food is a template), but the cards don't — so they live here
  * once. Optional slots ([IngredientsCard]'s total-weight scaler and edit-with-AI) appear only for

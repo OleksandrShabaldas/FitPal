@@ -15,6 +15,7 @@ import com.fitpal.app.domain.DietaryTally
 import com.fitpal.app.domain.model.DetectedFood
 import com.fitpal.app.domain.model.DietaryRuleKind
 import com.fitpal.app.domain.model.Ingredient
+import com.fitpal.app.domain.model.asDrinkPart
 import com.fitpal.app.domain.model.LogDecision
 import com.fitpal.app.domain.model.MealInsights
 import com.fitpal.app.domain.model.Micronutrients
@@ -319,6 +320,7 @@ class MealRepository @Inject constructor(
                 isDrink = food.isDrink,
                 // Count water from every source — drinks AND watery foods (fruit, soup…).
                 waterMl = food.totalWaterMl,
+                drinkWaterMl = food.drinkWaterMl,
                 vitaminA = micros.vitaminAMcg,
                 vitaminC = micros.vitaminCMg,
                 vitaminD = micros.vitaminDMcg,
@@ -333,8 +335,9 @@ class MealRepository @Inject constructor(
                 zinc = micros.zincMg,
                 vitaminE = micros.vitaminEMg,
                 photoPath = photoPath,
-                // Keep the ingredient breakdown so the detail screen can show/edit it.
-                ingredientsJson = MealJson.encodeIngredients(food.ingredients),
+                // Keep the ingredient breakdown so the detail screen can show/edit it (with each part's
+                // food/drink flag made consistent with the dish).
+                ingredientsJson = MealJson.encodeIngredients(food.drinkAwareIngredients),
                 insightsJson = insightsJson,
                 insightsGeneratedAt = insightsAt,
                 aiSource = source?.storedName,
@@ -379,6 +382,7 @@ class MealRepository @Inject constructor(
                 fiber = ingredient.fiber,
                 isDrink = ingredient.isDrink,
                 waterMl = ingredient.waterMl,
+                drinkWaterMl = if (ingredient.isDrink) ingredient.waterMl else 0f,
                 vitaminA = m.vitaminAMcg,
                 vitaminC = m.vitaminCMg,
                 vitaminD = m.vitaminDMcg,
@@ -634,7 +638,8 @@ class MealRepository @Inject constructor(
             carbs = 0f,
             fiber = 0f,
             isDrink = true,
-            waterMl = ml
+            waterMl = ml,
+            drinkWaterMl = ml
         )
         return mealLogDao.logMealWithItems(mealLog, listOf(item))
     }
@@ -770,9 +775,15 @@ class MealRepository @Inject constructor(
 
     // ---- Ingredient breakdown + cached AI insights (meal detail screen) ----
 
-    /** The ingredients that make up a logged item (empty if none were saved). */
-    fun ingredientsForItem(item: MealLogItemEntity): List<Ingredient> =
-        MealJson.decodeIngredients(item.ingredientsJson)
+    /**
+     * The ingredients that make up a logged item (empty if none were saved). Items logged before
+     * food/drink went per ingredient (docs/redesign/16) have no per-part flag: a drink's parts read as
+     * drinks.
+     */
+    fun ingredientsForItem(item: MealLogItemEntity): List<Ingredient> {
+        val list = MealJson.decodeIngredients(item.ingredientsJson)
+        return if (item.isDrink && list.none { it.isDrink }) list.map { it.copy(isDrink = true) } else list
+    }
 
     /** Cached AI insights for an item, or null if none / wiped by retention. */
     fun insightsForItem(item: MealLogItemEntity): MealInsights? =
@@ -806,12 +817,32 @@ class MealRepository @Inject constructor(
      */
     suspend fun setItemDrink(itemId: Long, drink: Boolean) {
         val item = mealLogDao.getItemById(itemId) ?: return
+        val parts = ingredientsForItem(item)
+        if (parts.isNotEmpty()) {
+            if (parts.all { it.isDrink == drink }) return
+            updateItemIngredients(itemId, parts.map { it.asDrinkPart(drink) })
+            return
+        }
         if (item.isDrink == drink) return
         val water = if (drink && item.waterMl <= 0f && item.grams > 0f) {
             val per100 = 100f / item.grams
             com.fitpal.app.domain.Drinks.estimateWaterPer100(item.carbs * per100, item.protein * per100, item.fat * per100) * item.grams / 100f
         } else item.waterMl
-        mealLogDao.updateItemDrink(itemId, drink, water)
+        mealLogDao.updateItemDrink(itemId, drink, water, if (drink) water else 0f)
+    }
+
+    /**
+     * The cup on one ingredient of a logged item (docs/redesign/16): that part becomes a drink — in ml,
+     * its water counting as drinks — or food again. The item is a drink only when every part is, and
+     * fasting adherence reads that at query time, so the day is re-judged by itself.
+     */
+    suspend fun setIngredientDrink(itemId: Long, index: Int, drink: Boolean) {
+        val item = mealLogDao.getItemById(itemId) ?: return
+        val parts = ingredientsForItem(item).toMutableList()
+        val part = parts.getOrNull(index) ?: return
+        if (part.isDrink == drink) return
+        parts[index] = part.asDrinkPart(drink)
+        updateItemIngredients(itemId, parts)
     }
 
     /** Persist the meal-detail +/− "Amount" stepper so it survives reopening the entry. */
@@ -846,6 +877,9 @@ class MealRepository @Inject constructor(
             carbs = ingredients.sumOf { it.carbs.toDouble() }.toFloat(),
             fiber = ingredients.sumOf { it.fiber.toDouble() }.toFloat(),
             waterMl = ingredients.sumOf { it.waterMl.toDouble() }.toFloat(),
+            // A dish is a drink when every part is; the drink parts' water counts as drinks.
+            isDrink = ingredients.isNotEmpty() && ingredients.all { it.isDrink },
+            drinkWaterMl = ingredients.filter { it.isDrink }.sumOf { it.waterMl.toDouble() }.toFloat(),
             vitaminA = micros.vitaminAMcg,
             vitaminC = micros.vitaminCMg,
             vitaminD = micros.vitaminDMcg,
@@ -896,6 +930,7 @@ class MealRepository @Inject constructor(
             carbs = item.carbs * factor,
             fiber = item.fiber * factor,
             waterMl = item.waterMl * factor,
+            drinkWaterMl = item.drinkWaterMl * factor,
             vitaminA = item.vitaminA * factor,
             vitaminC = item.vitaminC * factor,
             vitaminD = item.vitaminD * factor,

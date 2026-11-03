@@ -154,7 +154,9 @@ class WidgetUpdater @Inject constructor(
             settingsRepository.userProfile.map { },
             settingsRepository.macroSelection.map { },
             settingsRepository.waterGoalOverrideMl.map { },
-            settingsRepository.waterPresets.map { }
+            settingsRepository.waterPresets.map { },
+            // The 12/24-hour clock: fasting times and "easy on sleep from …" are drawn into the widgets.
+            settingsRepository.clock24h.map { }
         )
     }
 }

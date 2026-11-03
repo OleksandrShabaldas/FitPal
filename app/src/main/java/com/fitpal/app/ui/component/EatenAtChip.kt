@@ -50,12 +50,12 @@ fun EatenAtChip(
     /** What "no time set" means here — "just now" while logging, the log time on a logged meal. */
     unsetLabel: String = "just now"
 ) {
-    val context = LocalContext.current
+    val timePicker = com.fitpal.app.ui.component.kit.rememberTimePicker()
     val openPicker = {
         val t = eatenAt.time ?: LocalTime.now()
-        android.app.TimePickerDialog(
-            context, { _, h, m -> onPick(LocalTime.of(h, m)) }, t.hour, t.minute, false
-        ).show()
+        timePicker.open(t.hour * 60 + t.minute, title = "When did you eat?", quickAgo = true) { m ->
+            onPick(LocalTime.of(m / 60, m % 60))
+        }
     }
     val timeText = eatenAt.time?.let { clockLabel(it) } ?: unsetLabel
     val fromPhoto = eatenAt.source == TimeSource.PHOTO && eatenAt.time != null

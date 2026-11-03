@@ -240,7 +240,7 @@ private fun GardenSketch() {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun FeatureSetupControls(feature: Feature, setup: FeatureSetup, onChange: (FeatureSetup) -> Unit) {
-    val context = LocalContext.current
+    val timePicker = com.fitpal.app.ui.component.kit.rememberTimePicker()
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         when (feature) {
             Feature.FASTING -> {
@@ -252,20 +252,17 @@ fun FeatureSetupControls(feature: Feature, setup: FeatureSetup, onChange: (Featu
                     }
                     // Custom: pick the start (and then the end, below) yourself.
                     SetupPill("Custom", selected = preset == null) {
-                        android.app.TimePickerDialog(context, { _, hh, mm -> onChange(setup.copy(eatStartMin = hh * 60 + mm)) },
-                            setup.eatStartMin / 60, setup.eatStartMin % 60, false).show()
+                        timePicker.open(setup.eatStartMin, title = "Eating starts") { m -> onChange(setup.copy(eatStartMin = m)) }
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("Eat", style = MaterialTheme.typography.bodyMedium, color = CreamMuted)
                     SetupPill(fastingClockLabel(setup.eatStartMin), selected = false) {
-                        android.app.TimePickerDialog(context, { _, hh, mm -> onChange(setup.copy(eatStartMin = hh * 60 + mm)) },
-                            setup.eatStartMin / 60, setup.eatStartMin % 60, false).show()
+                        timePicker.open(setup.eatStartMin, title = "Eating starts") { m -> onChange(setup.copy(eatStartMin = m)) }
                     }
                     Text("–", style = MaterialTheme.typography.bodyMedium, color = CreamMuted)
                     SetupPill(fastingClockLabel(setup.eatEndMin), selected = false) {
-                        android.app.TimePickerDialog(context, { _, hh, mm -> onChange(setup.copy(eatEndMin = hh * 60 + mm)) },
-                            setup.eatEndMin / 60, setup.eatEndMin % 60, false).show()
+                        timePicker.open(setup.eatEndMin, title = "Eating ends") { m -> onChange(setup.copy(eatEndMin = m)) }
                     }
                 }
                 SetupLabel("How strict")

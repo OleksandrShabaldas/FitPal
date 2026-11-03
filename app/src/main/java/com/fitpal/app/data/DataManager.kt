@@ -69,6 +69,7 @@ class DataManager @Inject constructor(
             settings.homeStripBigger.value?.let { root.put("home_strip_bigger", it) }
             root.put("analytics_collapsed", JSONArray(settings.analyticsCollapsed.value.toList()))
             root.put("trail_enabled", settings.trailEnabled.value)
+            settings.clock24h.value?.let { root.put("clock_24h", it) }
             // The coach and the meal planner (docs/redesign/10).
             root.put("coach_enabled", settings.coachEnabled.value)
             root.put("planner_enabled", settings.plannerEnabled.value)
@@ -105,6 +106,8 @@ class DataManager @Inject constructor(
                         db.insert(table, SQLiteDatabase.CONFLICT_REPLACE, rowToValues(obj))
                     }
                 }
+                // Backups from before 2.16 have no drinkWaterMl: a drink's water was all "drinks".
+                db.execSQL("UPDATE meal_log_items SET drinkWaterMl = waterMl WHERE isDrink = 1 AND drinkWaterMl = 0")
                 // Custom barcode foods: upsert into usda_foods WITHOUT wiping the food table.
                 root.optJSONArray("custom_foods")?.let { rows ->
                     for (i in 0 until rows.length()) {
@@ -131,6 +134,7 @@ class DataManager @Inject constructor(
             root.optJSONObject("nav_config")?.let { settings.setNavConfig(com.fitpal.app.domain.model.NavConfig.fromJson(it.toString())) }
             if (root.has("step_goal")) settings.setStepGoalManual(root.optInt("step_goal", 0))
             if (root.has("trail_enabled")) settings.setTrailEnabled(root.optBoolean("trail_enabled", true))
+            if (root.has("clock_24h")) settings.setClock24h(root.optBoolean("clock_24h", false))
             if (root.has("coach_enabled")) settings.setCoachEnabled(root.optBoolean("coach_enabled", true))
             if (root.has("planner_enabled")) settings.setPlannerEnabled(root.optBoolean("planner_enabled", true))
             root.optJSONObject("food_profile")?.let { settings.setFoodProfile(com.fitpal.app.domain.model.FoodProfile.fromJson(it.toString())) }

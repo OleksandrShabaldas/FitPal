@@ -140,7 +140,8 @@ val SETTINGS_SEARCH_INDEX = listOf(
     SettingsSearchEntry("Look", "appearance", "look", "theme style glow liquid glass paper material you dark light mode night colours colors palette ocean forest berry aurora graphite ember wallpaper dynamic blue teal green gold orange red pink purple slate"),
     SettingsSearchEntry("Background photo", "appearance", "background", "background photo picture image wallpaper own behind cards dim glow liquid"),
     SettingsSearchEntry("App icon", "appearance", "app_icon", "icon launcher apple carrot sprout ring logo home screen icon change"),
-    SettingsSearchEntry("Fine-tune the look", "appearance", "look_tuning", "glow grain texture opacity transparency corners rounding compact spacing density reduce motion animation"),
+    SettingsSearchEntry("24-hour clock", "appearance", "clock", "24 hour 24h 12 hour 12h clock time format am pm"),
+    SettingsSearchEntry("Fine-tune the look", "appearance", "look_tuning","glow grain texture opacity transparency corners rounding compact spacing density reduce motion animation"),
     // Home & screens
     SettingsSearchEntry("Trackers on Home", "personalize", "trackers", "strip today strip trackers home cards caffeine on home fasting ring fasting bar drawer water steps weight food limits dessert fried drinks placement small card bigger rings numbers"),
     SettingsSearchEntry("Analytics summary tiles", "personalize", "customize", "summary tiles analytics average calories steps weight change logged score cards sections energy nutrition body habits"),

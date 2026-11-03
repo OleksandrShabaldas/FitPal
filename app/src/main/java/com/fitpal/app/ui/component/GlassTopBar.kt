@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowBackIos
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -34,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.lerp
 import com.fitpal.app.ui.component.kit.LocalTopBarScroll
 import com.fitpal.app.ui.theme.Cream
+import com.fitpal.app.ui.theme.CreamMuted
 import com.fitpal.app.ui.theme.LookState
 import com.fitpal.app.ui.theme.LookStyle
 import com.fitpal.app.ui.theme.glass
@@ -46,17 +48,22 @@ import com.fitpal.app.ui.theme.glass
  *  - Material You: Material's collapsing top app bar (medium; large on a screen without a back
  *    arrow), tinted as content slides under it.
  * Liquid and Material collapse through [LocalTopBarScroll], which the screen's backdrop provides.
+ *
+ * [onTitleClick] makes the title tappable with a small pencil after it (a meal's name, renamed in
+ * place); [titleMaxLines] lets a long one take two lines in Glow and Paper (docs/redesign/16).
  */
 @Composable
 fun GlassTopBar(
     title: String,
     modifier: Modifier = Modifier,
     onBack: (() -> Unit)? = null,
+    titleMaxLines: Int = 1,
+    onTitleClick: (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {}
 ) {
     when (LookState.style) {
-        LookStyle.LIQUID -> LiquidTopBar(title, modifier, onBack, actions)
-        LookStyle.MATERIAL -> MaterialTopBar(title, modifier, onBack, actions)
+        LookStyle.LIQUID -> LiquidTopBar(title, modifier, onBack, onTitleClick, actions)
+        LookStyle.MATERIAL -> MaterialTopBar(title, modifier, onBack, onTitleClick, actions)
         else -> Row(
             modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -75,16 +82,21 @@ fun GlassTopBar(
                 }
                 Spacer(Modifier.width(14.dp))
             }
-            // One line, always: titles can now be user-written (a named meal), and a long one
-            // wrapping would push the bar's height around.
-            Text(
-                title,
-                style = MaterialTheme.typography.headlineSmall,
-                color = Cream,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
-            )
+            // One line unless the screen asks for two: titles can be user-written (a named meal).
+            Row(
+                Modifier.weight(1f).then(if (onTitleClick != null) Modifier.clickable(onClick = onTitleClick) else Modifier),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = Cream,
+                    maxLines = titleMaxLines,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                TitlePencil(title, onTitleClick)
+            }
             actions()
         }
     }
@@ -92,7 +104,7 @@ fun GlassTopBar(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun LiquidTopBar(title: String, modifier: Modifier, onBack: (() -> Unit)?, actions: @Composable RowScope.() -> Unit) {
+private fun LiquidTopBar(title: String, modifier: Modifier, onBack: (() -> Unit)?, onTitleClick: (() -> Unit)?, actions: @Composable RowScope.() -> Unit) {
     val behavior = LocalTopBarScroll.current
     // With a back button the large title sits under the button row and the bar loses that row as
     // it collapses; without one (a tab's root) the large title simply turns into the small one.
@@ -136,23 +148,30 @@ private fun LiquidTopBar(title: String, modifier: Modifier, onBack: (() -> Unit)
             actions()
         }
         // The large title.
-        Text(
-            title,
-            style = MaterialTheme.typography.headlineLarge,
-            color = Cream,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier
+        Row(
+            Modifier
                 .align(Alignment.BottomStart)
                 .padding(start = 4.dp, bottom = 4.dp)
                 .alpha((1f - f * 1.7f).coerceIn(0f, 1f))
-        )
+                .then(if (onTitleClick != null) Modifier.clickable(onClick = onTitleClick) else Modifier),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                title,
+                style = MaterialTheme.typography.headlineLarge,
+                color = Cream,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false)
+            )
+            TitlePencil(title, onTitleClick)
+        }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MaterialTopBar(title: String, modifier: Modifier, onBack: (() -> Unit)?, actions: @Composable RowScope.() -> Unit) {
+private fun MaterialTopBar(title: String, modifier: Modifier, onBack: (() -> Unit)?, onTitleClick: (() -> Unit)?, actions: @Composable RowScope.() -> Unit) {
     val behavior = LocalTopBarScroll.current
     val scheme = MaterialTheme.colorScheme
     val colors = TopAppBarDefaults.mediumTopAppBarColors(
@@ -162,7 +181,15 @@ private fun MaterialTopBar(title: String, modifier: Modifier, onBack: (() -> Uni
         titleContentColor = scheme.onSurface,
         actionIconContentColor = scheme.onSurfaceVariant
     )
-    val titleText: @Composable () -> Unit = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+    val titleText: @Composable () -> Unit = {
+        Row(
+            Modifier.then(if (onTitleClick != null) Modifier.clickable(onClick = onTitleClick) else Modifier),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+            TitlePencil(title, onTitleClick)
+        }
+    }
     val nav: @Composable () -> Unit = {
         if (onBack != null) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
@@ -184,4 +211,12 @@ private fun MaterialTopBar(title: String, modifier: Modifier, onBack: (() -> Uni
             windowInsets = WindowInsets(0), colors = colors, scrollBehavior = behavior
         )
     }
+}
+
+/** The small pencil after a title that can be renamed by tapping it. */
+@Composable
+private fun TitlePencil(title: String, onTitleClick: (() -> Unit)?) {
+    if (onTitleClick == null) return
+    Spacer(Modifier.width(8.dp))
+    Icon(Icons.Default.Edit, contentDescription = "Rename $title", tint = CreamMuted, modifier = Modifier.size(16.dp))
 }

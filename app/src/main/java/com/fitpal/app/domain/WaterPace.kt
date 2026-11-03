@@ -55,13 +55,8 @@ object WaterPace {
 
     private fun roundTo50(ml: Float): Int = ((ml / 50f).roundToInt() * 50).coerceAtLeast(50)
 
-    /** "7:00 AM". */
-    fun clockLabel(minuteOfDay: Int): String {
-        val m = ((minuteOfDay % DAY) + DAY) % DAY
-        val h = m / 60
-        val hr12 = ((h + 11) % 12) + 1
-        return "$hr12:${"%02d".format(m % 60)} ${if (h < 12) "AM" else "PM"}"
-    }
+    /** "7:00 AM" (or "07:00" on the 24-hour clock). */
+    fun clockLabel(minuteOfDay: Int): String = ClockFormat.minuteOfDay(minuteOfDay)
 
     private const val DAY = 24 * 60
 }

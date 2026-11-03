@@ -46,6 +46,8 @@ class SettingsViewModel @Inject constructor(
         featureSwitches.turnOn(feature, setup)
     fun turnFeatureOff(feature: com.fitpal.app.domain.model.Feature) = featureSwitches.turnOff(feature)
     val trailEnabled: StateFlow<Boolean> = settingsRepository.trailEnabled
+    val clock24h: StateFlow<Boolean?> = settingsRepository.clock24h
+    fun setClock24h(on: Boolean) = settingsRepository.setClock24h(on)
     val foodProfile: StateFlow<com.fitpal.app.domain.model.FoodProfile> = settingsRepository.foodProfile
 
     // ---- Caffeine tracker ----

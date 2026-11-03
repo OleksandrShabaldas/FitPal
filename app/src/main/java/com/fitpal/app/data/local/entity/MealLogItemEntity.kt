@@ -41,6 +41,12 @@ data class MealLogItemEntity(
     val isDrink: Boolean = false,
     @ColumnInfo(defaultValue = "0")
     val waterMl: Float = 0f,
+    /**
+     * The part of [waterMl] from the item's drink ingredients — "drinks"; the rest is "from food"
+     * (docs/redesign/16: a dish can hold both). An all-drink item's equals [waterMl].
+     */
+    @ColumnInfo(defaultValue = "0")
+    val drinkWaterMl: Float = 0f,
     // Micronutrients (actual amounts eaten, not per-100g)
     @ColumnInfo(defaultValue = "0") val vitaminA: Float = 0f,
     @ColumnInfo(defaultValue = "0") val vitaminC: Float = 0f,

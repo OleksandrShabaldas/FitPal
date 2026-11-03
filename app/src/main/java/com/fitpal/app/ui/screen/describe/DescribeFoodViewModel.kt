@@ -186,6 +186,15 @@ class DescribeFoodViewModel @Inject constructor(
         _uiState.update { it.copy(onlineFailedReason = null, isAnalyzing = false, cancelled = true) }
     }
 
+    /**
+     * Cancel while the AI works (docs/redesign/16): the request stops and the screen goes back to the
+     * description, as it was — ready to try again.
+     */
+    fun stopAnalysis() {
+        jobManager.discard()
+        _uiState.update { it.copy(isAnalyzing = false, onlineFailedReason = null, progressMessage = "") }
+    }
+
     /** Hand the description to the background service so it survives leaving the screen/app. */
     fun analyze() {
         val text = _uiState.value.description
@@ -275,6 +284,16 @@ class DescribeFoodViewModel @Inject constructor(
             val foods = state.foods.toMutableList()
             val food = foods.getOrNull(foodIndex) ?: return@update state
             foods[foodIndex] = food.asDrink(drink)
+            state.copy(foods = foods)
+        }
+    }
+
+    /** The cup on one ingredient (docs/redesign/16): that part is a drink (ml, counts as drinks) or food. */
+    fun setIngredientDrink(foodIndex: Int, ingredientIndex: Int, drink: Boolean) {
+        _uiState.update { state ->
+            val foods = state.foods.toMutableList()
+            val food = foods.getOrNull(foodIndex) ?: return@update state
+            foods[foodIndex] = food.withIngredientDrink(ingredientIndex, drink)
             state.copy(foods = foods)
         }
     }

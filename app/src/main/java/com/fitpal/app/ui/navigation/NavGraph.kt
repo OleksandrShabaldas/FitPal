@@ -62,7 +62,6 @@ import com.fitpal.app.ui.screen.collection.CollectionScreen
 import com.fitpal.app.ui.screen.custom.CustomFoodScreen
 import com.fitpal.app.ui.screen.customize.CustomizeWidgetsScreen
 import com.fitpal.app.ui.screen.describe.DescribeFoodScreen
-import com.fitpal.app.ui.screen.entrydetail.EntryDetailScreen
 import com.fitpal.app.ui.screen.exercise.DescribeExerciseScreen
 import com.fitpal.app.ui.screen.exercise.ExerciseDetailScreen
 import com.fitpal.app.ui.screen.gallery.GalleryFoodDetailScreen
@@ -71,7 +70,7 @@ import com.fitpal.app.ui.screen.trail.TrailScreen
 import com.fitpal.app.ui.screen.home.HomeScreen
 import com.fitpal.app.ui.screen.search.SearchScreen
 import com.fitpal.app.ui.screen.manual.ManualEntryScreen
-import com.fitpal.app.ui.screen.mealgroup.MealGroupScreen
+import com.fitpal.app.ui.screen.meal.MealScreen
 import com.fitpal.app.ui.screen.modelsetup.ModelSetupScreen
 import com.fitpal.app.ui.screen.onboarding.OnboardingScreen
 import com.fitpal.app.ui.screen.settings.SettingsScreen
@@ -574,9 +573,9 @@ fun FitPalNavHost(
                     }
                 )
             ) {
-                EntryDetailScreen(
+                // One Meal page for every logged meal (docs/redesign/16): opened at this item's dish.
+                MealScreen(
                     onBack = safeBack,
-                    onDeleted = goHome,
                     onOpenRecipe = { id -> navController.navigate(Screen.PlannedMeal.buildRoute(id)) }
                 )
             }
@@ -589,9 +588,8 @@ fun FitPalNavHost(
                     }
                 )
             ) {
-                MealGroupScreen(
+                MealScreen(
                     onBack = safeBack,
-                    onDishClick = { entryId -> navController.navigate(Screen.EntryDetail.buildRoute(entryId)) },
                     onOpenRecipe = { id -> navController.navigate(Screen.PlannedMeal.buildRoute(id)) }
                 )
             }

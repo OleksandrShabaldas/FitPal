@@ -59,7 +59,7 @@ import com.fitpal.app.data.local.entity.WeightEntryEntity
         UsdaFoodEntity::class,
         WeightEntryEntity::class
     ],
-    version = 34,
+    version = 35,
     exportSchema = true
 )
 abstract class FitPalDatabase : RoomDatabase() {
@@ -572,6 +572,17 @@ abstract class FitPalDatabase : RoomDatabase() {
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_planned_meals_requestId ON planned_meals (requestId)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_planned_meals_date ON planned_meals (date)")
                 db.execSQL("ALTER TABLE meal_logs ADD COLUMN plannedMealId INTEGER")
+            }
+        }
+
+        /**
+         * 34 → 35 (docs/redesign/16): food and drink per ingredient, so a dish can hold both. Water from
+         * an item's drink ingredients gets its own column; every older item was all-drink or all-food.
+         */
+        val MIGRATION_34_35 = object : Migration(34, 35) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE meal_log_items ADD COLUMN drinkWaterMl REAL NOT NULL DEFAULT 0")
+                db.execSQL("UPDATE meal_log_items SET drinkWaterMl = waterMl WHERE isDrink = 1")
             }
         }
     }

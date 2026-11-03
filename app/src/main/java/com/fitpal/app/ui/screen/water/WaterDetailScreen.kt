@@ -147,8 +147,9 @@ fun WaterDetailScreen(
     var amountSheet by remember { mutableStateOf<AmountMode?>(null) }
     var showGoalSheet by remember { mutableStateOf(false) }
 
-    val drinkMl = timeline.filter { it.isDrink }.sumOf { it.waterMl.toDouble() }.toFloat()
-    val foodMl = timeline.filterNot { it.isDrink }.sumOf { it.waterMl.toDouble() }.toFloat()
+    // A dish can hold a drink (docs/redesign/16): its drink part's water is "drinks", the rest "from food".
+    val drinkMl = timeline.sumOf { it.drinkWaterMl.toDouble() }.toFloat()
+    val foodMl = timeline.sumOf { (it.waterMl - it.drinkWaterMl).toDouble() }.toFloat()
     val glassMl = presets.firstOrNull() ?: 250
     val status = if (isToday) WaterPace.statusToday(total, goal, nowMin, wake, bed, glassMl)
         else WaterPace.statusPast(total, goal)
@@ -517,12 +518,16 @@ private fun WaterEntry(row: WaterTimelineRow, onOpen: () -> Unit, onRemove: () -
             )
             Column(Modifier.weight(1f)) {
                 Text(row.name, style = MaterialTheme.typography.bodyMedium, color = Cream, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (!row.isDrink) Text("from food", style = MaterialTheme.typography.labelSmall, color = CreamFaint)
+                val fromFood = (row.waterMl - row.drinkWaterMl).roundToInt()
+                when {
+                    row.drinkWaterMl <= 0f -> Text("from food", style = MaterialTheme.typography.labelSmall, color = CreamFaint)
+                    fromFood > 0 -> Text("+ %,d ml from food".format(fromFood), style = MaterialTheme.typography.labelSmall, color = CreamFaint)
+                }
             }
             Text(
-                "%,d ml".format(row.waterMl.roundToInt()),
+                "%,d ml".format((if (row.drinkWaterMl > 0f) row.drinkWaterMl else row.waterMl).roundToInt()),
                 style = MaterialTheme.typography.bodyMedium,
-                color = if (row.isDrink) AccentTrends else Cream
+                color = if (row.drinkWaterMl > 0f) AccentTrends else Cream
             )
         }
     }
