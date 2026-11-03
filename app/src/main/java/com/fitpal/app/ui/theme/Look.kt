@@ -54,8 +54,11 @@ data class Appearance(
     val materialPalette: MaterialPalette = MaterialPalette.BLUE,
     /** Glow and Liquid glass: the user's own photo behind everything instead of the glow / colour. */
     val photo: Boolean = false,
-    /** 0–0.8 — how much the photo is dimmed (darkened on dark looks, lightened on light ones). */
-    val photoDim: Float = 0.35f,
+    /**
+     * 0–1 — how much of the photo shows through (0) versus the look (1): blur, darkness, grain and the
+     * look's light move together ([PhotoTreatment.at]). 0.5 = the values tuned on the 2.15 review page.
+     */
+    val photoStrength: Float = PhotoTreatment.DEFAULT_STRENGTH,
     /** Bumped each time a new photo is picked, so the backdrop reloads the file. */
     val photoVersion: Long = 0L,
     /** 0.4–1.6 — how bright the backdrop's light orbs are. */
@@ -74,7 +77,7 @@ data class Appearance(
     fun toJson(): String = JSONObject()
         .put("style", style.name).put("palette", palette.name).put("mode", mode.name)
         .put("dynamic", dynamicColor).put("materialPalette", materialPalette.name)
-        .put("photo", photo).put("photoDim", photoDim.toDouble()).put("photoVersion", photoVersion)
+        .put("photo", photo).put("photoStrength", photoStrength.toDouble()).put("photoVersion", photoVersion)
         .put("glow", glow.toDouble()).put("grain", grain)
         .put("cardOpacity", cardOpacity.toDouble()).put("roundness", roundness.toDouble())
         .put("compact", compact).put("reduceMotion", reduceMotion)
@@ -83,7 +86,7 @@ data class Appearance(
     /** What "Reset fine-tuning" keeps: the look itself, its colours and the background. */
     fun withoutTuning(): Appearance = Appearance(
         style = style, palette = palette, mode = mode, dynamicColor = dynamicColor,
-        materialPalette = materialPalette, photo = photo, photoDim = photoDim, photoVersion = photoVersion
+        materialPalette = materialPalette, photo = photo, photoStrength = photoStrength, photoVersion = photoVersion
     )
 
     companion object {
@@ -101,7 +104,8 @@ data class Appearance(
                     materialPalette = MaterialPalette.entries.firstOrNull { it.name == o.optString("materialPalette") }
                         ?: materialPaletteFor(palette),
                     photo = o.optBoolean("photo", false),
-                    photoDim = o.optDouble("photoDim", 0.35).toFloat().coerceIn(0f, 0.8f),
+                    // Before 2.15 there was only "photoDim"; everyone starts from the new default treatment.
+                    photoStrength = o.optDouble("photoStrength", PhotoTreatment.DEFAULT_STRENGTH.toDouble()).toFloat().coerceIn(0f, 1f),
                     photoVersion = o.optLong("photoVersion", 0L),
                     glow = o.optDouble("glow", 1.0).toFloat().coerceIn(0.4f, 1.6f),
                     grain = o.optBoolean("grain", true),

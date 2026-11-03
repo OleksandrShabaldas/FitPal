@@ -1,5 +1,6 @@
 package com.fitpal.app.ui.screen.coach
 
+import com.fitpal.app.ui.component.kit.aiGlow
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -219,7 +220,7 @@ fun PlanRequestSheet(
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
             if (stepIndex > 0) GlassButton("Back", onClick = { stepIndex-- }, modifier = Modifier.weight(1f))
             if (stepIndex < steps.size - 1) GlassButton("Next", onClick = { stepIndex++ }, modifier = Modifier.weight(1f))
-            GoldButton("Generate", onClick = { onGenerate(req) }, modifier = Modifier.weight(1f))
+            GoldButton("Generate", onClick = { onGenerate(req) }, modifier = Modifier.weight(1f).aiGlow())
         }
     }
 }

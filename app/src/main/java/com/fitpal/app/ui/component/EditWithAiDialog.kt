@@ -1,5 +1,6 @@
 package com.fitpal.app.ui.component
 
+import com.fitpal.app.ui.component.kit.aiGlow
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -72,7 +73,7 @@ fun EditWithAiDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onSubmit(text) }, enabled = text.isNotBlank() && !loading) {
+            TextButton(onClick = { onSubmit(text) }, enabled = text.isNotBlank() && !loading, modifier = Modifier.aiGlow()) {
                 Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text("Update")

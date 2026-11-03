@@ -75,6 +75,9 @@ class DataManager @Inject constructor(
             root.put("food_profile", JSONObject(settings.foodProfile.value.toJson()))
             settings.lastPlanRequest.takeIf { it.isNotBlank() }?.let { root.put("last_plan_request", JSONObject(it)) }
             root.put("dismissed_suggestions", JSONArray(settings.dismissedSuggestions.value.toList()))
+            // Your drinks and the three on the caffeine planner (2.15).
+            root.put("caffeine_drinks", JSONArray(com.fitpal.app.domain.Caffeine.drinksToJson(settings.caffeineDrinks.value)))
+            root.put("caffeine_quick_drinks", JSONArray(settings.caffeineQuickDrinks.value))
             context.contentResolver.openOutputStream(uri)?.use { out ->
                 out.write(root.toString().toByteArray(Charsets.UTF_8))
             } ?: return@withContext false
@@ -134,6 +137,12 @@ class DataManager @Inject constructor(
             root.optJSONObject("last_plan_request")?.let { settings.lastPlanRequest = it.toString() }
             root.optJSONArray("dismissed_suggestions")?.let { arr ->
                 settings.setDismissedSuggestions((0 until arr.length()).mapNotNull { arr.optString(it).takeIf { s -> s.isNotBlank() } }.toSet())
+            }
+            root.optJSONArray("caffeine_drinks")?.let { arr ->
+                com.fitpal.app.domain.Caffeine.drinksFromJson(arr.toString())?.let(settings::setCaffeineDrinks)
+            }
+            root.optJSONArray("caffeine_quick_drinks")?.let { arr ->
+                settings.setCaffeineQuickDrinks((0 until arr.length()).mapNotNull { arr.optString(it).takeIf { s -> s.isNotBlank() } })
             }
             root.optJSONArray("analytics_collapsed")?.let { arr ->
                 settings.setAnalyticsCollapsed((0 until arr.length()).mapNotNull { arr.optString(it).takeIf { s -> s.isNotBlank() } }.toSet())

@@ -1,5 +1,6 @@
 package com.fitpal.app.ui.component
 
+import com.fitpal.app.ui.component.kit.aiGlow
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -39,11 +40,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.fitpal.app.domain.model.DetectedFood
-import com.fitpal.app.domain.model.FoodVariation
+import com.fitpal.app.domain.model.ChoiceGroup
 import com.fitpal.app.domain.model.Ingredient
 import com.fitpal.app.domain.model.ServingPreset
 import com.fitpal.app.ui.theme.CalorieColor
 import com.fitpal.app.ui.theme.Cream
+import com.fitpal.app.ui.theme.CreamFaint
 import com.fitpal.app.ui.theme.CreamMuted
 import com.fitpal.app.ui.theme.GoldLight
 import com.fitpal.app.ui.theme.glass
@@ -67,7 +69,8 @@ data class MealItemContent(
     /** Number of servings (pre-log photo only); 1 when it doesn't apply. */
     val servings: Int,
     val ingredients: List<Ingredient>,
-    val variations: List<FoodVariation> = emptyList()
+    /** What the AI couldn't tell, as choices that replace an ingredient (pre-log only). */
+    val choices: List<ChoiceGroup> = emptyList()
 )
 
 /** Adapter from the pre-log draft model. */
@@ -83,7 +86,7 @@ fun DetectedFood.toMealItemContent(): MealItemContent = MealItemContent(
     waterMl = totalWaterMl,
     servings = servings,
     ingredients = ingredients,
-    variations = variations
+    choices = choices
 )
 
 /**
@@ -108,7 +111,8 @@ fun MealItemCard(
     onWaterChanged: ((ml: Float) -> Unit)? = null,
     onAddIngredient: (() -> Unit)? = null,
     onEditWithAi: (() -> Unit)? = null,
-    onToggleVariation: ((index: Int) -> Unit)? = null,
+    /** "Not sure about": put option [option] of choice [group] in the dish (pre-log only). */
+    onPickChoice: ((group: Int, option: Int) -> Unit)? = null,
     onRename: ((String) -> Unit)? = null,
     onRemove: (() -> Unit)? = null,
     onToggleSave: (() -> Unit)? = null,
@@ -278,6 +282,35 @@ fun MealItemCard(
             )
         }
 
+        // Not sure about — pre-log only (docs/redesign/15): a part of the dish the AI couldn't tell,
+        // one row each; a chip swaps that ingredient in place, nothing is ever added. A row whose
+        // ingredient was removed or renamed since goes away.
+        if (content.choices.isNotEmpty() && onPickChoice != null) {
+            val shown = content.choices.withIndex().filter { (_, g) ->
+                content.ingredients.any { it.name.equals(g.current?.name, ignoreCase = true) }
+            }
+            if (shown.isNotEmpty()) {
+                Spacer(Modifier.height(10.dp))
+                Text("Not sure about", style = MaterialTheme.typography.titleSmall, color = Cream, modifier = Modifier.padding(bottom = 6.dp))
+                shown.forEach { (g, group) ->
+                    Row(Modifier.fillMaxWidth().padding(bottom = 6.dp), verticalAlignment = Alignment.Top) {
+                        Text(
+                            group.label, style = MaterialTheme.typography.labelMedium, color = CreamFaint, maxLines = 2,
+                            modifier = Modifier.width(68.dp).padding(top = 5.dp, end = 6.dp)
+                        )
+                        FlowRow(
+                            modifier = Modifier.weight(1f),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            group.options.forEachIndexed { o, option ->
+                                ChoiceChip(option.name, selected = o == group.selected) { onPickChoice(g, o) }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Add ingredient / Edit with AI — pre-log only.
         if (onAddIngredient != null || onEditWithAi != null) {
             FlowRow(
@@ -285,18 +318,7 @@ fun MealItemCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 if (onAddIngredient != null) SetupPill("+ Add ingredient", selected = false, onClick = onAddIngredient)
-                if (onEditWithAi != null) SetupPill("✦ Edit with AI", selected = false, onClick = onEditWithAi)
-            }
-        }
-
-        // Variations — pre-log only.
-        if (content.variations.isNotEmpty() && onToggleVariation != null) {
-            Spacer(Modifier.height(12.dp))
-            Text("Variations — tap to add", style = MaterialTheme.typography.titleSmall, color = Cream, modifier = Modifier.padding(bottom = 8.dp))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                content.variations.forEachIndexed { index, variation ->
-                    SetupPill(variation.description, selected = variation.isSelected) { onToggleVariation(index) }
-                }
+                if (onEditWithAi != null) SetupPill("✦ Edit with AI", selected = false, modifier = Modifier.aiGlow(), onClick = onEditWithAi)
             }
         }
 

@@ -155,6 +155,7 @@ fun SettingsCategoryScreen(
                 }
                 "caffeine" -> {
                     SettingsAnchor("caffeine", focus) { CaffeineSection(viewModel) }
+                    SettingsAnchor("drinks", focus) { CaffeineDrinksSection(viewModel) }
                 }
                 "reminders" -> {
                     SettingsAnchor("reminder_daily", focus) { DailyReminderCard(viewModel) }
@@ -1922,7 +1923,7 @@ private fun CaffeineSection(viewModel: SettingsViewModel) {
                     Text("Caffeine tracker", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Text(
                         "See how much caffeine is still in your body, today's total, and roughly when it'll " +
-                            "be low enough not to get in the way of sleep. It lives in the little drawer on Home's main card.",
+                            "be low enough not to get in the way of sleep. It shows on Home and has its own page.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

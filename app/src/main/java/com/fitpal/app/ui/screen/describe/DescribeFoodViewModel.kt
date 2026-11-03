@@ -1,5 +1,6 @@
 package com.fitpal.app.ui.screen.describe
 
+import com.fitpal.app.domain.model.withChoice
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fitpal.app.data.local.entity.UsdaFoodEntity
@@ -319,24 +320,12 @@ class DescribeFoodViewModel @Inject constructor(
         }
     }
 
-    fun toggleVariation(foodIndex: Int, variationIndex: Int) {
+    /** "Not sure about": swap in another option for an ingredient the AI had to guess (docs/redesign/15). */
+    fun pickChoice(foodIndex: Int, groupIndex: Int, optionIndex: Int) {
         _uiState.update { state ->
             val foods = state.foods.toMutableList()
             val food = foods.getOrNull(foodIndex) ?: return@update state
-            val variations = food.variations.toMutableList()
-            val variation = variations.getOrNull(variationIndex) ?: return@update state
-            val nowSelected = !variation.isSelected
-            val ingredients = food.ingredients.toMutableList()
-            if (nowSelected) {
-                ingredients.addAll(variation.ingredientChanges)
-            } else {
-                variation.ingredientChanges.forEach { change ->
-                    val idx = ingredients.indexOfLast { it.name == change.name }
-                    if (idx >= 0) ingredients.removeAt(idx)
-                }
-            }
-            variations[variationIndex] = variation.copy(isSelected = nowSelected)
-            foods[foodIndex] = food.copy(ingredients = ingredients, variations = variations)
+            foods[foodIndex] = food.withChoice(groupIndex, optionIndex) ?: return@update state
             state.copy(foods = foods)
         }
     }

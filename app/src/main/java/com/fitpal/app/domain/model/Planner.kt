@@ -97,6 +97,72 @@ data class PlanRequest(
 /** One ingredient of a recipe, per serving the user eats, and whether they already have it. */
 data class RecipeIngredient(val ingredient: Ingredient, val have: Boolean)
 
+/**
+ * One step of a planned recipe (docs/redesign/14): its phase (prep / cook / serve), a short title,
+ * the full instruction (how much, how hot, how long, how to tell it's done), the ingredients it uses
+ * with their amounts, and [minutes] when the step is waiting (simmer, bake, rest) — what cook mode's
+ * timer counts down. Recipes planned before 2.15 have only [text].
+ */
+data class RecipeStep(
+    val text: String,
+    val title: String = "",
+    val phase: String = "",
+    val uses: List<String> = emptyList(),
+    val minutes: Int? = null
+) {
+    fun toJson(): JSONObject = JSONObject()
+        .put("text", text).put("title", title).put("phase", phase).put("uses", JSONArray(uses))
+        .apply { minutes?.let { put("minutes", it) } }
+
+    companion object {
+        const val PREP = "prep"
+        const val COOK = "cook"
+        const val SERVE = "serve"
+
+        /** The order phases are shown in. */
+        val PHASES = listOf(PREP, COOK, SERVE)
+
+        /** A model's phase word as prep / cook / serve ("" when it gave none). */
+        fun phaseOf(raw: String): String = when (raw.trim().lowercase()) {
+            "" -> ""
+            "prep", "preparation", "prepare", "mise en place", "before you start" -> PREP
+            "serve", "serving", "to serve", "plate", "plating", "finish" -> SERVE
+            else -> COOK
+        }
+
+        /**
+         * A step as a model or a stored recipe wrote it: a plain string (every recipe before 2.15)
+         * or an object `{phase, title, text, uses, minutes}`. Leading "1." numbering is dropped (the
+         * screen numbers the steps); a timer only from 1 to 600 minutes. Null for an empty one.
+         */
+        fun from(value: Any?): RecipeStep? = when (value) {
+            is String -> clean(value).takeIf { it.isNotEmpty() }?.let { RecipeStep(text = it) }
+            is JSONObject -> {
+                val text = clean(value.optString("text").ifBlank { value.optString("step") }.ifBlank { value.optString("instruction") })
+                val title = clean(value.optString("title"))
+                if (text.isEmpty() && title.isEmpty()) null
+                else RecipeStep(
+                    text = text.ifEmpty { title },
+                    title = if (text.isEmpty()) "" else title,
+                    phase = phaseOf(value.optString("phase")),
+                    uses = value.optJSONArray("uses")?.let { a ->
+                        (0 until a.length()).map { a.optString(it).trim() }.filter { it.isNotEmpty() }
+                    }.orEmpty(),
+                    minutes = (if (value.has("minutes")) value.optInt("minutes", 0) else value.optInt("timer", 0))
+                        .takeIf { it in 1..600 }
+                )
+            }
+            else -> null
+        }
+
+        /** Every readable step of a JSON array, in order. */
+        fun listFrom(array: JSONArray?): List<RecipeStep> =
+            if (array == null) emptyList() else (0 until array.length()).mapNotNull { from(array.opt(it)) }
+
+        private fun clean(s: String): String = s.trim().replace(Regex("^\\d+[.)]\\s*"), "")
+    }
+}
+
 /** A complete planned meal: what to cook, how, and what it brings per serving. */
 data class PlannedRecipe(
     val name: String,
@@ -109,7 +175,7 @@ data class PlannedRecipe(
     val difficulty: String = "",
     val whyItFits: String = "",
     val ingredients: List<RecipeIngredient> = emptyList(),
-    val steps: List<String> = emptyList(),
+    val steps: List<RecipeStep> = emptyList(),
     val tips: List<String> = emptyList(),
     /** Allergies found in the ingredients by the code check (see `Allergens`) — blocks scheduling. */
     val allergens: Set<String> = emptySet()

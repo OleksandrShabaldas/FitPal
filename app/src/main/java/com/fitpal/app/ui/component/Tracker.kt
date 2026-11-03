@@ -45,6 +45,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -160,7 +161,11 @@ private fun TopBarIcon(icon: ImageVector, description: String, onClick: () -> Un
     }
 }
 
-/** The hero card: a visual (usually a ring) on the left, the numbers and the status on the right. */
+/**
+ * The top of a tracker page: a visual (usually a ring) on the left, the numbers and the status on the
+ * right — straight on the background, without a card of its own (docs/redesign/12, #11), so the
+ * page's cards start below it.
+ */
 @Composable
 fun TrackerHero(
     visual: @Composable (() -> Unit)?,
@@ -168,7 +173,7 @@ fun TrackerHero(
     content: @Composable ColumnScope.() -> Unit
 ) {
     Row(
-        modifier = modifier.fillMaxWidth().glass().padding(16.dp),
+        modifier = modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (visual != null) {
@@ -500,6 +505,27 @@ private fun Modifier.liquidSheen(): Modifier = this.drawWithContent {
     )
 }
 
+/**
+ * A done state where the main action was: a quiet grey pill with a tick that does nothing ("✓ Weighed
+ * in today"). Change what it would save and the page shows a [GoldButton] again.
+ */
+@Composable
+fun DoneButton(text: String, modifier: Modifier = Modifier) {
+    if (LookState.style == LookStyle.MATERIAL) {
+        // Material You: a disabled tonal button reads as "nothing to do".
+        FilledTonalButton(onClick = {}, enabled = false, modifier = modifier) { Text("✓ $text", maxLines = 1) }
+        return
+    }
+    Box(
+        modifier = modifier
+            .glassSoft(RoundedCornerShape(50))
+            .padding(horizontal = 18.dp, vertical = 12.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text("✓ $text", style = MaterialTheme.typography.labelLarge, color = CreamMuted, maxLines = 1)
+    }
+}
+
 /** A secondary action: a glass pill. */
 @Composable
 fun GlassButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
@@ -537,4 +563,49 @@ fun TrackerSection(
         Spacer(Modifier.height(10.dp))
         content()
     }
+}
+
+/**
+ * A row you swipe away to delete (the Weight and Water pages, docs/redesign/12 #9). The red layer
+ * with [label] appears only while the row is being swiped and grows with the swipe: rows on these
+ * pages are see-through, so a layer drawn all the time showed through every one of them.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SwipeToDeleteRow(
+    label: String,
+    onDelete: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
+) {
+    val state = androidx.compose.material3.rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            if (value != androidx.compose.material3.SwipeToDismissBoxValue.Settled) {
+                onDelete()
+                true
+            } else false
+        }
+    )
+    androidx.compose.material3.SwipeToDismissBox(
+        state = state,
+        modifier = modifier,
+        backgroundContent = {
+            val fromStart = state.dismissDirection == androidx.compose.material3.SwipeToDismissBoxValue.StartToEnd
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    // Read in the draw phase: nothing at rest, fully there after ~96 dp of swipe.
+                    .graphicsLayer {
+                        val offset = runCatching { state.requireOffset() }.getOrDefault(0f)
+                        alpha = (kotlin.math.abs(offset) / 96.dp.toPx()).coerceIn(0f, 1f)
+                    }
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(com.fitpal.app.ui.theme.MacroOver.copy(alpha = 0.18f))
+                    .padding(horizontal = 14.dp),
+                contentAlignment = if (fromStart) Alignment.CenterStart else Alignment.CenterEnd
+            ) {
+                Text(label, style = MaterialTheme.typography.labelLarge, color = com.fitpal.app.ui.theme.MacroOver)
+            }
+        }
+    ) { content() }
 }

@@ -218,7 +218,7 @@ fun DescribeFoodScreen(
                     phase == AnalysisPhase.READY -> item(key = "tip") {
                         Text(
                             "Name what you ate or drank. Products like \"coca-cola\" come back as one item; dishes like " +
-                                "\"chilli con carne\" show their ingredients and variations you can pick.",
+                                "\"chilli con carne\" show their ingredients, and anything the AI can't tell is yours to pick.",
                             style = MaterialTheme.typography.bodySmall, color = CreamMuted
                         )
                     }
@@ -277,7 +277,7 @@ fun DescribeFoodScreen(
                                 onExpand = { expanded = if (expanded == index) null else index },
                                 onIngredientGramsChanged = { ii, g -> viewModel.updateIngredientGrams(index, ii, g) },
                                 onIngredientRemoved = { ii -> viewModel.removeIngredient(index, ii) },
-                                onToggleVariation = { vi -> viewModel.toggleVariation(index, vi) },
+                                onPickChoice = { g, o -> viewModel.pickChoice(index, g, o) },
                                 onRemove = { expanded = null; viewModel.removeFood(index) },
                                 onSetDrink = { viewModel.setFoodDrink(index, it) },
                                 onTotalGramsChanged = { g -> viewModel.scaleFoodToGrams(index, g) },

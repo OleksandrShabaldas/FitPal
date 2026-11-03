@@ -1,5 +1,6 @@
 package com.fitpal.app.ui.screen.analysis
 
+import com.fitpal.app.domain.model.withChoice
 import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
@@ -465,26 +466,15 @@ class AnalysisViewModel @Inject constructor(
         }
     }
 
-    /** Toggle a variation on/off — adds or removes its add-on ingredient. */
-    fun toggleVariation(foodIndex: Int, variationIndex: Int) {
+    /**
+     * "Not sure about" (docs/redesign/15): put option [optionIndex] of choice [groupIndex] in the
+     * dish in place of the one there now, at its weight. Nothing is ever added.
+     */
+    fun pickChoice(foodIndex: Int, groupIndex: Int, optionIndex: Int) {
         _uiState.update { state ->
             val foods = state.detectedFoods.toMutableList()
             val food = foods.getOrNull(foodIndex) ?: return@update state
-            val variations = food.variations.toMutableList()
-            val variation = variations.getOrNull(variationIndex) ?: return@update state
-
-            val nowSelected = !variation.isSelected
-            val ingredients = food.ingredients.toMutableList()
-            if (nowSelected) {
-                ingredients.addAll(variation.ingredientChanges)
-            } else {
-                variation.ingredientChanges.forEach { change ->
-                    val idx = ingredients.indexOfLast { it.name == change.name }
-                    if (idx >= 0) ingredients.removeAt(idx)
-                }
-            }
-            variations[variationIndex] = variation.copy(isSelected = nowSelected)
-            foods[foodIndex] = food.copy(ingredients = ingredients, variations = variations)
+            foods[foodIndex] = food.withChoice(groupIndex, optionIndex) ?: return@update state
             state.copy(detectedFoods = foods)
         }
     }
@@ -664,7 +654,7 @@ class AnalysisViewModel @Inject constructor(
         }
     }
 
-    /** Pick which candidate dish to log — swaps in its ingredients + variations (drinks stay put). */
+    /** Pick which candidate dish to log — swaps in its ingredients + choices (drinks stay put). */
     /** Name the whole meal before logging (empty = no name; the meal type shows instead). */
     fun renameMeal(name: String) = _uiState.update { it.copy(mealName = name.trim().takeIf { n -> n.isNotEmpty() }) }
 

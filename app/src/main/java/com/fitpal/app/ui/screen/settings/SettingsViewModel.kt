@@ -60,6 +60,26 @@ class SettingsViewModel @Inject constructor(
     fun setCaffeineDailyLimit(mg: Int) = settingsRepository.setCaffeineDailyLimit(mg)
     fun setCaffeineHalfLife(hours: Float) = settingsRepository.setCaffeineHalfLife(hours)
 
+    // ---- Your drinks (the caffeine planner's list) ----
+    val caffeineDrinks: StateFlow<List<com.fitpal.app.domain.CaffeinePreset>> = settingsRepository.caffeineDrinks
+
+    /** Adds a drink, or replaces the one with the same name. */
+    fun addCaffeineDrink(drink: com.fitpal.app.domain.CaffeinePreset) =
+        settingsRepository.setCaffeineDrinks(caffeineDrinks.value.filterNot { it.label.equals(drink.label, ignoreCase = true) } + drink)
+
+    /** Removes a drink (never the last one) and its star. */
+    fun removeCaffeineDrink(label: String) {
+        val rest = caffeineDrinks.value.filterNot { it.label.equals(label, ignoreCase = true) }
+        if (rest.isEmpty()) return
+        settingsRepository.setCaffeineDrinks(rest)
+        settingsRepository.setCaffeineQuickDrinks(settingsRepository.caffeineQuickDrinks.value.filterNot { it.equals(label, ignoreCase = true) })
+    }
+
+    fun resetCaffeineDrinks() {
+        settingsRepository.setCaffeineDrinks(com.fitpal.app.domain.Caffeine.DEFAULT_DRINKS)
+        settingsRepository.setCaffeineQuickDrinks(com.fitpal.app.domain.Caffeine.DEFAULT_QUICK_DRINKS)
+    }
+
     // ---- App updates (GitHub releases; this build is sideloaded) ----
     val updateState: StateFlow<com.fitpal.app.update.UpdateUiState> = updateManager.state
     val autoCheckUpdates: StateFlow<Boolean> = settingsRepository.autoCheckUpdates

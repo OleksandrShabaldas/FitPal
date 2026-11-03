@@ -5,7 +5,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,13 +18,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -60,6 +60,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.fitpal.app.domain.Caffeine
 import com.fitpal.app.domain.CaffeineDose
+import com.fitpal.app.domain.CaffeinePreset
 import com.fitpal.app.domain.CaffeineSettings
 import com.fitpal.app.domain.GoalKind
 import com.fitpal.app.domain.StatusKind
@@ -99,9 +100,6 @@ import kotlin.math.roundToInt
 
 private const val HOUR = 3_600_000L
 
-/** The planner's quick picks, by their label in [Caffeine.PRESETS]; the rest sit behind "More…". */
-private val QUICK_PRESETS = listOf("Espresso", "Coffee", "Latte / cappuccino", "Black tea", "Cola", "Red Bull")
-
 private fun infoText(halfLife: Float) =
     "Caffeine is absorbed over about an hour after a drink, then your body clears half of it every " +
         "${fmtHours(halfLife)} hours (your half-life — people differ a lot; set yours in Settings → Caffeine).\n\n" +
@@ -127,6 +125,8 @@ fun CaffeineScreen(
     val week by viewModel.week.collectAsStateWithLifecycle()
     val bedMin by viewModel.bedMinutes.collectAsStateWithLifecycle()
     val chartView by viewModel.chartView.collectAsStateWithLifecycle()
+    val drinks by viewModel.drinks.collectAsStateWithLifecycle()
+    val starred by viewModel.quickDrinks.collectAsStateWithLifecycle()
     val isToday = viewModel.isToday
 
     // A once-a-minute clock, so "in you now" keeps draining while the page is open.
@@ -264,7 +264,10 @@ fun CaffeineScreen(
 
         // ---- Planning another one? (today only, folded) ----
         if (isToday) {
-            Planner(view = view, nowMillis = now, bedMinute = bedMin, onChange = { whatIf = it })
+            Planner(
+                view = view, nowMillis = now, bedMinute = bedMin, drinks = drinks, starred = starred,
+                onToggleStar = viewModel::toggleQuickDrink, onChange = { whatIf = it }
+            )
         }
     }
 }
@@ -401,12 +404,21 @@ private fun CaffeineCurve(
 }
 
 /**
- * "Planning another one?" — folded until opened. A few common drinks (the rest behind "More…") and
- * a time; the answer is one sentence, and the drink is drawn on the curve above. Nothing is logged.
+ * "Planning another one?" — folded until opened. Your three starred drinks (the rest behind "More…",
+ * where the stars are set) and a time; the answer is one sentence, and the drink is drawn on the
+ * curve above. Nothing is logged.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun Planner(view: CaffeineView, nowMillis: Long, bedMinute: Int, onChange: (CaffeineDose?) -> Unit) {
+private fun Planner(
+    view: CaffeineView,
+    nowMillis: Long,
+    bedMinute: Int,
+    drinks: List<CaffeinePreset>,
+    starred: List<String>,
+    onToggleStar: (String) -> Boolean,
+    onChange: (CaffeineDose?) -> Unit
+) {
     val context = LocalContext.current
     var open by remember { mutableStateOf(false) }
     var label by remember { mutableStateOf<String?>(null) }
@@ -439,11 +451,12 @@ private fun Planner(view: CaffeineView, nowMillis: Long, bedMinute: Int, onChang
         }
         AnimatedVisibility(visible = open) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    QUICK_PRESETS.mapNotNull { name -> Caffeine.PRESETS.firstOrNull { it.label == name } }.forEach { p ->
+                val quick = Caffeine.quickDrinks(drinks, starred)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    quick.forEach { p ->
                         PresetPill("${p.label} · ${p.mg}", selected = label == p.label) { label = p.label; mg = p.mg }
                     }
-                    PresetPill("More…", selected = label != null && label !in QUICK_PRESETS) { showMore = true }
+                    PresetPill("More…", selected = label != null && quick.none { it.label == label }) { showMore = true }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Row(
@@ -477,7 +490,10 @@ private fun Planner(view: CaffeineView, nowMillis: Long, bedMinute: Int, onChang
 
     if (showMore) {
         MoreDrinksSheet(
+            drinks = drinks,
+            starred = starred,
             initialMg = mg.takeIf { it > 0 } ?: 95,
+            onToggleStar = onToggleStar,
             onPick = { name, value -> label = name; mg = value; showMore = false },
             onDismiss = { showMore = false }
         )
@@ -498,16 +514,48 @@ private fun PresetPill(text: String, selected: Boolean, onClick: () -> Unit) {
     )
 }
 
-/** The rest of the typical drinks, and any amount of your own. */
-@OptIn(ExperimentalLayoutApi::class)
+/**
+ * All your drinks, least caffeine first: tap one to plan it, tap its star to put it on the planner
+ * card (three at most). Below them, any amount of your own.
+ */
 @Composable
-private fun MoreDrinksSheet(initialMg: Int, onPick: (String, Int) -> Unit, onDismiss: () -> Unit) {
+private fun MoreDrinksSheet(
+    drinks: List<CaffeinePreset>,
+    starred: List<String>,
+    initialMg: Int,
+    onToggleStar: (String) -> Boolean,
+    onPick: (String, Int) -> Unit,
+    onDismiss: () -> Unit
+) {
     var text by remember { mutableStateOf(initialMg.toString()) }
+    var full by remember { mutableStateOf(false) }
     TrackerSheet(title = "More drinks", onDismiss = onDismiss) {
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Caffeine.PRESETS.filter { it.label !in QUICK_PRESETS }.forEach { p ->
-                PresetPill("${p.label} · ${p.mg}", selected = false) { onPick(p.label, p.mg) }
+        Column {
+            drinks.sortedWith(Caffeine.drinkOrder).forEach { p ->
+                val on = starred.any { it.equals(p.label, ignoreCase = true) }
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { onPick(p.label, p.mg) }
+                        .padding(start = 4.dp, top = 2.dp, bottom = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(p.label, style = MaterialTheme.typography.bodyLarge, color = Cream, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (p.serving.isNotBlank()) Text(p.serving, style = MaterialTheme.typography.labelSmall, color = CreamFaint)
+                    }
+                    Text("${p.mg} mg", style = MaterialTheme.typography.labelLarge, color = CaffeineColor)
+                    Icon(
+                        if (on) Icons.Default.Star else Icons.Default.StarBorder,
+                        contentDescription = if (on) "Take ${p.label} off the planner card" else "Put ${p.label} on the planner card",
+                        tint = if (on) GoldLight else CreamMuted,
+                        modifier = Modifier.size(44.dp).clip(CircleShape).clickable { full = !onToggleStar(p.label) }.padding(11.dp)
+                    )
+                }
             }
+            Text(
+                if (full) "Three at most on the card, unstar one first." else "★ = on the planner card, three at most.",
+                style = MaterialTheme.typography.bodySmall, color = if (full) GoldLight else CreamFaint,
+                modifier = Modifier.padding(start = 4.dp, top = 4.dp)
+            )
         }
         Text("Or an amount of your own", style = MaterialTheme.typography.titleSmall, color = Cream)
         GlassNumberField(
@@ -523,13 +571,21 @@ private fun MoreDrinksSheet(initialMg: Int, onPick: (String, Int) -> Unit, onDis
     }
 }
 
-/** "A coffee", "An espresso", "This drink". */
+/** "A coffee", "An espresso", "A Monster", "This drink" — brand names keep their capitals. */
 private fun articleFor(label: String?): String {
     if (label == null || label == "This drink") return "This drink"
-    val name = label.substringBefore(" /").lowercase().let { if (it == "red bull") "Red Bull" else it }
+    val written = label.substringBefore(" /").trim()
+    val generic = written.substringBefore(' ').lowercase() in GENERIC_DRINK_WORDS
+    val name = if (generic) written.replaceFirstChar { it.lowercaseChar() } else written
     val vowel = name.firstOrNull()?.lowercaseChar() in setOf('a', 'e', 'i', 'o', 'u')
     return (if (vowel) "An " else "A ") + name
 }
+
+/** First words of drink names that are ordinary nouns ("a double espresso"), not brands ("a Monster"). */
+private val GENERIC_DRINK_WORDS = setOf(
+    "espresso", "double", "latte", "cappuccino", "coffee", "cold", "black", "green", "white", "matcha",
+    "cola", "caffeine", "tea", "iced", "flat", "americano", "mocha", "energy", "instant", "filter"
+)
 
 private fun clock(epochMillis: Long): String {
     val t = Instant.ofEpochMilli(epochMillis).atZone(ZoneId.systemDefault()).toLocalTime()

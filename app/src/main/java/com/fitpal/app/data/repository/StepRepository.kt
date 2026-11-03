@@ -160,8 +160,11 @@ class StepRepository @Inject constructor(
         settingsRepository.setStepGoalAuto(com.fitpal.app.domain.StepGoal.automatic(rows.map { it.steps }), todayIso)
     }
 
-    /** The day's steps by hour from Health Connect (null when it has none) — the Steps page's Today chart. */
-    suspend fun stepsByHour(dateIso: String): List<Long>? =
+    /**
+     * The day's steps by hour from Health Connect (null when it has nothing) — the Steps page's
+     * Today chart. Unscaled: the page scales the hours to the count it shows.
+     */
+    suspend fun stepsByHour(dateIso: String): com.fitpal.app.health.HealthConnectManager.HourlySteps? =
         runCatching { healthConnectManager.readStepsByHour(LocalDate.parse(dateIso)) }.getOrNull()
 
     /** What the watch itself reported for the day (0 = nothing). */

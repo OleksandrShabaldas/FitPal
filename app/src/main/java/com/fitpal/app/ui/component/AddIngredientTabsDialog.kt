@@ -1,5 +1,6 @@
 package com.fitpal.app.ui.component
 
+import com.fitpal.app.ui.component.kit.aiGlow
 import android.content.Context
 import android.net.Uri
 import androidx.compose.foundation.clickable
@@ -131,7 +132,7 @@ private fun DatabaseTab(
                 Spacer(Modifier.width(10.dp))
                 Text("Asking the AI…", style = MaterialTheme.typography.bodyMedium)
             }
-            query.isNotBlank() -> TextButton(onClick = { onAiAdd(query) }) {
+            query.isNotBlank() -> TextButton(onClick = { onAiAdd(query) }, modifier = Modifier.aiGlow()) {
                 Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text("Add \"${query.take(24)}\" with AI")

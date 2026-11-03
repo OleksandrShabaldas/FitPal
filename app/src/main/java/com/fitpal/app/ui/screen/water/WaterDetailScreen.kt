@@ -21,16 +21,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
-import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -502,7 +498,6 @@ private fun WaterDayChart(rows: List<WaterTimelineRow>, goalMl: Int, wakeMin: In
 }
 
 /** One entry: time, what it was, its water. Plain water can be swiped away; the rest open their entry. */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun WaterEntry(row: WaterTimelineRow, onOpen: () -> Unit, onRemove: () -> Unit) {
     val plainWater = row.isDrink && row.calories <= 0f
@@ -535,25 +530,7 @@ private fun WaterEntry(row: WaterTimelineRow, onOpen: () -> Unit, onRemove: () -
         content()
         return
     }
-    val state = rememberSwipeToDismissBoxState(
-        confirmValueChange = { value ->
-            if (value != SwipeToDismissBoxValue.Settled) {
-                onRemove()
-                true
-            } else false
-        }
-    )
-    SwipeToDismissBox(
-        state = state,
-        backgroundContent = {
-            Box(
-                Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp)).background(MacroOver.copy(alpha = 0.18f)).padding(horizontal = 14.dp),
-                contentAlignment = if (state.dismissDirection == SwipeToDismissBoxValue.StartToEnd) Alignment.CenterStart else Alignment.CenterEnd
-            ) {
-                Text("Remove", style = MaterialTheme.typography.labelLarge, color = MacroOver)
-            }
-        }
-    ) { content() }
+    com.fitpal.app.ui.component.SwipeToDeleteRow(label = "Remove", onDelete = onRemove) { content() }
 }
 
 private enum class AmountMode { OTHER, NEW_BUTTON }

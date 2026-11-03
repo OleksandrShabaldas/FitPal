@@ -1,5 +1,6 @@
 package com.fitpal.app.ui.screen.exercise
 
+import com.fitpal.app.ui.component.kit.aiGlow
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -129,7 +130,7 @@ fun DescribeExerciseScreen(
                     Button(
                         onClick = viewModel::estimate,
                         enabled = state.query.isNotBlank() && !state.isEstimating,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.aiGlow().fillMaxWidth()
                     ) {
                         if (state.isEstimating) {
                             CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)

@@ -4,7 +4,7 @@ import android.graphics.RectF
 import com.fitpal.app.domain.model.CoachingTip
 import com.fitpal.app.domain.model.ContextQuestion
 import com.fitpal.app.domain.model.DetectedFood
-import com.fitpal.app.domain.model.FoodVariation
+import com.fitpal.app.domain.model.ChoiceGroup
 import com.fitpal.app.domain.model.HealthSwap
 import com.fitpal.app.domain.model.Ingredient
 import com.fitpal.app.domain.model.MealInsights
@@ -119,7 +119,7 @@ object FoodJsonParser {
     /**
      * Parse the richer ONLINE vision reply ({"foods":[...],"dishCandidates":[...]}): the confident
      * plate decomposition, plus — only when the plate is one ambiguous dish — 2-3 candidate dishes
-     * to pick from. Each candidate re-names the same ingredients and carries its own variations.
+     * to pick from. Each candidate re-names the same ingredients and carries its own choices.
      */
     fun parseVisionResult(raw: String): VisionResult {
         val foods = parseFoods(raw)
@@ -140,7 +140,7 @@ object FoodJsonParser {
                         label = name,
                         grams = totalGrams,
                         ingredients = baseIngredients,
-                        variations = parseVariations(obj.optJSONArray("variations")),
+                        choices = parseChoices(obj.optJSONArray("choices"), baseIngredients),
                         isDrink = false
                     )
                 )
@@ -150,7 +150,7 @@ object FoodJsonParser {
     }
 
     /**
-     * Read the dish step's groups: `{"dishes":[{"name","items":[…],"also":[…],"missing":[…]}]}` —
+     * Read the dish step's groups: `{"dishes":[{"name","items":[…],"also":[…],"choices":[…]}]}` —
      * one entry per separate dish, naming which of the loose [baseIngredients] belong to it. Two or
      * more groups with items → that many dishes (an item no group claimed joins the first, so nothing
      * is lost). One group → one dish of everything, with its name and its "also" names as candidates.
@@ -165,15 +165,17 @@ object FoodJsonParser {
             fun strings(key: String) = obj.optJSONArray(key)?.let { a ->
                 (0 until a.length()).mapNotNull { a.optString(it).trim().takeIf { s -> s.isNotEmpty() } }
             }.orEmpty()
-            DishGroup(name, strings("items"), strings("also"), obj.optJSONArray("missing"))
+            DishGroup(name, strings("items"), strings("also"), obj.optJSONArray("choices"))
         }
         if (groups.isEmpty()) return DishResult()
         val totalGrams = baseIngredients.sumOf { it.grams.toDouble() }.toFloat()
-        fun wholePlate(name: String, missing: JSONArray?) =
-            buildFood(label = name, grams = totalGrams, ingredients = baseIngredients, variations = parseVariations(missing), isDrink = false)
+        fun wholePlate(name: String, choices: JSONArray?) = buildFood(
+            label = name, grams = totalGrams, ingredients = baseIngredients,
+            choices = parseChoices(choices, baseIngredients, ON_DEVICE_CHOICE_GROUPS), isDrink = false
+        )
 
         // The older answer: every entry is a guess at the same one dish.
-        if (groups.none { it.items.isNotEmpty() }) return DishResult(candidates = groups.map { wholePlate(it.name, it.missing) })
+        if (groups.none { it.items.isNotEmpty() }) return DishResult(candidates = groups.map { wholePlate(it.name, it.choices) })
 
         // Hand each loose item to the group that names it: the exact name first, then a containing one.
         val owner = IntArray(baseIngredients.size) { -1 }
@@ -192,7 +194,7 @@ object FoodJsonParser {
         val claimed = groups.indices.filter { g -> owner.any { it == g } }
         if (claimed.size <= 1) {
             val main = groups[claimed.firstOrNull() ?: 0]
-            return DishResult(candidates = listOf(wholePlate(main.name, main.missing)) + main.also.map { wholePlate(it, null) })
+            return DishResult(candidates = listOf(wholePlate(main.name, main.choices)) + main.also.map { wholePlate(it, null) })
         }
         baseIngredients.indices.forEach { if (owner[it] == -1) owner[it] = claimed.first() }
         val dishes = claimed.map { g ->
@@ -201,7 +203,7 @@ object FoodJsonParser {
                 label = groups[g].name,
                 grams = items.sumOf { it.grams.toDouble() }.toFloat(),
                 ingredients = items,
-                variations = parseVariations(groups[g].missing),
+                choices = parseChoices(groups[g].choices, items, ON_DEVICE_CHOICE_GROUPS),
                 isDrink = false
             )
         }
@@ -244,8 +246,9 @@ object FoodJsonParser {
                     difficulty = o.optString("difficulty").trim(),
                     whyItFits = o.optString("whyItFits").trim(),
                     ingredients = ingredients,
-                    // Strip any "1." the model numbered itself — the screen numbers the steps.
-                    steps = strings("steps").map { it.replace(Regex("^\\s*\\d+[.)]\\s*"), "") },
+                    // Step objects (phase, title, text, uses, minutes) or plain strings; any "1." the
+                    // model numbered itself is dropped — the screen numbers the steps.
+                    steps = com.fitpal.app.domain.model.RecipeStep.listFrom(o.optJSONArray("steps")),
                     tips = strings("tips")
                 )
             }
@@ -263,7 +266,7 @@ object FoodJsonParser {
         return ParsedPlan(meals, shopping)
     }
 
-    private class DishGroup(val name: String, val items: List<String>, val also: List<String>, val missing: JSONArray?)
+    private class DishGroup(val name: String, val items: List<String>, val also: List<String>, val choices: JSONArray?)
 
     fun parseInsights(raw: String): MealInsights {
         val json = extractJsonObject(raw) ?: return EMPTY_INSIGHTS
@@ -407,11 +410,12 @@ object FoodJsonParser {
             ingredients = listOf(collapseCondiment(label, ingredients))
         }
         val drink = drinkFlag(obj, label)
+        val finalIngredients = withDrinkWater(ingredients, drink)
         return buildFood(
             label = label,
             grams = obj.optDouble("grams", 0.0).toFloat(),
-            ingredients = withDrinkWater(ingredients, drink),
-            variations = parseVariations(obj.optJSONArray("variations")),
+            ingredients = finalIngredients,
+            choices = parseChoices(obj.optJSONArray("choices"), finalIngredients),
             isDrink = drink
         )
     }
@@ -517,7 +521,7 @@ object FoodJsonParser {
         label: String,
         grams: Float,
         ingredients: List<Ingredient>,
-        variations: List<FoodVariation>,
+        choices: List<ChoiceGroup> = emptyList(),
         isDrink: Boolean = false
     ): DetectedFood = DetectedFood(
         label = label.replaceFirstChar { it.uppercase() },
@@ -525,7 +529,7 @@ object FoodJsonParser {
         boundingBox = RectF(),
         estimatedGrams = if (grams > 0f) grams else ingredients.sumOf { it.grams.toDouble() }.toFloat(),
         ingredients = ingredients,
-        variations = variations,
+        choices = choices,
         isDrink = isDrink
     )
 
@@ -655,21 +659,47 @@ object FoodJsonParser {
         "cheese" to 30f, "yogurt" to 150f, "yoghurt" to 150f, "soup" to 300f, "salad" to 200f
     )
 
-    private fun parseVariations(arr: JSONArray?): List<FoodVariation> {
-        if (arr == null) return emptyList()
-        val result = mutableListOf<FoodVariation>()
+    /** At most this many "Not sure about" rows per dish online; the on-device model gets fewer. */
+    private const val MAX_CHOICE_GROUPS = 3
+    const val ON_DEVICE_CHOICE_GROUPS = 2
+    /** Options per row, the dish's own item included. */
+    private const val MAX_CHOICE_OPTIONS = 4
+
+    /**
+     * Read a dish's "choices" (docs/redesign/15): `[{"label","item","options":[item objects]}]` — a
+     * part of the dish the model couldn't tell, as alternatives for ONE ingredient already in
+     * [items]. The dish's own item is always the first option (the group starts on it). Dropped: a
+     * group that doesn't point at one of the dish's items, an option that is another item of the
+     * dish (an addition in disguise), and a group left with fewer than two options.
+     */
+    internal fun parseChoices(arr: JSONArray?, items: List<Ingredient>, maxGroups: Int = MAX_CHOICE_GROUPS): List<ChoiceGroup> {
+        if (arr == null || items.isEmpty()) return emptyList()
+        fun norm(s: String) = s.lowercase().trim()
+        val groups = mutableListOf<ChoiceGroup>()
+        val claimed = mutableSetOf<Int>()
         for (i in 0 until arr.length()) {
+            if (groups.size >= maxGroups) break
             val obj = arr.optJSONObject(i) ?: continue
-            val ingredient = parseIngredientObject(obj) ?: continue
-            val description = obj.optString("description").trim().ifEmpty { ingredient.name }
-            result.add(
-                FoodVariation(
-                    description = description.replaceFirstChar { it.uppercase() },
-                    ingredientChanges = listOf(ingredient)
-                )
-            )
+            val item = norm(obj.optString("item"))
+            if (item.isEmpty()) continue
+            val idx = items.indices.firstOrNull { it !in claimed && norm(items[it].name) == item }
+                ?: items.indices.firstOrNull { it !in claimed && norm(items[it].name).let { n -> n.contains(item) || item.contains(n) } }
+                ?: continue
+            val current = items[idx]
+            val others = items.filterIndexed { j, _ -> j != idx }.map { norm(it.name) }.toSet()
+            val options = mutableListOf(current)
+            for (o in parseIngredientArray(obj.optJSONArray("options"))) {
+                if (options.size >= MAX_CHOICE_OPTIONS) break
+                val n = norm(o.name)
+                if (n in others || options.any { norm(it.name) == n }) continue
+                options.add(o)
+            }
+            if (options.size < 2) continue
+            val label = obj.optString("label").trim().ifEmpty { current.name }
+            groups.add(ChoiceGroup(label.replaceFirstChar { it.uppercase() }, options, selected = 0))
+            claimed.add(idx)
         }
-        return result
+        return groups
     }
 
     private fun extractJsonObject(text: String): JSONObject? {

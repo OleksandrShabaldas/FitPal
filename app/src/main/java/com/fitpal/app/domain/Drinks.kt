@@ -81,6 +81,50 @@ object Drinks {
     /** Drink phrases that contain a "not a drink" word but are drinks after all. */
     private val strongPhrases = listOf("hot chocolate", "chocolate milk", "chocolate shake", "chocolate milkshake", "milkshake*")
 
+    /**
+     * Drinks that really have no calories: water of any kind, black coffee, plain tea, diet and zero
+     * sodas, ice. A 0 kcal answer for one of these is right, not a gap to fill from the food database
+     * (that's how tap water used to come back as 160 kcal). Anything with milk, sugar, syrup, juice,
+     * cream or a sweet drink word in its name doesn't count.
+     */
+    fun isZeroCalorie(name: String): Boolean {
+        if (TextMatch.containsAny(name, iceWords)) return !TextMatch.containsAny(name, notDrinks + caloricDrinkWords)
+        if (!isDrink(name, null)) return false
+        if (TextMatch.containsAny(name, dietDrinks)) return !TextMatch.containsAny(name, listOf("milk", "cream", "latte", "cappuccino"))
+        if (TextMatch.containsAny(name, caloricDrinkWords)) return false
+        return TextMatch.containsAny(name, zeroCalorieWords)
+    }
+
+    private val iceWords = listOf("ice", "ice cube", "ice cubes", "лід", "лед")
+
+    /** Diet / zero drinks — 0 kcal whatever else their name says (checked before the sweet words). */
+    private val dietDrinks = listOf(
+        "diet coke", "diet cola", "diet pepsi", "diet soda", "coke zero", "coca-cola zero", "coca-cola light", "coke light",
+        "pepsi max", "pepsi zero", "sprite zero", "fanta zero", "kofola zero", "zero sugar", "sugar free", "sugar-free",
+        "no sugar", "bez cukru", "без цукру"
+    )
+
+    /** Words that put calories into a drink that would otherwise be plain. */
+    private val caloricDrinkWords = listOf(
+        "milk", "cream", "creamer", "sugar", "sugared", "sweet", "sweetened", "syrup", "honey", "juice", "nectar",
+        "latte", "cappuccino", "flat white", "cortado", "macchiato", "mocha", "frappe", "frappé", "frappuccino",
+        "cocoa", "chocolate", "condensed", "lemonade", "smoothie", "shake", "kefir", "kombucha", "chai",
+        "bubble tea", "iced tea", "ice tea", "tonic", "coconut water", "vitamin water", "flavoured", "flavored",
+        "beer", "wine", "liqueur", "cider", "energy drink", "s mlékem", "s mliekom", "з молоком", "s cukrem",
+        "s cukrom", "з цукром", "з медом"
+    )
+
+    /** Plain drinks with nothing in them. */
+    private val zeroCalorieWords = listOf(
+        "water", "tap water", "still water", "sparkling water", "mineral water", "soda water", "seltzer", "club soda",
+        "minerálka", "minerálna voda", "minerální voda", "voda", "вода", "мінеральна вода",
+        "rajec", "bonaqua", "mattoni", "evian", "vittel", "borjomi", "san pellegrino",
+        "coffee", "black coffee", "filter coffee", "brewed coffee", "káv*", "kava", "кава", "кофе",
+        "espresso", "ristretto", "doppio", "americano", "long black",
+        "tea", "black tea", "green tea", "white tea", "herbal tea", "fruit tea", "mint tea", "rooibos", "earl grey",
+        "oolong", "čaj", "чай"
+    )
+
     /** Water per 100 ml for a drink, estimated from its macros (most of a drink is water). */
     fun estimateWaterPer100(carbs: Float, protein: Float, fat: Float): Float {
         val solids = (carbs + protein + fat).coerceAtLeast(0f)

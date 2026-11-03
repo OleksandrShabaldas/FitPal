@@ -27,7 +27,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -64,7 +66,7 @@ import kotlin.math.roundToInt
 
 /**
  * A planned meal's recipe (docs/redesign/10): what it brings per serving and whether it fits the day,
- * the ingredients (have / buy, editable — the numbers follow), numbered steps with a cook mode that
+ * the ingredients (have / buy, editable — the numbers follow), steps by phase with timers, and a cook mode (one step per page) that
  * keeps the screen on, and Log at the bottom, through the fasting check like every log.
  */
 @Composable
@@ -85,6 +87,17 @@ fun RecipeScreen(
     val fastingGuard = rememberFastingGuard()
     var adding by remember { mutableStateOf(false) }
     var cookMode by remember { mutableStateOf(false) }
+    val timers by viewModel.timers.collectAsStateWithLifecycle()
+    // A clock for the countdowns, ticking only while a timer runs.
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    val anyRunning = timers.values.any { it.running }
+    LaunchedEffect(anyRunning) {
+        now = System.currentTimeMillis()
+        while (anyRunning) {
+            kotlinx.coroutines.delay(500L)
+            now = System.currentTimeMillis()
+        }
+    }
 
     LaunchedEffect(logged) { if (logged) onLogged() }
 
@@ -121,7 +134,7 @@ fun RecipeScreen(
                     ) {
                         Icon(
                             Icons.Default.SoupKitchen,
-                            contentDescription = if (cookMode) "Leave cook mode" else "Cook mode — bigger text, screen stays on",
+                            contentDescription = if (cookMode) "Leave cook mode" else "Cook mode — one step at a time, screen stays on",
                             tint = if (cookMode) OnGold else Cream, modifier = Modifier.size(20.dp)
                         )
                     }
@@ -130,6 +143,16 @@ fun RecipeScreen(
             val r = recipe
             if (r == null) {
                 Box(Modifier.weight(1f))
+            } else if (cookMode && r.steps.isNotEmpty()) {
+                // Cook mode: one step per page, big, with its timer (docs/redesign/14).
+                CookModePager(
+                    steps = r.steps, timers = timers, keyFor = viewModel::timerKey, now = now,
+                    onStart = { i -> r.steps[i].minutes?.let { viewModel.startTimer(i, r.steps[i].title.ifBlank { r.steps[i].text.take(40) }, it) } },
+                    onPause = viewModel::pauseTimer,
+                    onReset = viewModel::resetTimer,
+                    onDone = { cookMode = false },
+                    modifier = Modifier.weight(1f)
+                )
             } else LazyColumn(
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 16.dp),
@@ -203,19 +226,26 @@ fun RecipeScreen(
                 }
                 item { SetupPill("+ Add ingredient", selected = false) { adding = true } }
 
-                // ---- Steps (numbering matters here) ----
+                // ---- Steps (numbering matters here), under a label where each phase starts ----
                 if (r.steps.isNotEmpty()) {
                     item { Text("Steps", style = MaterialTheme.typography.titleMedium, color = Cream) }
                     itemsIndexed(r.steps) { i, step ->
-                        Row(Modifier.fillMaxWidth().glassSoft().padding(14.dp), verticalAlignment = Alignment.Top) {
-                            Box(Modifier.size(if (cookMode) 32.dp else 26.dp).clip(CircleShape).background(GoldLight), contentAlignment = Alignment.Center) {
-                                Text("${i + 1}", style = MaterialTheme.typography.labelLarge, color = OnGold, textAlign = TextAlign.Center)
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            val phase = phaseLabel(step.phase)
+                            if (phase.isNotEmpty() && (i == 0 || r.steps[i - 1].phase != step.phase)) {
+                                Text(phase.uppercase(), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = GoldLight)
                             }
-                            Spacer(Modifier.width(12.dp))
-                            Text(
-                                step,
-                                style = if (cookMode) MaterialTheme.typography.titleLarge else MaterialTheme.typography.bodyMedium,
-                                color = Cream, modifier = Modifier.weight(1f)
+                            RecipeStepRow(
+                                number = i + 1, step = step, timer = timers[viewModel.timerKey(i)], now = now,
+                                onTimerTap = {
+                                    val t = timers[viewModel.timerKey(i)]
+                                    when {
+                                        t == null -> step.minutes?.let { viewModel.startTimer(i, step.title.ifBlank { step.text.take(40) }, it) }
+                                        t.remaining(System.currentTimeMillis()) == 0L -> viewModel.resetTimer(i)
+                                        t.running -> viewModel.pauseTimer(i)
+                                        else -> step.minutes?.let { viewModel.startTimer(i, step.title.ifBlank { step.text.take(40) }, it) }
+                                    }
+                                }
                             )
                         }
                     }
@@ -229,7 +259,8 @@ fun RecipeScreen(
             }
 
             val isLogged = entity?.status == PlannedMealEntity.LOGGED
-            LogBar(
+            // Cook mode has its own Back / Next; Log comes back when you leave it.
+            if (!(cookMode && recipe?.steps?.isNotEmpty() == true)) LogBar(
                 totalKcal = recipe?.kcal?.roundToInt(),
                 status = when {
                     isLogged -> "Logged"

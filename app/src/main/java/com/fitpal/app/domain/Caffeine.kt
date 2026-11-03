@@ -17,11 +17,13 @@ data class CaffeineSettings(
 ) {
     companion object {
         /** Below roughly this much still in the body, caffeine is unlikely to disturb sleep. */
-        const val SLEEP_FRIENDLY_MG = 50
+        const val SLEEP_FRIENDLY_MG = 40
+        /** This much or more left at bedtime is likely to keep you up — the red verdict. */
+        const val KEEPS_YOU_UP_MG = 65
     }
 }
 
-/** A typical drink for the sleep calculator: its name, the serving it's for, and its caffeine. */
+/** A drink for the sleep calculator (Settings → Caffeine → Your drinks): name, serving, caffeine. */
 data class CaffeinePreset(val label: String, val serving: String, val mg: Int)
 
 /** What a (hypothetical) dose would mean for sleep — see [Caffeine.sleepVerdict]. */
@@ -134,8 +136,8 @@ object Caffeine {
 
     /**
      * The verdict a person actually wants — will tonight's sleep be fine? — judged at [bedMillis]
-     * against the sleep-friendly line (50 mg): low enough already; under the line by a time before
-     * bed; or roughly how much will still be in them at bedtime.
+     * against the sleep-friendly line (40 mg): low enough already; under the line by a time before
+     * bed; or roughly how much will still be in them at bedtime (red from [CaffeineSettings.KEEPS_YOU_UP_MG]).
      */
     fun bedtimeStatus(doses: List<CaffeineDose>, nowMillis: Long, bedMillis: Long, halfLifeHours: Float): TrackerStatus {
         val line = CaffeineSettings.SLEEP_FRIENDLY_MG
@@ -147,7 +149,7 @@ object Caffeine {
         return when {
             atBed <= line && clear == null -> TrackerStatus(StatusKind.OK, "Low enough for sleep")
             atBed <= line && clear != null -> TrackerStatus(StatusKind.OK, "Under $line mg by ${clockLabel(clear)}, ${gapBeforeBed(bedMillis - clear)}")
-            atBed <= 80f -> TrackerStatus(StatusKind.CLOSE, "About ${atBed.roundToInt()} mg left at bedtime")
+            atBed <= CaffeineSettings.KEEPS_YOU_UP_MG -> TrackerStatus(StatusKind.CLOSE, "About ${atBed.roundToInt()} mg left at bedtime")
             else -> TrackerStatus(StatusKind.OVER, "About ${atBed.roundToInt()} mg left at bedtime, it may keep you up")
         }
     }
@@ -173,7 +175,7 @@ object Caffeine {
             SleepVerdict.NeverAffects -> "$what stays under $line mg, no problem for sleep."
             is SleepVerdict.ClearAt ->
                 if (v.atMillis <= bed) "$what: under $line mg by ${clockLabel(v.atMillis)}, still before bed."
-                else "$what leaves about ${atBed.roundToInt()} mg at bedtime" + (if (atBed > 80f) ", enough to keep you up." else ".")
+                else "$what leaves about ${atBed.roundToInt()} mg at bedtime" + (if (atBed > CaffeineSettings.KEEPS_YOU_UP_MG) ", enough to keep you up." else ".")
             SleepVerdict.NotWithin36h -> "$what leaves about ${atBed.roundToInt()} mg at bedtime, enough to keep you up."
         }
     }
@@ -193,22 +195,65 @@ object Caffeine {
         return WaterPace.clockLabel(t.hour * 60 + t.minute)
     }
 
-    /** Typical caffeine per serving — what the sleep calculator's chips fill in. Rough, well-known figures. */
-    val PRESETS: List<CaffeinePreset> = listOf(
-        CaffeinePreset("Espresso", "single shot", 63),
-        CaffeinePreset("Double espresso", "2 shots", 126),
-        CaffeinePreset("Coffee", "mug, 250 ml", 95),
-        CaffeinePreset("Latte / cappuccino", "2 shots", 126),
-        CaffeinePreset("Cold brew", "350 ml", 155),
-        CaffeinePreset("Black tea", "250 ml", 47),
+    /** Every list of drinks: least caffeine first, then by name. */
+    val drinkOrder: Comparator<CaffeinePreset> = compareBy<CaffeinePreset> { it.mg }.thenBy { it.label.lowercase() }
+
+    /** The drinks a new install starts with (Settings → Caffeine → Your drinks). Rough, well-known figures. */
+    val DEFAULT_DRINKS: List<CaffeinePreset> = listOf(
         CaffeinePreset("Green tea", "250 ml", 28),
-        CaffeinePreset("Matcha", "1 tsp", 70),
-        CaffeinePreset("Cola", "330 ml can", 32),
+        CaffeinePreset("Black tea", "250 ml", 47),
+        CaffeinePreset("Espresso", "single shot", 63),
+        CaffeinePreset("Latte / cappuccino", "1 shot", 63),
         CaffeinePreset("Red Bull", "250 ml can", 80),
-        CaffeinePreset("Monster", "500 ml can", 160),
+        CaffeinePreset("Double espresso", "2 shots", 126),
+        CaffeinePreset("Monster", "500 ml can", 160)
+    ).sortedWith(drinkOrder)
+
+    /** Offered as one-tap adds in Your drinks, when they're not in the list already. */
+    val SUGGESTED_DRINKS: List<CaffeinePreset> = listOf(
+        CaffeinePreset("Cola", "330 ml can", 32),
+        CaffeinePreset("Matcha", "1 tsp", 70),
+        CaffeinePreset("Coffee", "mug, 250 ml", 95),
+        CaffeinePreset("Cold brew", "350 ml", 155),
         CaffeinePreset("Celsius", "355 ml can", 200),
         CaffeinePreset("Caffeine pill", "1 tablet", 200)
-    )
+    ).sortedWith(drinkOrder)
+
+    /** The planner's quick picks on a new install (the user's stars replace them). */
+    val DEFAULT_QUICK_DRINKS: List<String> = listOf("Espresso", "Latte / cappuccino", "Double espresso")
+
+    /** How many drinks sit on the planner card; the rest are behind "More…". */
+    const val QUICK_DRINK_COUNT = 3
+
+    /**
+     * The planner card's drinks: the starred ones that are still in [drinks], topped up with the first
+     * unstarred ones so there are always [QUICK_DRINK_COUNT] (or as many as exist), least caffeine first.
+     */
+    fun quickDrinks(drinks: List<CaffeinePreset>, starred: List<String>): List<CaffeinePreset> {
+        val sorted = drinks.sortedWith(drinkOrder)
+        val picked = sorted.filter { d -> starred.any { it.equals(d.label, ignoreCase = true) } }.take(QUICK_DRINK_COUNT)
+        val fill = sorted.filterNot { it in picked }.take(QUICK_DRINK_COUNT - picked.size)
+        return (picked + fill).sortedWith(drinkOrder)
+    }
+
+    /** Your drinks as stored: `[{"label","serving","mg"}]`. */
+    fun drinksToJson(drinks: List<CaffeinePreset>): String = org.json.JSONArray().apply {
+        drinks.forEach { put(org.json.JSONObject().put("label", it.label).put("serving", it.serving).put("mg", it.mg)) }
+    }.toString()
+
+    /** Null when [raw] is missing or unreadable (the defaults apply); never an empty list. */
+    fun drinksFromJson(raw: String?): List<CaffeinePreset>? {
+        if (raw.isNullOrBlank()) return null
+        return runCatching {
+            val arr = org.json.JSONArray(raw)
+            (0 until arr.length()).mapNotNull { i ->
+                val o = arr.optJSONObject(i) ?: return@mapNotNull null
+                val label = o.optString("label").trim()
+                val mg = o.optInt("mg", 0)
+                if (label.isEmpty() || mg <= 0) null else CaffeinePreset(label, o.optString("serving").trim(), mg)
+            }.distinctBy { it.label.lowercase() }.sortedWith(drinkOrder).takeIf { it.isNotEmpty() }
+        }.getOrNull()
+    }
 
     /** The level sampled evenly from [fromMillis] to [toMillis] — the detail chart's line. */
     fun curve(doses: List<CaffeineDose>, fromMillis: Long, toMillis: Long, points: Int, halfLifeHours: Float): List<Float> {

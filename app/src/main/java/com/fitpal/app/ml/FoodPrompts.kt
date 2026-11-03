@@ -35,22 +35,22 @@ object FoodPrompts {
         is an item INSIDE the dish it comes with. A ready-made sauce, dressing, condiment, cheese or
         bread is ONE item named as itself ("Tartar sauce"), never split into its recipe. Anything that is drunk — water, coffee, tea, juice, soda, energy drinks, milk, kefir, smoothies, shakes (protein shakes too), beer, wine, cocktails — is a DRINK: "isDrink":true, amount in ml. If the user states a total weight (e.g.
         "650g"), make the item weights sum to it.
-        Then add a "variations" array with 4-6 of the MOST COMMON ways people actually make this
-        dish differently — alternative bases, proteins, dressings or add-ons they swap in or add
-        (for okroshka: sour cream, mayonnaise, kefir base, kvass base, ham, sausage, boiled beef,
-        potato, radish, boiled egg). List as MANY genuinely common ones as you can, not just one.
-        Each variation is ONE single ingredient object (never a whole dish or a tip) with the SAME
-        fields as an item PLUS a "description" that is a SHORT 2-4 word label naming just that one
-        swap/add-on — NOT a sentence, NOT advice. e.g.
-        {"name":"Sour cream","grams":40,"kcalPer100g":190,"proteinPer100g":2,"fatPer100g":20,"carbsPer100g":3,"fiberPer100g":0,"waterMlPer100":71,"description":"Sour cream"}
+        Then add a "choices" array ONLY for a part of the dish the words genuinely don't tell you
+        (at most 2): "okroshka" doesn't say whether the base is kefir or kvass, "pierogi" don't say
+        the filling. Each choice: {"label":"<what's unknown in 1-2 words: Base, Filling, Meat>",
+        "item":"<the name of the item in your items you guessed>","options":[2-4 item objects: your
+        guess first, then what people commonly use in THIS dish for that part instead]}. An option
+        REPLACES that one item: never an extra, never a "healthier" swap, never another dish. Most
+        dishes need none: "choices":[].
         For each item set "waterMlPer100" = real water content per 100 ml/g (water=100, cola≈89,
         juice≈85, milk≈88; fruit/veg 80-96, soup 88-92, cooked grains 65-70, bread 35, cheese 37,
         nuts 4, oil 0). Estimate honestly for EVERY item, foods included.
         Use realistic calorie densities (kcal per 100 g): light soups 25-60, broths 10-30,
         salads/veg 15-120, fruit 30-90, cooked grains/pasta 110-160, lean meat 120-200,
         cheese/fatty/fried 250-450, oils ~880. A bowl of light soup is NOT calorie-dense.
+        Plain water (tap, mineral, sparkling), black coffee, plain tea and diet drinks are 0 kcal.
         Reply with ONLY a JSON object in exactly this format and nothing else:
-        {"foods":[{"name":"Coca-Cola","isDrink":true,"grams":330,"items":[{"name":"Coca-Cola","grams":330,"kcalPer100g":42,"proteinPer100g":0,"fatPer100g":0,"carbsPer100g":11,"fiberPer100g":0,"waterMlPer100":89,"vitA":0,"vitC":0,"vitD":0,"calcium":0,"iron":0,"potassium":0,"sodium":5,"b12":0,"folate":0,"b6":0,"magnesium":1,"zinc":0,"vitE":0,"caffeine":10}],"variations":[]}]}
+        {"foods":[{"name":"Coca-Cola","isDrink":true,"grams":330,"items":[{"name":"Coca-Cola","grams":330,"kcalPer100g":42,"proteinPer100g":0,"fatPer100g":0,"carbsPer100g":11,"fiberPer100g":0,"waterMlPer100":89,"vitA":0,"vitC":0,"vitD":0,"calcium":0,"iron":0,"potassium":0,"sodium":5,"b12":0,"folate":0,"b6":0,"magnesium":1,"zinc":0,"vitE":0,"caffeine":10}],"choices":[]}]}
         Use realistic per-100 values and a realistic serving (grams for food, ml for drinks).
         vitA = vitamin A mcg, vitC = vitamin C mg, vitD = vitamin D mcg,
         calcium/iron/potassium/sodium = mg, b12 = vitamin B12 mcg, folate = mcg,
@@ -73,17 +73,21 @@ object FoodPrompts {
           dish it comes with. A ready-made product (sauce, dressing, condiment, cheese, bread) is ONE
           item named as itself ("Tartar sauce"), never split into its recipe.
         - Anything that is drunk — water, coffee, tea, juice, soda, energy drinks, milk, kefir, smoothies, shakes (protein shakes too), beer, wine, cocktails — is a DRINK: "isDrink":true, amount in ml.
-        - "variations": 4-6 common ways people vary the dish (alt bases/proteins/dressings/add-ons),
-          each a SINGLE item object PLUS a "description" that is a SHORT 2-4 word label (e.g.
-          "Sour cream", "Kefir base") — never a sentence or a tip. Simple items use [].
+        - "choices": ONLY for a part of a dish the words genuinely don't tell (at most 3 per dish):
+          okroshka's base (kefir / kvass / water with sour cream), its meat (ham / boiled beef), a
+          pierogi filling. Each {"label":"<1-2 words: Base, Filling, Meat>","item":"<the item in
+          your items you guessed>","options":[2-4 item objects, your guess first]}. An option
+          REPLACES that item: never an extra, never a healthier swap, never another dish; only what
+          is commonly used in exactly this dish. Most foods need none: [].
         Each item, per 100 g/ml: name, grams (this item's weight), kcalPer100g, proteinPer100g,
         fatPer100g, carbsPer100g, fiberPer100g, waterMlPer100 (water 100, cola 89, juice 85,
         milk 88, fruit/veg 80-96, cooked grains 65-70, bread 35, cheese 37, oil 0), then micros:
         vitA/vitD/b12/folate in mcg; vitC/calcium/iron/potassium/sodium/b6/magnesium/zinc/vitE in mg;
         then caffeine in mg (coffee 40, espresso 210, energy drink 32, cola 10, tea 20; 0 if none).
         Realistic calorie densities (light soup 25-60, salad/veg 15-120, cooked grains 110-160,
-        fried/fatty 250-450, oil ~880). Never 0 kcal for a real food. Estimate every field honestly.
-        Example food: {"name":"Coca-Cola","isDrink":true,"grams":330,"items":[{"name":"Coca-Cola","grams":330,"kcalPer100g":42,"proteinPer100g":0,"fatPer100g":0,"carbsPer100g":11,"fiberPer100g":0,"waterMlPer100":89,"vitA":0,"vitC":0,"vitD":0,"calcium":0,"iron":0,"potassium":0,"sodium":5,"b12":0,"folate":0,"b6":0,"magnesium":1,"zinc":0,"vitE":0,"caffeine":10}],"variations":[]}
+        fried/fatty 250-450, oil ~880). Never 0 kcal for a real food, but plain water (tap, mineral,
+          sparkling), black coffee, plain tea and diet/zero drinks ARE 0 kcal. Estimate every field honestly.
+        Example food: {"name":"Coca-Cola","isDrink":true,"grams":330,"items":[{"name":"Coca-Cola","grams":330,"kcalPer100g":42,"proteinPer100g":0,"fatPer100g":0,"carbsPer100g":11,"fiberPer100g":0,"waterMlPer100":89,"vitA":0,"vitC":0,"vitD":0,"calcium":0,"iron":0,"potassium":0,"sodium":5,"b12":0,"folate":0,"b6":0,"magnesium":1,"zinc":0,"vitE":0,"caffeine":10}],"choices":[]}
     """.trimIndent()
 
     /**
@@ -112,10 +116,10 @@ object FoodPrompts {
             others so the items still sum to roughly the total, instead of just piling it on top.
 
             Reply with ONLY JSON in this exact shape and nothing else:
-            {"foods":[{"name":"<dish name>","isDrink":${food.isDrink},"grams":$total,"items":[{"name":"<item>","grams":<weight>,"kcalPer100g":0,"proteinPer100g":0,"fatPer100g":0,"carbsPer100g":0,"fiberPer100g":0,"waterMlPer100":0,"vitA":0,"vitC":0,"vitD":0,"calcium":0,"iron":0,"potassium":0,"sodium":0,"b12":0,"folate":0,"b6":0,"magnesium":0,"zinc":0,"vitE":0,"caffeine":0}],"variations":[]}]}
+            {"foods":[{"name":"<dish name>","isDrink":${food.isDrink},"grams":$total,"items":[{"name":"<item>","grams":<weight>,"kcalPer100g":0,"proteinPer100g":0,"fatPer100g":0,"carbsPer100g":0,"fiberPer100g":0,"waterMlPer100":0,"vitA":0,"vitC":0,"vitD":0,"calcium":0,"iron":0,"potassium":0,"sodium":0,"b12":0,"folate":0,"b6":0,"magnesium":0,"zinc":0,"vitE":0,"caffeine":0}],"choices":[]}]}
             Per 100 $unit for each item: realistic kcalPer100g (light soup 25-60, salad/veg 15-120,
             cooked grains 110-160, lean meat 120-200, cheese/fried 250-450, oil ~880 — never 0 for a
-            real food), macros, fiber, waterMlPer100 (water 100, cola 89, juice 85, milk 88,
+            real food; plain water, black coffee, plain tea and diet drinks ARE 0), macros, fiber, waterMlPer100 (water 100, cola 89, juice 85, milk 88,
             fruit/veg 80-96, cooked grains 65-70, bread 35, cheese 37, oil 0), micros
             (vitA/vitD/b12/folate in mcg; vitC/calcium/iron/potassium/sodium/b6/magnesium/zinc/vitE in mg),
             and caffeine in mg (coffee 40, espresso 210, energy drink 32, cola 10, tea 20; 0 if none).
@@ -144,8 +148,8 @@ object FoodPrompts {
         cola=89, juice=85, milk=88; foods — most fruit/veg 80-96 (watermelon 92, cucumber 96,
         orange 86, apple 85), soups 88-92, cooked rice/pasta 65-70, bread 35, cheese 37, nuts 4,
         oil 0. Estimate it honestly for EVERY item, foods included.
-        Give REALISTIC per-100 g nutrition for every item - NEVER 0 kcal for a real food, and do
-        NOT over-estimate: light soups are 25-60 kcal/100g, broths 10-30, salad/veg 15-120, cooked
+        Give REALISTIC per-100 g nutrition for every item - NEVER 0 kcal for a real food (plain water, black coffee,
+        plain tea and diet drinks ARE 0 kcal), and do NOT over-estimate: light soups are 25-60 kcal/100g, broths 10-30, salad/veg 15-120, cooked
         grains 110-160, fried/oily food 250-450. A bowl of light soup is not calorie-dense.
         If a food is a blended or mixed dish whose parts you can't see one-by-one (a soup, stew,
         smoothie or sauce) and you can tell what it is (use the user's note if given), list its
@@ -176,7 +180,7 @@ object FoodPrompts {
     /**
      * Online vision prompt — purpose-built for a capable cloud model, so it's leaner than the
      * on-device [vision] prompt (no repeated coaxing / four worked examples). In ONE pass it reads
-     * the plate, names composite dishes FROM THE PHOTO, suggests variations, and — only when the
+     * the plate, names composite dishes FROM THE PHOTO, offers choices for what it can't see, and — only when the
      * whole plate is a single dish it's unsure about — offers 2-3 candidate dishes to pick from.
      */
     fun visionOnline(note: String): String {
@@ -187,7 +191,7 @@ object FoodPrompts {
         garnishes. Describe only what's visibly present. Reply with ONLY this JSON:
         {"foods":[...],"dishCandidates":[...]}
 
-        Each food is one DISH: {"name","isDrink","grams","items":[ item objects ],"variations":[]}.
+        Each food is one DISH: {"name","isDrink","grams","items":[ item objects ],"choices":[]}.
         - A dish is what you'd order or serve on its own: a main, a side (fries, rice, a side salad), a
           dessert, a bread basket. Fish and chips with a side salad = two foods, "Fish and chips" and
           "Side salad". Every drink is its own food.
@@ -199,10 +203,14 @@ object FoodPrompts {
         - A ready-made product (a sauce, dressing, condiment, cheese, bread, a packaged food) is ONE item
           named as itself ("Tartar sauce", "Ketchup", "Pesto"), never split into its recipe (no
           mayonnaise + pickles + capers for tartar sauce).
-        - "variations": 4-6 common ways people vary that dish (alt dressings, bases, proteins,
-          add-ons), each a SINGLE item object PLUS a "description" that is a SHORT 2-4 word label
-          (e.g. "Ranch dressing", "Extra chicken") — never a sentence or a tip. Simple items
-          (apple, soda) use [].
+        - "choices": ONLY for a part of a dish you genuinely CAN'T tell from the photo (at most 3 per
+          dish): a hidden filling (pierogi, dumplings, pies), a soup's base (okroshka: kefir / kvass /
+          water with sour cream), which meat (ham / boiled beef), tomato or red pepper. Each
+          {"label":"<1-2 words: Filling, Base, Meat>","item":"<the item in this dish's items you
+          guessed>","options":[2-4 item objects, your guess first]}. An option REPLACES that item:
+          never an extra or a topping to add, never a healthier swap, never another dish, never
+          something the photo rules out (no brown rice when the rice is clearly white). Only what is
+          commonly used in exactly this dish. Most foods need none: [].
         - Mark drinks "isDrink":true (ml); solids false (g). Anything that is drunk — water, coffee, tea, juice, soda, energy drinks, milk, kefir, smoothies, shakes (protein shakes too), beer, wine, cocktails — is a DRINK: "isDrink":true, amount in ml. Every drink
           you can see (plain water, beer and wine too) is its OWN food — never part of a dish.
         - Use any fork/coin/bank card in shot for SCALE (a bank card is 8.6 cm wide) to judge real portions.
@@ -215,11 +223,11 @@ object FoodPrompts {
         (coffee 40, espresso 210, latte 30, energy drink 32, cola 10, tea 20; 0 if none).
         Realistic calorie densities: light soup 25-60, broth 10-30, salad/veg 15-120, fruit 30-90,
         cooked grains/pasta 110-160, lean meat 120-200, cheese/fried 250-450, oil ~880. Never 0 kcal
-        for a real food; never list cooking water or cooking alcohol as a dish's item. Estimate every field honestly.
+        for a real food (plain water, black coffee, plain tea and diet/zero drinks ARE 0 kcal); never list cooking water or cooking alcohol as a dish's item. Estimate every field honestly.
         Example item: {"name":"Crepe","grams":120,"kcalPer100g":220,"proteinPer100g":6,"fatPer100g":8,"carbsPer100g":31,"fiberPer100g":1,"waterMlPer100":0,"vitA":30,"vitC":0,"vitD":1,"calcium":80,"iron":1,"potassium":120,"sodium":150,"b12":0.3,"folate":10,"b6":0.05,"magnesium":12,"zinc":0.5,"vitE":0.4,"caffeine":0}
 
         "dishCandidates": include ONLY when the food on the plate is a single dish you're genuinely unsure
-        about — 2-3 most likely dish names, each {"name","variations":[ item objects with description ]}.
+        about — 2-3 most likely dish names, each {"name","choices":[ choice objects, same rule ]}.
         Drinks are never part of a candidate dish (they stay their own foods).
         Use [] when it's clearly one dish, or several separate foods.
     """.trimIndent()
@@ -239,19 +247,16 @@ object FoodPrompts {
             (copy their names; every listed item in one dish). If it's all one dish, give one entry and put
             1-2 other likely names for it in "also" (e.g. a round base with dough, cheese, ham and
             mushrooms = Pizza, also ["Calzone"]).$noteLine
-            For EACH dish, list its typical parts that are MISSING from the list above as "missing".
-            ALWAYS put the dish's signature sauce or dressing FIRST if it isn't already present
-            (for example: Caesar salad -> Caesar dressing; Greek salad -> olive oil and feta;
-            pancakes -> maple syrup; fries -> ketchup). Then list 4-6 MORE of the most common
-            variations people use — different sauces, proteins, bases or add-ons they swap in
-            (e.g. okroshka: sour cream, mayonnaise, kefir, kvass, ham, sausage, beef, potato,
-            radish). Include as MANY genuinely common ones as you can, not just one or two.
-            Do NOT suggest variants or duplicates of ingredients already in the
-            list. NEVER suggest alcohol, plain water, or anything not actually eaten.
-            Give each a realistic per-100 nutrition (light soups 25-60 kcal/100g, oils ~880) and a
-            small serving size in grams.
+            For EACH dish, ONLY if you genuinely can't tell a part of it from the photo (a hidden
+            filling, a soup's base, which meat, tomato or red pepper), add "choices" — at most 2:
+            {"label":"<Filling, Base or Meat>","item":"<the listed item you're unsure about>",
+            "options":[2-4 item objects: that item first, then what people commonly use in THIS dish
+            instead]}. An option REPLACES that item: never an extra, never another dish, never
+            something the photo rules out. Most dishes need none: "choices":[].
+            NEVER suggest alcohol, plain water, or anything not actually eaten.
+            Give each option a realistic per-100 nutrition (light soups 25-60 kcal/100g, oils ~880).
             Reply with ONLY a JSON object in exactly this format and nothing else:
-            {"dishes":[{"name":"<dish name>","items":["<listed item>"],"also":[],"missing":[{"name":"<sauce or dressing>","grams":30,"kcalPer100g":300,"proteinPer100g":1,"fatPer100g":32,"carbsPer100g":4,"fiberPer100g":0,"vitA":0,"vitC":0,"vitD":0,"calcium":10,"iron":0,"potassium":5,"sodium":200,"b12":0,"folate":2,"b6":0,"magnesium":3,"zinc":0,"vitE":1,"caffeine":0}]}]}
+            {"dishes":[{"name":"<dish name>","items":["<listed item>"],"also":[],"choices":[{"label":"Filling","item":"<listed item>","options":[{"name":"<option>","grams":100,"kcalPer100g":200,"proteinPer100g":6,"fatPer100g":8,"carbsPer100g":26,"fiberPer100g":2,"vitA":0,"vitC":0,"vitD":0,"calcium":20,"iron":1,"potassium":150,"sodium":300,"b12":0,"folate":10,"b6":0.1,"magnesium":15,"zinc":0.5,"vitE":0.5,"caffeine":0}]}]}]}
         """.trimIndent()
     }
 
@@ -732,7 +737,7 @@ object FoodPrompts {
 
     private fun planShape(mealTypes: List<String>) = """
         Reply with ONLY this JSON:
-        {"meals":[{"mealType":"<${mealTypes.joinToString("|")}>","name":"<dish name>","cuisine":"<cuisine>","timeMinutes":<total minutes>,"servings":<number>,"difficulty":"easy|medium|hard","whyItFits":"<one short sentence with numbers on why it suits this person today>","ingredients":[ item objects ],"steps":["<step>"],"tips":["<tip>"]}],
+        {"meals":[{"mealType":"<${mealTypes.joinToString("|")}>","name":"<dish name>","cuisine":"<cuisine>","timeMinutes":<total minutes>,"servings":<number>,"difficulty":"easy|medium|hard","whyItFits":"<one short sentence with numbers on why it suits this person today>","ingredients":[ item objects ],"steps":[{"phase":"prep|cook|serve","title":"<2-5 words>","text":"<the full instruction>","uses":["<ingredient with amount>"],"minutes":<only for a waiting step>}],"tips":["<tip>"]}],
          "shopping":[{"name":"<thing to buy>","amount":"<e.g. 200 g>","estimatedCost":<number or null>}]}
     """.trimIndent()
 
@@ -756,7 +761,14 @@ object FoodPrompts {
         - Ingredients are for the portion ONE person eats ("servings" says how many portions the recipe makes).
           Each item: real grams for that portion and honest per-100 g nutrition; "have": true when it's from
           what they have. List cooking oil with its grams. Sauces and dressings bought ready-made stay one item.
-        - Steps: short, numbered in order, practical. Tips: 0-2 swaps or shortcuts.
+        - Steps a beginner can follow without guessing, in order, grouped by "phase": prep (wash, chop,
+          measure, marinate, preheat), cook, serve. Each step: a 2-5 word "title" and a full "text" that
+          says HOW MUCH (spoons with grams in brackets: "1 tsp (5 g) paprika", "1 tbsp (10 g) oil"),
+          HOW HOT (low / medium / medium-high / high, or °C for the oven), HOW LONG, and HOW TO TELL IT'S
+          DONE (colour, texture, internal temperature). "uses": the ingredients that step uses, with
+          amounts. "minutes": only when the step is waiting (simmer, bake, rest, marinate), else leave it
+          out. Usually 6-14 steps; never skip preheating, seasoning or resting.
+        - Tips: 0-2 swaps or shortcuts.
         - shopping: what to buy for these meals (not what they have), with rough cost when there's a budget.
         Example item: $PLAN_ITEM_EXAMPLE
 
@@ -779,7 +791,10 @@ object FoodPrompts {
         5. Ingredient amounts are for ONE person's portion. Give each ingredient its grams and its
            nutrition per 100 g (kcal, protein, fat, carbs, fibre, and the vitamins and minerals).
            Mark "have": true for ingredients from their list, false for ones to buy.
-        6. Steps: 3 to 8 short steps in order.
+        6. Steps: 5 to 10 steps in order, each with "phase" (prep, cook or serve), a short "title" and a
+           "text" that says how much (spoons with grams, like "1 tbsp (10 g) oil"), how hot (low, medium or
+           high, or °C for the oven), how long, and how to tell it is done. "uses" lists that step's
+           ingredients with amounts. Add "minutes" only for waiting steps (simmer, bake, rest).
         7. Write numbers, not words, in the JSON. Use the exact keys shown.
         Example item: $PLAN_ITEM_EXAMPLE
 

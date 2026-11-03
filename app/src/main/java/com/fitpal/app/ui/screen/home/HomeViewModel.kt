@@ -150,6 +150,7 @@ class HomeViewModel @Inject constructor(
 
     /** The tracker drawn bigger in a strip row of three (null = the row's first). */
     val homeStripBigger: StateFlow<String?> = settingsRepository.homeStripBigger
+    fun setStripBigger(key: String?) = settingsRepository.setHomeStripBigger(key)
     /** The one-time "your limits moved out of the drawer" tip, for users who had the drawer. */
     val homeStripTip: StateFlow<Boolean> = settingsRepository.homeStripTip
     fun dismissHomeStripTip() = settingsRepository.dismissHomeStripTip()

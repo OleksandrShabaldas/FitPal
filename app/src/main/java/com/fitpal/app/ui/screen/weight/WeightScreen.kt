@@ -10,15 +10,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
-import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -39,6 +35,7 @@ import com.fitpal.app.data.local.entity.WeightEntryEntity
 import com.fitpal.app.domain.Trackers
 import com.fitpal.app.domain.WeightTrend
 import com.fitpal.app.ui.component.GlassNumberField
+import com.fitpal.app.ui.component.DoneButton
 import com.fitpal.app.ui.component.GoldButton
 import com.fitpal.app.ui.component.SegmentedPills
 import com.fitpal.app.ui.component.StatusPill
@@ -218,27 +215,24 @@ private fun LogToday(latest: WeightEntryEntity?, weights: List<WeightEntryEntity
             modifier = Modifier.align(Alignment.CenterHorizontally)
         )
         Spacer(Modifier.height(10.dp))
-        GoldButton(
-            if (loggedToday) "Update today's weigh-in" else "Save",
-            onClick = { value?.let(onSave) }, enabled = value != null, modifier = Modifier.fillMaxWidth()
-        )
+        // Weighed in today and the number is still today's: nothing to do, so the button goes grey.
+        // Change the number and it's gold again, saying what it will save.
+        val unchanged = loggedToday && value != null && abs(value - latest!!.weightKg) < 0.05f
+        when {
+            unchanged -> DoneButton("Weighed in today", modifier = Modifier.fillMaxWidth())
+            loggedToday -> GoldButton(
+                value?.let { "Update to ${format1(it)} kg" } ?: "Update today's weigh-in",
+                onClick = { value?.let(onSave) }, enabled = value != null, modifier = Modifier.fillMaxWidth()
+            )
+            else -> GoldButton("Save", onClick = { value?.let(onSave) }, enabled = value != null, modifier = Modifier.fillMaxWidth())
+        }
     }
 }
 
 /** One weigh-in: the day, the weight, the change since the one before. Swipe to delete. */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun WeighInRow(entry: WeightEntryEntity, previous: WeightEntryEntity?, goal: com.fitpal.app.domain.model.FitnessGoal, onDelete: () -> Unit) {
-    val state = rememberSwipeToDismissBoxState(confirmValueChange = { v -> if (v != SwipeToDismissBoxValue.Settled) { onDelete(); true } else false })
-    SwipeToDismissBox(
-        state = state,
-        backgroundContent = {
-            Box(
-                Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp)).background(MacroOver.copy(alpha = 0.18f)).padding(horizontal = 14.dp),
-                contentAlignment = if (state.dismissDirection == SwipeToDismissBoxValue.StartToEnd) Alignment.CenterStart else Alignment.CenterEnd
-            ) { Text("Delete", style = MaterialTheme.typography.labelLarge, color = MacroOver) }
-        }
-    ) {
+    com.fitpal.app.ui.component.SwipeToDeleteRow(label = "Delete", onDelete = onDelete) {
         Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(dayLabel(entry.date), style = MaterialTheme.typography.bodyMedium, color = Cream, modifier = Modifier.weight(1f))
             Text("${format1(entry.weightKg)} kg", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = Cream)

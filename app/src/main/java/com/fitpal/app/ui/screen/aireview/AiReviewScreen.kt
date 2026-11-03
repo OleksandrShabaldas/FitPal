@@ -1,5 +1,6 @@
 package com.fitpal.app.ui.screen.aireview
 
+import com.fitpal.app.ui.component.kit.aiGlow
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -270,7 +271,7 @@ private fun StaleBanner(note: String, onRefresh: () -> Unit) {
         }
         Spacer(Modifier.width(10.dp))
         Row(
-            modifier = Modifier.glass(CircleShape).padding(horizontal = 12.dp, vertical = 8.dp),
+            modifier = Modifier.aiGlow().glass(CircleShape).padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(Icons.Default.Refresh, contentDescription = null, tint = GoldLight, modifier = Modifier.size(16.dp))

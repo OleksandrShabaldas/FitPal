@@ -21,7 +21,9 @@ import javax.inject.Singleton
  * needed — the vision model does it all in one shot.)
  *
  * As a safety net, any ingredient the AI returns with 0 calories is looked up in
- * the offline USDA database so the user never ends up logging a "0 kcal" food.
+ * the offline USDA database so the user never ends up logging a "0 kcal" food — except the
+ * drinks that really are 0 kcal (water, black coffee, plain tea, diet sodas), and only from a
+ * database food that is the same food.
  */
 @Singleton
 class FoodAnalysisPipeline @Inject constructor(
@@ -125,14 +127,18 @@ class FoodAnalysisPipeline @Inject constructor(
     }
 
     /**
-     * Fill in nutrition for any ingredient the AI returned with 0 kcal by looking
-     * it up by name in the offline food database. Keeps the AI's portion size.
+     * Fill in nutrition for any ingredient the AI returned with 0 kcal by looking it up by name
+     * in the offline food database. Keeps the AI's portion size. Drinks that really are 0 kcal
+     * keep their 0, and only a database food that is the same food counts: the old "first name
+     * that contains the words" match turned a glass of tap water into 160 kcal.
      */
     private suspend fun enrichZeros(food: DetectedFood): DetectedFood {
         if (food.ingredients.all { it.caloriesPer100g > 0f }) return food
+        val zeroDrink = food.ingredients.size == 1 && com.fitpal.app.domain.Drinks.isZeroCalorie(food.label)
         val fixed = food.ingredients.map { ing ->
             if (ing.caloriesPer100g > 0f) return@map ing
-            val lookup = nutritionRepository.lookupIngredient(ing.name, ing.grams)
+            if (zeroDrink || com.fitpal.app.domain.Drinks.isZeroCalorie(ing.name)) return@map ing
+            val lookup = nutritionRepository.lookupIngredientStrict(ing.name, ing.grams)
             if (lookup != null && lookup.caloriesPer100g > 0f) {
                 ing.copy(
                     caloriesPer100g = lookup.caloriesPer100g,

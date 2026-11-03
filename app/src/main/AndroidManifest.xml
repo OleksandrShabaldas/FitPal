@@ -1182,6 +1182,11 @@
             </intent-filter>
         </receiver>
 
+        <!-- A recipe's cook-mode timer is done (only our own PendingIntent fires it) -->
+        <receiver
+            android:name=".ml.CookTimerReceiver"
+            android:exported="false" />
+
         <!-- Health Connect permissions rationale (Android 14+) -->
         <activity-alias
             android:name="ViewPermissionUsageActivity"

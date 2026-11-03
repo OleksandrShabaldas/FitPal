@@ -11,12 +11,12 @@ class AppearanceTest {
     fun newFieldsSurviveTheRoundTrip() {
         val a = Appearance(
             style = LookStyle.MATERIAL, dynamicColor = false, materialPalette = MaterialPalette.PURPLE,
-            photo = true, photoDim = 0.5f, photoVersion = 1234L
+            photo = true, photoStrength = 0.7f, photoVersion = 1234L
         )
         val back = Appearance.fromJson(a.toJson())
         assertEquals(MaterialPalette.PURPLE, back.materialPalette)
         assertTrue(back.photo)
-        assertEquals(0.5f, back.photoDim, 0.0001f)
+        assertEquals(0.7f, back.photoStrength, 0.0001f)
         assertEquals(1234L, back.photoVersion)
         assertFalse(back.dynamicColor)
     }
@@ -32,15 +32,32 @@ class AppearanceTest {
     }
 
     @Test
-    fun photoDimIsClamped() {
-        val a = Appearance.fromJson("""{"photo":true,"photoDim":3.0}""")
-        assertEquals(0.8f, a.photoDim, 0.0001f)
+    fun photoStrengthIsClampedAndOldDimIsIgnored() {
+        assertEquals(1f, Appearance.fromJson("""{"photo":true,"photoStrength":3.0}""").photoStrength, 0.0001f)
+        // Before 2.15 there was only a dim amount: everyone starts from the new default treatment.
+        assertEquals(PhotoTreatment.DEFAULT_STRENGTH, Appearance.fromJson("""{"photo":true,"photoDim":0.2}""").photoStrength, 0.0001f)
+    }
+
+    @Test
+    fun photoTreatmentRunsFromLightThroughTheTunedValuesToDeep() {
+        assertEquals(PhotoTreatment.LIGHT, PhotoTreatment.at(0f))
+        assertEquals(PhotoTreatment.DEFAULT, PhotoTreatment.at(0.5f))
+        assertEquals(PhotoTreatment.DEEP, PhotoTreatment.at(1f))
+        // The values tuned on the review page: blur 65, darken 62, grain 39, warm light 55.
+        val d = PhotoTreatment.at(PhotoTreatment.DEFAULT_STRENGTH)
+        assertEquals(65f, d.blur, 0.001f); assertEquals(62f, d.dark, 0.001f)
+        assertEquals(39f, d.grain, 0.001f); assertEquals(55f, d.glow, 0.001f)
+        assertEquals(65, d.blurLevel)
+        // Halfway between the default and Deep.
+        val q = PhotoTreatment.at(0.75f)
+        assertEquals(77.5f, q.blur, 0.001f)
+        assertEquals(80, q.blurLevel)
     }
 
     @Test
     fun resetKeepsTheLookAndTheBackground() {
         val a = Appearance(
-            style = LookStyle.LIQUID, palette = LookPalette.BERRY, photo = true, photoDim = 0.2f, photoVersion = 9L,
+            style = LookStyle.LIQUID, palette = LookPalette.BERRY, photo = true, photoStrength = 0.2f, photoVersion = 9L,
             glow = 1.5f, cardOpacity = 0.6f, roundness = 0.5f, compact = true, reduceMotion = true
         )
         val r = a.withoutTuning()
@@ -48,6 +65,7 @@ class AppearanceTest {
         assertEquals(LookPalette.BERRY, r.palette)
         assertTrue(r.photo)
         assertEquals(9L, r.photoVersion)
+        assertEquals(0.2f, r.photoStrength, 0.0001f)
         assertEquals(1f, r.glow, 0.0001f)
         assertEquals(1f, r.cardOpacity, 0.0001f)
         assertFalse(r.compact)

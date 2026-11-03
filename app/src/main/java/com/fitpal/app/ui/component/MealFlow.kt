@@ -1,5 +1,6 @@
 package com.fitpal.app.ui.component
 
+import com.fitpal.app.ui.component.kit.aiGlow
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateIntAsState
@@ -301,7 +302,9 @@ fun LogBar(
     actionEnabled: Boolean,
     onAction: () -> Unit,
     menu: List<Pair<String, () -> Unit>> = emptyList(),
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** The action starts the AI ("Analyse", "Analyse again"): it gets the AI glow while enabled. */
+    aiAction: Boolean = actionLabel.startsWith("Analyse")
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val shown by animateIntAsState(totalKcal ?: 0, animationSpec = tween(400), label = "logTotal")
@@ -337,6 +340,6 @@ fun LogBar(
             }
             Spacer(Modifier.width(4.dp))
         }
-        GoldPill(actionLabel, onAction, enabled = actionEnabled)
+        GoldPill(actionLabel, onAction, enabled = actionEnabled, modifier = if (aiAction && actionEnabled) Modifier.aiGlow() else Modifier)
     }
 }

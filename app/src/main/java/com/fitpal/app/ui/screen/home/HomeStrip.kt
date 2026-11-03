@@ -352,25 +352,6 @@ fun StripMovedTip(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
     }
 }
 
-/** In edit mode, a tracker that isn't a card: where it is, in one line. */
-@Composable
-internal fun PlacedElsewhere(item: HomeTracker?, label: String, placement: TrackerPlacement?, featureOn: Boolean) {
-    val where = when {
-        !featureOn -> "Not in use — turn it on in Settings"
-        placement == TrackerPlacement.STRIP -> "In the strip"
-        placement == TrackerPlacement.MAIN -> "On the main card"
-        else -> ""
-    }
-    Row(Modifier.fillMaxWidth().glassSoft().padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-        item?.let {
-            Icon(it.icon, contentDescription = null, tint = it.color, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-        }
-        Text(label, style = MaterialTheme.typography.labelLarge, color = Cream, modifier = Modifier.weight(1f))
-        Text(where, style = MaterialTheme.typography.labelMedium, color = if (featureOn) GoldLight else CreamFaint)
-    }
-}
-
 /**
  * The gentle suggestion (docs/redesign/06): one optional feature the user's own logs point to, under
  * the strip. "Turn on" opens its setup, "Not now" waits a week, × never asks about it again.

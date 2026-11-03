@@ -121,6 +121,7 @@ val SETTINGS_SEARCH_INDEX = listOf(
     SettingsSearchEntry("Food limits", "rules", "rules", "dessert sweets fried fast food sugary drinks soda cola daily limit cap rules warn"),
     // Caffeine
     SettingsSearchEntry("Caffeine tracker", "caffeine", "caffeine", "coffee tea energy drink half-life half life sleep mg limit"),
+    SettingsSearchEntry("Your drinks", "caffeine", "drinks", "caffeine drinks presets planner coffee espresso latte cappuccino tea red bull monster energy drink add remove"),
     // Reminders
     SettingsSearchEntry("Daily reminder", "reminders", "reminder_daily", "log your day nudge notification"),
     SettingsSearchEntry("Meal reminders", "reminders", "reminder_meals", "breakfast lunch dinner notification nudge"),

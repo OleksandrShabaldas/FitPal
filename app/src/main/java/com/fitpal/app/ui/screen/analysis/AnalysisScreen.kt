@@ -1,5 +1,6 @@
 package com.fitpal.app.ui.screen.analysis
 
+import com.fitpal.app.ui.component.kit.aiGlow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -342,7 +343,7 @@ fun AnalysisScreen(
                                         onTotalGramsChanged = { g -> viewModel.scaleFoodToGrams(foodIndex, g) },
                                         onServingsChanged = { n -> viewModel.setServings(foodIndex, n) },
                                         onWaterChanged = { ml -> viewModel.setFoodWater(foodIndex, ml) },
-                                        onToggleVariation = { vi -> viewModel.toggleVariation(foodIndex, vi) },
+                                        onPickChoice = { g, o -> viewModel.pickChoice(foodIndex, g, o) },
                                         onAddIngredient = { addIngredientFor = foodIndex },
                                         onEditWithAi = { editWithAiFor = foodIndex },
                                         onRename = { viewModel.renameFood(foodIndex, it) },
@@ -364,7 +365,7 @@ fun AnalysisScreen(
                                     state.insights != null -> {
                                         item(key = "insights") { MealInsightsSection(state.insights!!, breakdown = mealBreakdown(state.detectedFoods)) }
                                         item(key = "insights_refresh") {
-                                            com.fitpal.app.ui.component.SetupPill("✦ Refresh AI analysis", selected = false) { viewModel.generateInsights() }
+                                            com.fitpal.app.ui.component.SetupPill("✦ Refresh AI analysis", selected = false, modifier = Modifier.aiGlow()) { viewModel.generateInsights() }
                                         }
                                     }
                                     else -> item(key = "insights_offer") {
@@ -380,7 +381,7 @@ fun AnalysisScreen(
                                                 style = MaterialTheme.typography.bodySmall, color = CreamMuted
                                             )
                                             Spacer(Modifier.height(12.dp))
-                                            com.fitpal.app.ui.component.GoldPill("Generate AI analysis", { viewModel.generateInsights() })
+                                            com.fitpal.app.ui.component.GoldPill("Generate AI analysis", { viewModel.generateInsights() }, modifier = Modifier.aiGlow())
                                         }
                                     }
                                 }

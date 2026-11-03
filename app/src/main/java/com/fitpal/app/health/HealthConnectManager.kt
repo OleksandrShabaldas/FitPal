@@ -38,6 +38,11 @@ class HealthConnectManager @Inject constructor(
         }.getOrDefault(false)
     }
 
+    /** A record this long or shorter counts as hour-level detail. */
+    private val SHORT_RECORD: java.time.Duration = java.time.Duration.ofMinutes(70)
+    /** A source "has hours" when at least this share of its steps comes in short records. */
+    private val DETAILED_SHARE = 0.8
+
     private fun dayRange(date: LocalDate): Pair<Instant, Instant> {
         val zone = ZoneId.systemDefault()
         return date.atStartOfDay(zone).toInstant() to date.plusDays(1).atStartOfDay(zone).toInstant()
@@ -81,12 +86,16 @@ class HealthConnectManager @Inject constructor(
     }
 
     /**
-     * The day's steps hour by hour (24 values, local time), from the **single most complete source**
-     * — the same rule as [readSteps], since sources are overlapping views of the same steps. A record
-     * that spans an hour boundary is split by how much of it falls in each hour. Null when Health
-     * Connect isn't available or has nothing for the day (the page then shows only the week).
+     * The day's steps hour by hour (24 values, local time), or why there's no hour-by-hour view.
+     *
+     * The shape comes from the most complete source that really splits the day into short records
+     * (most of its steps in records of about an hour or less). Samsung Health often hands over the
+     * whole day as one long record; spreading that evenly drew 24 equal bars, hours still to come
+     * included. A record that spans an hour boundary is split by how much of it falls in each hour,
+     * and nothing is counted after now. Null when Health Connect isn't available or has nothing.
+     * The page scales the hours to the day's count ([com.fitpal.app.domain.StepHours]).
      */
-    suspend fun readStepsByHour(date: LocalDate): List<Long>? {
+    suspend fun readStepsByHour(date: LocalDate): HourlySteps? {
         if (!isAvailable()) return null
         val (start, end) = dayRange(date)
         val zone = ZoneId.systemDefault()
@@ -105,19 +114,29 @@ class HealthConnectManager @Inject constructor(
                 pageToken = response.pageToken
             } while (pageToken != null)
         }.onFailure { return null }
-        val best = records.groupBy { it.metadata.dataOrigin.packageName }
-            .maxByOrNull { (_, rs) -> rs.sumOf { it.count } }?.value ?: return null
+        val byOrigin = records.groupBy { it.metadata.dataOrigin.packageName }
+        if (byOrigin.isEmpty()) return null
+        fun stepsOf(rs: List<StepsRecord>) = rs.sumOf { it.count }
+        fun detailShare(rs: List<StepsRecord>): Double {
+            val total = stepsOf(rs).toDouble()
+            if (total <= 0.0) return 0.0
+            val short = rs.filter { java.time.Duration.between(it.startTime, it.endTime) <= SHORT_RECORD }.sumOf { it.count }
+            return short / total
+        }
+        val best = byOrigin.filter { (_, rs) -> detailShare(rs) >= DETAILED_SHARE }.maxByOrNull { (_, rs) -> stepsOf(rs) }?.value
+            ?: return HourlySteps(hours = null, coarseSource = byOrigin.maxByOrNull { (_, rs) -> stepsOf(rs) }?.key)
+        val cut = minOf(end, Instant.now())
         val hours = LongArray(24)
         for (r in best) {
             val from = maxOf(r.startTime, start)
             val to = minOf(r.endTime, end)
             val total = (to.toEpochMilli() - from.toEpochMilli()).coerceAtLeast(0L)
             if (total == 0L) {
-                hours[from.atZone(zone).hour] += r.count
+                if (!from.isAfter(cut)) hours[from.atZone(zone).hour] += r.count
                 continue
             }
             var cursor = from
-            while (cursor.isBefore(to)) {
+            while (cursor.isBefore(to) && cursor.isBefore(cut)) {
                 val local = cursor.atZone(zone)
                 val nextHour = local.withMinute(0).withSecond(0).withNano(0).plusHours(1).toInstant()
                 val sliceEnd = minOf(nextHour, to)
@@ -126,8 +145,16 @@ class HealthConnectManager @Inject constructor(
                 cursor = sliceEnd
             }
         }
-        return hours.toList().takeIf { list -> list.any { it > 0L } }
+        return HourlySteps(hours = hours.toList().takeIf { list -> list.any { it > 0L } })
     }
+
+    /** The day hour by hour, or (no [hours]) the source that only gives long records. */
+    data class HourlySteps(
+        /** 24 values, local time; null when no source splits the day into hours. */
+        val hours: List<Long>?,
+        /** The biggest writer's package when no source has hour-by-hour detail (e.g. Samsung Health). */
+        val coarseSource: String? = null
+    )
 
     /**
      * Steps for the day grouped by the app that wrote them (package name → total). Used both

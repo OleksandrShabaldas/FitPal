@@ -275,10 +275,12 @@ internal fun AppearanceBackgroundSection(viewModel: SettingsViewModel) {
             }
             Spacer(Modifier.height(6.dp))
             SliderRow(
-                "Dim the photo",
-                if (style == LookStyle.LIQUID && appearance.mode != LookMode.DARK) "Softens it so text on the glass stays easy to read." else "Darkens it so text on the cards stays easy to read.",
-                appearance.photoDim, 0f..0.8f
-            ) { v -> viewModel.updateAppearance { it.copy(photoDim = v) } }
+                "Photo strength",
+                "Left shows more of the photo, right more of the look. Blur, " +
+                    (if (style == LookStyle.LIQUID && appearance.mode != LookMode.DARK) "the light veil" else "darkness") +
+                    ", grain and the look's light move together.",
+                appearance.photoStrength, 0f..1f
+            ) { v -> viewModel.updateAppearance { it.copy(photoStrength = v) } }
             Text(
                 "The photo stays on this phone — it isn't part of backups.",
                 style = MaterialTheme.typography.labelSmall, color = CreamFaint

@@ -1,5 +1,6 @@
 package com.fitpal.app.ui.component
 
+import com.fitpal.app.ui.component.kit.aiGlow
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -70,7 +71,7 @@ fun AddIngredientDialog(
                         Spacer(Modifier.width(10.dp))
                         Text("Asking the AI…", style = MaterialTheme.typography.bodyMedium)
                     }
-                    query.isNotBlank() -> TextButton(onClick = { onAiAdd(query) }) {
+                    query.isNotBlank() -> TextButton(onClick = { onAiAdd(query) }, modifier = Modifier.aiGlow()) {
                         Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
                         Text("$aiVerb \"${query.take(24)}\" with AI")

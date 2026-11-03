@@ -65,9 +65,9 @@ class StepsViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), List(7) { null })
 
-    /** Steps hour by hour from Health Connect; null when it has no intervals for the day. */
-    private val _hourly = MutableStateFlow<List<Long>?>(null)
-    val hourly: StateFlow<List<Long>?> = _hourly.asStateFlow()
+    /** Steps hour by hour from Health Connect (unscaled), or which source only gives a daily total. */
+    private val _hourly = MutableStateFlow<com.fitpal.app.health.HealthConnectManager.HourlySteps?>(null)
+    val hourly: StateFlow<com.fitpal.app.health.HealthConnectManager.HourlySteps?> = _hourly.asStateFlow()
 
     /** Every Health Connect writer's count for the day (package → steps), plus the watch's report. */
     private val _sources = MutableStateFlow<Map<String, Int>>(emptyMap())

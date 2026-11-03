@@ -989,14 +989,9 @@ fun AnalyticsScreen(
                             highlight = highlight == "maintenance",
                             spotlight = spotlight, onToggleSpotlight = viewModel::toggleSpotlight,
                             onClick = { showMaintenanceInfo = true },
-                            trailing = {
-                                com.fitpal.app.ui.component.InfoButton(
-                                    title = "Maintenance estimate",
-                                    text = "What all your logged days and weigh-ins suggest you actually burn. " +
-                                        "It's a rough estimate: it can still read high while you're losing weight quickly, " +
-                                        "and settles as your weight steadies. It never changes your calorie goal."
-                                )
-                            }
+                            info = "What all your logged days and weigh-ins suggest you actually burn. " +
+                                "It's a rough estimate: it can still read high while you're losing weight quickly, " +
+                                "and settles as your weight steadies. It never changes your calorie goal."
                         ) {
                             Text(
                                 "≈ ${"%,d".format(maint)} kcal/day",

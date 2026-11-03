@@ -179,9 +179,12 @@ internal fun ChartCard(
 }
 
 /**
- * A card's title row — title, (i), then any trailing control — and under it the card's takeaway:
- * one computed sentence about the data (P8), never a description of the chart.
+ * A card's title row — title and its (i), any trailing control on the right — and under it the
+ * card's takeaway: one computed sentence about the data (P8), never a description of the chart.
+ * The title gets all the room it needs (it used to share the free width half and half with a
+ * spacer and end in "…"); when title and controls can't share a line, the controls move under it.
  */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 internal fun CardHeader(
     title: String,
@@ -189,16 +192,17 @@ internal fun CardHeader(
     info: String?,
     trailing: (@Composable () -> Unit)? = null
 ) {
-    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            title, style = MaterialTheme.typography.titleMedium, color = Cream,
-            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false)
-        )
-        if (info != null) com.fitpal.app.ui.component.InfoButton(title = title, text = info)
-        Spacer(Modifier.weight(1f))
+    androidx.compose.foundation.layout.FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Row(Modifier.align(Alignment.CenterVertically).padding(end = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(title, style = MaterialTheme.typography.titleMedium, color = Cream)
+            if (info != null) com.fitpal.app.ui.component.InfoButton(title = title, text = info)
+        }
         if (trailing != null) {
-            Spacer(Modifier.width(10.dp))
-            trailing()
+            Box(Modifier.align(Alignment.CenterVertically)) { trailing() }
         }
     }
     if (subtitle.isNotEmpty()) {

@@ -140,13 +140,27 @@ private class LiquidGlassNode(
         val at = if (known) origin - frame.topLeft else Offset.Zero
 
         // 1. The frosted backdrop (over a photo), or nothing (over the blobs: the film is see-through).
+        //    Over a photo it gets the same veil and the same light as the backdrop around it.
         val useLens = lens && known && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+        val treatment = PhotoTreatment.at(look.appearance.photoStrength)
+        val dim = treatment.darkAlpha
         if (photo != null && full != null && known) {
             val bs = photoShader(photo, full.width, full.height, frame.size, at)
-            if (useLens) drawLens(outline, at, frame.size, bs, look.appearance.photoDim, light)
+            if (useLens) drawLens(outline, at, frame.size, bs, dim, light)
             else {
                 drawOutline(outline, ShaderBrush(bs))
-                drawOutline(outline, if (light) Color.White else Color.Black, alpha = look.appearance.photoDim)
+                drawOutline(outline, if (light) Color.White else Color.Black, alpha = dim)
+            }
+            val g = treatment.glowAmount
+            if (g > 0f) LookState.colors.backdrops.values.first().orbs.forEachIndexed { i, o ->
+                val (c, r) = LiquidBackdrop.orb(i, o, LiquidBackdrop.phase, frame.width, frame.height)
+                drawOutline(
+                    outline,
+                    Brush.radialGradient(
+                        listOf(com.fitpal.app.ui.component.photoGlow(o.color.copy(alpha = o.alpha), g), Color.Transparent),
+                        center = c - at, radius = r
+                    )
+                )
             }
         } else if (useLens) {
             drawLens(outline, at, frame.size, null, 0f, light)
@@ -155,7 +169,7 @@ private class LiquidGlassNode(
         // 2. The contrast guard: a scrim that thickens where what's behind is bright (dark looks)
         //    or dark (light looks), so the text on the card holds its contrast.
         if (known) {
-            val guard = guardAlpha(at, frame.size, photo != null, light, look.appearance.photoDim)
+            val guard = guardAlpha(at, frame.size, photo != null, light, dim)
             if (guard > 0f) drawOutline(outline, if (light) Color.White else LookState.colors.inkBlack, alpha = guard)
         }
 

@@ -1,5 +1,6 @@
 package com.fitpal.app.ui.screen.coach
 
+import com.fitpal.app.ui.component.kit.aiGlow
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -184,9 +185,9 @@ fun CoachScreen(
                     }
                     if (job?.status is PlanStatus.Running || job?.status is PlanStatus.OnlineFailed) Spacer(Modifier.height(10.dp))
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        GoldPill("Plan a meal", { requestSheet = viewModel.requestFor(PlanScope.DINNER) })
-                        SetupPill("Plan my day", selected = false) { requestSheet = viewModel.requestFor(PlanScope.DAY) }
-                        SetupPill("Plan my week", selected = false) { requestSheet = viewModel.requestFor(PlanScope.WEEK) }
+                        GoldPill("Plan a meal", { requestSheet = viewModel.requestFor(PlanScope.DINNER) }, modifier = Modifier.aiGlow())
+                        SetupPill("Plan my day", selected = false, modifier = Modifier.aiGlow()) { requestSheet = viewModel.requestFor(PlanScope.DAY) }
+                        SetupPill("Plan my week", selected = false, modifier = Modifier.aiGlow()) { requestSheet = viewModel.requestFor(PlanScope.WEEK) }
                     }
                     Spacer(Modifier.height(6.dp))
                     upcoming.firstOrNull()?.let { m ->

@@ -10,8 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MonitorWeight
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -23,7 +21,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -35,7 +32,6 @@ import com.fitpal.app.ui.theme.Cream
 import com.fitpal.app.ui.theme.CreamMuted
 import com.fitpal.app.ui.theme.Gold
 import com.fitpal.app.ui.theme.GoldLight
-import com.fitpal.app.ui.theme.InkBlack
 import com.fitpal.app.ui.theme.ScoreFair
 import com.fitpal.app.ui.theme.glassOverlay
 import java.time.LocalDate
@@ -109,14 +105,20 @@ fun WeighInCard(
         )
 
         Spacer(Modifier.height(22.dp))
+        // Weighed in today and the number is still today's: the button goes grey (docs/redesign/12, #10).
+        // Change the number and it's gold again, saying what it will save.
+        val loggedToday = latest?.date == today
+        val unchanged = loggedToday && value != null && abs(value - latest!!.weightKg) < 0.05f
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            TextButton(onClick = onCancel, modifier = Modifier.weight(1f)) { Text("Not now", color = CreamMuted) }
-            Button(
-                onClick = { value?.let(onSave) },
-                enabled = value != null,
-                colors = ButtonDefaults.buttonColors(containerColor = GoldLight, contentColor = InkBlack),
-                modifier = Modifier.weight(1f)
-            ) { Text("Save", fontWeight = FontWeight.SemiBold) }
+            GlassButton(if (unchanged) "Close" else "Not now", onClick = onCancel, modifier = Modifier.weight(1f))
+            when {
+                unchanged -> DoneButton("Weighed in today", modifier = Modifier.weight(1f))
+                loggedToday -> GoldButton(
+                    value?.let { "Update to ${format1(it)}" } ?: "Update",
+                    onClick = { value?.let(onSave) }, enabled = value != null, modifier = Modifier.weight(1f)
+                )
+                else -> GoldButton("Save", onClick = { value?.let(onSave) }, enabled = value != null, modifier = Modifier.weight(1f))
+            }
         }
         if (onOpenTrend != null) {
             TextButton(onClick = onOpenTrend) { Text("See your trend ›", color = GoldLight) }

@@ -9,6 +9,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -33,6 +34,13 @@ object BackdropPhoto {
     /** A small, heavily blurred copy for Liquid glass's surfaces (drawn scaled up). */
     var blurred: ImageBitmap? by mutableStateOf(null)
         private set
+    /**
+     * The photo blurred for the backdrop itself, at the treatment's blur level ([ensureBackdrop]);
+     * null at level 0 or until it's made (the sharp [image] is drawn meanwhile).
+     */
+    var backdrop: ImageBitmap? by mutableStateOf(null)
+        private set
+    private var backdropFor: Pair<Long, Int>? = null
     /** Brightness 0–1 on a [GRID_W]×[GRID_H] grid over the photo, for the contrast guard. */
     var luma: FloatArray? = null
         private set
@@ -70,6 +78,8 @@ object BackdropPhoto {
         runCatching { file(context).delete() }
         image = null
         blurred = null
+        backdrop = null
+        backdropFor = null
         luma = null
         loadedVersion = Long.MIN_VALUE
     }
@@ -89,6 +99,36 @@ object BackdropPhoto {
         image = loaded?.first
         blurred = loaded?.second
         luma = loaded?.third
+        backdrop = null
+        backdropFor = null
+    }
+
+    /**
+     * Makes [backdrop] for blur [level] (0–100, see `PhotoTreatment.blurLevel`) once per photo and
+     * level, off the main thread: the photo shrunk by 2× (level 1) to 24× (level 100) and softened
+     * with three small box blurs, then drawn scaled back up — on every Android version.
+     */
+    suspend fun ensureBackdrop(level: Int) {
+        val src = image ?: return
+        val key = loadedVersion to level
+        if (backdropFor == key) return
+        val made = if (level <= 0) null else withContext(Dispatchers.Default) {
+            runCatching { blurAt(src.asAndroidBitmap(), level).asImageBitmap() }.getOrNull()
+        }
+        if (image !== src) return  // a newer photo arrived meanwhile
+        backdrop = made
+        backdropFor = key
+    }
+
+    private fun blurAt(src: Bitmap, level: Int): Bitmap {
+        val divisor = 2f + level.coerceIn(0, 100) / 100f * 22f
+        val w = max(8, (src.width / divisor).roundToInt())
+        val h = max(8, (src.height / divisor).roundToInt())
+        val small = Bitmap.createScaledBitmap(src, w, h, true)
+        val px = IntArray(w * h)
+        small.getPixels(px, 0, w, 0, 0, w, h)
+        repeat(3) { boxBlur(px, w, h, 2) }
+        return Bitmap.createBitmap(px, w, h, Bitmap.Config.ARGB_8888)
     }
 
     /**

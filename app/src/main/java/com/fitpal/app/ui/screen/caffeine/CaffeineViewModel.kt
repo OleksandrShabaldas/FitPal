@@ -54,6 +54,24 @@ class CaffeineViewModel @Inject constructor(
 
     fun setChartView(index: Int) = settingsRepository.setAnalyticsView(CHART_VIEW_KEY, index)
 
+    /** Your drinks (Settings → Caffeine), least caffeine first. */
+    val drinks: StateFlow<List<com.fitpal.app.domain.CaffeinePreset>> = settingsRepository.caffeineDrinks
+
+    /** The starred drinks (labels) — the planner card shows them, topped up to three. */
+    val quickDrinks: StateFlow<List<String>> = settingsRepository.caffeineQuickDrinks
+
+    /**
+     * Star / unstar a drink for the planner card. False when it can't be starred because three
+     * already are (the sheet says so); unstarring always works.
+     */
+    fun toggleQuickDrink(label: String): Boolean {
+        val current = quickDrinks.value.filter { q -> drinks.value.any { it.label.equals(q, ignoreCase = true) } }
+        val on = current.any { it.equals(label, ignoreCase = true) }
+        if (!on && current.size >= com.fitpal.app.domain.Caffeine.QUICK_DRINK_COUNT) return false
+        settingsRepository.setCaffeineQuickDrinks(if (on) current.filterNot { it.equals(label, ignoreCase = true) } else current + label)
+        return true
+    }
+
     private companion object {
         const val CHART_VIEW_KEY = "tracker:caffeine"
     }

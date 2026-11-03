@@ -16,8 +16,8 @@ import com.fitpal.app.domain.model.UserProfile
  *  - vision: look at a food photo and return every food on the plate
  *
  * Both return [DetectedFood]s: a packaged product/drink comes back as one food with
- * a single ingredient; a composite dish comes back with its ingredients and any
- * common variations the user can choose.
+ * a single ingredient; a composite dish comes back with its ingredients and, for any part
+ * the AI couldn't tell (a filling, a soup's base), choices that replace that ingredient.
  */
 interface IngredientEngine {
 
@@ -34,8 +34,8 @@ interface IngredientEngine {
      * Second pass over a photo's loose ingredients: guess which dish they form.
      * Passes the [image] (when available) so the dish can be named from what's
      * actually on the plate, plus the optional user [note]. Returns one or more
-     * candidate dishes (most likely first); each holds the same ingredients plus
-     * dish-specific "missing" extras (e.g. a dressing) as variations.
+     * candidate dishes (most likely first); each holds the same ingredients plus, for a
+     * part the model couldn't see (a hidden filling), choices that replace that ingredient.
      */
     suspend fun identifyDish(ingredients: List<Ingredient>, image: Bitmap? = null, note: String = ""): DishResult
 

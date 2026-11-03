@@ -143,9 +143,10 @@ fun StepsScreen(
                 }
             )
         }
-        val hours = hourly
+        // The shape from the most detailed source, scaled so the bars add up to the count above.
+        val hours = hourly?.hours?.let { com.fitpal.app.domain.StepHours.scaleTo(it, steps.toLong()) }
         if (hours != null) {
-            val busiest = hours.indices.maxByOrNull { hours[it] }
+            val busiest = com.fitpal.app.domain.StepHours.busiest(hours)
             TrackerChart(
                 todayTitle = if (isToday) "Today by hour" else "That day by hour",
                 weekTitle = "This week",
@@ -157,12 +158,19 @@ fun StepsScreen(
                 week = { weekChart() }
             )
         } else {
-            // Without Health Connect intervals there's no day to draw — the week is the chart.
+            // Without hour-by-hour records there's no day to draw — the week is the chart.
             TrackerSection(title = "This week") {
                 Box(Modifier.fillMaxWidth().height(150.dp)) { weekChart() }
                 weekTakeaway?.let {
                     Spacer(Modifier.height(8.dp))
                     Text(it, style = MaterialTheme.typography.bodySmall, color = CreamMuted)
+                }
+                hourly?.coarseSource?.let { pkg ->
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "${friendlyStepSource(pkg)} only shares a daily total, so there's no hour-by-hour view.",
+                        style = MaterialTheme.typography.bodySmall, color = CreamFaint
+                    )
                 }
             }
         }

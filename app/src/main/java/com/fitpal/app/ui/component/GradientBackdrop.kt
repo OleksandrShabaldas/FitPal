@@ -35,6 +35,7 @@ import com.fitpal.app.ui.theme.BackdropWorld
 import com.fitpal.app.ui.theme.LiquidBackdrop
 import com.fitpal.app.ui.theme.LookState
 import com.fitpal.app.ui.theme.LookStyle
+import com.fitpal.app.ui.theme.PhotoTreatment
 
 /**
  * Per-section background "world" in the current look, all generated on the phone:
@@ -42,7 +43,8 @@ import com.fitpal.app.ui.theme.LookStyle
  *  - Liquid glass: big vivid colour blobs drifting slowly (still with reduce-motion) — the colour
  *    the thick glass on top has to catch.
  *  - Glow and Liquid glass can show the user's own photo instead (Settings → Appearance →
- *    Background), dimmed by their chosen amount; Glow keeps its grain on top.
+ *    Background), under a thick frost: blurred, darkened (lightened on light Liquid), the look's
+ *    own light on top and grain — how much is the "Photo strength" ([PhotoTreatment]).
  *  - Paper: a flat sheet with a faint wash and paper grain.
  *  - Material You: the plain surface colour.
  * Content sits on top. The world (Today / Trends / …) keeps each section its own colour where the
@@ -99,11 +101,14 @@ fun GradientBackdrop(
         SideEffect { LiquidBackdrop.phase = 0f }
     }
 
-    // The user's own photo (Glow and Liquid glass), loaded once per pick.
+    // The user's own photo (Glow and Liquid glass), loaded once per pick, and its blurred copy for
+    // the treatment's blur level (made once per photo and level).
     val context = LocalContext.current
     val photo = if (look.hasPhoto) BackdropPhoto.image else null
+    val treatment = PhotoTreatment.at(look.appearance.photoStrength)
     if (look.hasPhoto) {
         LaunchedEffect(look.appearance.photoVersion) { BackdropPhoto.ensureLoaded(context, look.appearance.photoVersion) }
+        LaunchedEffect(photo, treatment.blurLevel) { BackdropPhoto.ensureBackdrop(treatment.blurLevel) }
     }
 
     val frameModifier = if (look.style == LookStyle.LIQUID) {
@@ -121,9 +126,12 @@ fun GradientBackdrop(
         Canvas(Modifier.fillMaxSize()) {
             when (look.style) {
                 LookStyle.GLOW -> if (photo != null) {
-                    drawCover(photo)
-                    drawRect(Color.Black, alpha = look.appearance.photoDim)
-                    if (grain) drawRect(brush = noiseBrush, alpha = 0.05f, blendMode = BlendMode.Softlight)
+                    drawTreatedPhoto(
+                        photo, treatment, light = false, noise = noiseBrush,
+                        glows = spec.orbs.map { o ->
+                            Triple(Offset(size.width * o.cx, size.height * o.cy), size.minDimension * o.rFrac, o.color.copy(alpha = o.alpha))
+                        }
+                    )
                 } else {
                     drawRect(
                         brush = Brush.radialGradient(
@@ -146,8 +154,15 @@ fun GradientBackdrop(
                     if (grain) drawRect(brush = noiseBrush, alpha = 0.05f, blendMode = BlendMode.Softlight)
                 }
                 LookStyle.LIQUID -> if (photo != null) {
-                    drawCover(photo)
-                    drawRect(if (colors.isLight) Color.White else Color.Black, alpha = look.appearance.photoDim)
+                    // The drifting blobs are the light here; the glass surfaces draw the same ones.
+                    val phase = LiquidBackdrop.phase
+                    drawTreatedPhoto(
+                        photo, treatment, light = colors.isLight, noise = noiseBrush,
+                        glows = spec.orbs.mapIndexed { i, o ->
+                            val (c, r) = LiquidBackdrop.orb(i, o, phase, size.width, size.height)
+                            Triple(c, r, o.color.copy(alpha = o.alpha))
+                        }
+                    )
                 } else {
                     val phase = LiquidBackdrop.phase
                     drawRect(colors.inkBlack)
@@ -187,6 +202,32 @@ fun GradientBackdrop(
         if (topBarScroll != null) CompositionLocalProvider(LocalTopBarScroll provides topBarScroll) { content() } else content()
     }
 }
+
+/**
+ * The user's photo under the look's frost: its blurred copy (the sharp photo until that's made),
+ * darkened (or lightened on a light look), the look's light orbs over it, then grain.
+ */
+private fun DrawScope.drawTreatedPhoto(
+    photo: ImageBitmap,
+    t: PhotoTreatment,
+    light: Boolean,
+    noise: Brush,
+    glows: List<Triple<Offset, Float, Color>>
+) {
+    drawCover(BackdropPhoto.backdrop ?: photo)
+    drawRect(if (light) Color.White else Color.Black, alpha = t.darkAlpha)
+    val g = t.glowAmount
+    if (g > 0f) glows.forEach { (c, r, color) ->
+        drawCircle(
+            brush = Brush.radialGradient(listOf(photoGlow(color, g), Color.Transparent), center = c, radius = r),
+            radius = r, center = c
+        )
+    }
+    if (t.grainAlpha > 0f) drawRect(brush = noise, alpha = t.grainAlpha, blendMode = BlendMode.Overlay)
+}
+
+/** An orb's colour as light over the photo: its own alpha, scaled by the treatment's light. */
+internal fun photoGlow(color: Color, amount: Float): Color = color.copy(alpha = (color.alpha * amount * 1.4f).coerceIn(0f, 1f))
 
 /** The photo, centre-cropped to cover the whole backdrop (the glass uses the same mapping). */
 private fun DrawScope.drawCover(photo: ImageBitmap) {

@@ -54,7 +54,7 @@ class RemoteIngredientEngine @Inject constructor(
     ): List<DetectedFood> = analyzeImageWithCandidates(bitmap, note, onProgress = onProgress).foods
 
     /**
-     * Online single pass: identify ingredients AND name composite dishes AND suggest variations
+     * Online single pass: identify ingredients AND name composite dishes AND offer choices for what it can't see
      * AND (when the plate is one ambiguous dish) offer 2-3 candidates to pick from — all from the
      * photo, in one call. No separate dish-naming pass (that two-pass design was an on-device
      * crutch). Extraction stays on the fast thinking level.

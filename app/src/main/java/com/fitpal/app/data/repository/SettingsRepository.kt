@@ -493,6 +493,38 @@ class SettingsRepository @Inject constructor(
         _caffeineSettings.value = _caffeineSettings.value.copy(halfLifeHours = clamped)
     }
 
+    // --- Your drinks (Settings → Caffeine): the planner's list, and the three on its card ---
+
+    private val _caffeineDrinks = MutableStateFlow(
+        com.fitpal.app.domain.Caffeine.drinksFromJson(prefs.getString(KEY_CAFFEINE_DRINKS, null))
+            ?: com.fitpal.app.domain.Caffeine.DEFAULT_DRINKS
+    )
+    val caffeineDrinks: StateFlow<List<com.fitpal.app.domain.CaffeinePreset>> = _caffeineDrinks
+
+    /** Saves the list sorted and de-duplicated; an empty list is ignored so the planner always has drinks. */
+    fun setCaffeineDrinks(drinks: List<com.fitpal.app.domain.CaffeinePreset>) {
+        val clean = drinks.filter { it.label.isNotBlank() && it.mg > 0 }
+            .distinctBy { it.label.trim().lowercase() }
+            .sortedWith(com.fitpal.app.domain.Caffeine.drinkOrder)
+        if (clean.isEmpty()) return
+        prefs.edit().putString(KEY_CAFFEINE_DRINKS, com.fitpal.app.domain.Caffeine.drinksToJson(clean)).apply()
+        _caffeineDrinks.value = clean
+    }
+
+    private val _caffeineQuickDrinks = MutableStateFlow(
+        prefs.getString(KEY_CAFFEINE_QUICK, null)?.split('\n')?.map { it.trim() }?.filter { it.isNotEmpty() }
+            ?: com.fitpal.app.domain.Caffeine.DEFAULT_QUICK_DRINKS
+    )
+    /** The starred drinks (labels, at most three) shown on the planner card. */
+    val caffeineQuickDrinks: StateFlow<List<String>> = _caffeineQuickDrinks
+
+    fun setCaffeineQuickDrinks(labels: List<String>) {
+        val clean = labels.map { it.trim() }.filter { it.isNotEmpty() }.distinctBy { it.lowercase() }
+            .take(com.fitpal.app.domain.Caffeine.QUICK_DRINK_COUNT)
+        prefs.edit().putString(KEY_CAFFEINE_QUICK, clean.joinToString("\n")).apply()
+        _caffeineQuickDrinks.value = clean
+    }
+
     // --- Home hero: the little drawer of food-limit + caffeine rings, open or closed ---
     // Persisted (not a remember) so it stays the way you left it across screens and restarts.
 
@@ -1220,6 +1252,8 @@ class SettingsRepository @Inject constructor(
         private const val KEY_CAFFEINE_ENABLED = "caffeine_enabled"
         private const val KEY_CAFFEINE_LIMIT = "caffeine_daily_limit_mg"
         private const val KEY_CAFFEINE_HALF_LIFE = "caffeine_half_life_h"
+        private const val KEY_CAFFEINE_DRINKS = "caffeine_drinks"
+        private const val KEY_CAFFEINE_QUICK = "caffeine_quick_drinks"
         // "hero_drawer_open" (the drawer's open/closed state) is no longer read — the strip replaced it.
         private const val KEY_HOME_STRIP_BIGGER = "home_strip_bigger"
         private const val KEY_HOME_STRIP_TIP = "home_strip_tip"

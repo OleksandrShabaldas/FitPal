@@ -14,7 +14,7 @@ import androidx.compose.material.icons.filled.LocalCafe
 import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import sh.calvin.reorderable.ReorderableItem
-import sh.calvin.reorderable.rememberReorderableLazyListState
+import sh.calvin.reorderable.rememberReorderableLazyGridState
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 import androidx.compose.animation.AnimatedContent
@@ -538,6 +538,117 @@ fun HomeScreen(
         }
     }
 
+    // ---- Arrange mode (docs/redesign/13): Home's own layout, outlined, in a two-column grid ----
+    var optionsFor by remember { mutableStateOf<String?>(null) }
+    var addingCard by remember { mutableStateOf(false) }
+    val startArranging = {
+        haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+        editing = true
+    }
+    val moveInEditList: (String, String) -> Unit = { f, t ->
+        editList = com.fitpal.app.domain.model.ScreenWidgets.resolveCards(
+            com.fitpal.app.domain.model.ScreenWidgets.HOME,
+            com.fitpal.app.domain.model.LayoutEdits.move(editList.map { it.setting }, f, t)
+        )
+        viewModel.moveCard(f, t)
+    }
+    val arrangeGrid: @Composable () -> Unit = {
+        val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+        val reorder = rememberReorderableLazyGridState(gridState) { from, to ->
+            val f = (from.key as? String)?.takeIf { it.startsWith("card_") }?.removePrefix("card_")
+            val t = (to.key as? String)?.takeIf { it.startsWith("card_") }?.removePrefix("card_")
+            if (f != null && t != null) moveInEditList(f, t)
+        }
+        // What has a place of its own on Home: cards (not trackers in the strip or on the main card),
+        // with their feature on, and the strip when something's in it. Off features stay invisible.
+        val placed = editList.filter {
+            it.enabled && it.isOwnCard && featureOn(it.key) &&
+                (it.key != com.fitpal.app.domain.model.ScreenWidgets.STRIP || stripItems.isNotEmpty())
+        }
+        val hiddenCount = editList.count { !it.enabled && featureOn(it.key) }
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
+            state = gridState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 110.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(com.fitpal.app.ui.theme.CardGap)
+        ) {
+            item(key = "arrange_banner", span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                ArrangeBanner(onDone = { editing = false })
+            }
+            items(
+                count = placed.size,
+                key = { i -> "card_${placed[i].key}" },
+                span = { i ->
+                    androidx.compose.foundation.lazy.grid.GridItemSpan(
+                        if (placed[i].size == com.fitpal.app.domain.model.CardSize.S) 1 else maxLineSpan
+                    )
+                }
+            ) { i ->
+                val card = placed[i]
+                ReorderableItem(reorder, key = "card_${card.key}") { dragging ->
+                    ArrangeCard(
+                        label = card.def.label,
+                        dragging = dragging,
+                        dragHandle = Modifier.longPressDraggableHandle(onDragStarted = {
+                            haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                        }),
+                        onOptions = { optionsFor = card.key }
+                    ) {
+                        if (card.key == "meals") MealsEditPlaceholder(sections.size)
+                        else homeCard(card, Modifier.fillMaxWidth())
+                    }
+                }
+            }
+            item(key = "arrange_add", span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                AddCardButton(hiddenCount = hiddenCount, onClick = { addingCard = true })
+            }
+        }
+    }
+    optionsFor?.let { key ->
+        val card = editList.firstOrNull { it.key == key }
+        when {
+            card == null -> Unit
+            key == com.fitpal.app.domain.model.ScreenWidgets.STRIP -> StripOptionsSheet(
+                strip = card,
+                items = editList
+                    .filter { it.def.isTracker && it.enabled && it.placement == com.fitpal.app.domain.model.TrackerPlacement.STRIP && featureOn(it.key) }
+                    .map { it to trackers[it.key] },
+                bigger = stripBigger,
+                onVariant = { viewModel.setCardVariant(key, it) },
+                onBigger = viewModel::setStripBigger,
+                onMove = moveInEditList,
+                onPlacement = { k, p -> viewModel.setPlacement(k, p) },
+                onDismiss = { optionsFor = null }
+            )
+            else -> {
+                val fastingOnHero = if (key == "hero") editList.firstOrNull {
+                    it.key == "fasting" && it.enabled && it.placement == com.fitpal.app.domain.model.TrackerPlacement.MAIN && featureOn(it.key)
+                } else null
+                CardOptionsSheet(
+                    card = card,
+                    onPlacement = { viewModel.setPlacement(key, it) },
+                    onSize = { viewModel.setCardSize(key, it) },
+                    onVariant = { viewModel.setCardVariant(key, it) },
+                    onHide = { viewModel.hideCard(key) },
+                    onDismiss = { optionsFor = null },
+                    extra = fastingOnHero?.let { f -> { AlsoOnThisCard(f) { p -> viewModel.setPlacement(f.key, p) } } }
+                )
+            }
+        }
+    }
+    if (addingCard) {
+        AddCardSheet(
+            hidden = editList.filter { !it.enabled && featureOn(it.key) },
+            trackerFor = { trackers[it] },
+            onShow = viewModel::showCard,
+            onPlace = { k, p -> viewModel.setPlacement(k, p) },
+            onReset = viewModel::resetLayout,
+            onDismiss = { addingCard = false }
+        )
+    }
+
     GradientBackdrop(theme = BackdropTheme.TODAY) {
         Box(Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize().nestedScroll(searchBarScroll)) {
@@ -560,20 +671,10 @@ fun HomeScreen(
             },
             label = "daySwipe"
         ) { _ ->
+            if (editing) {
+                arrangeGrid()
+            } else {
             val listState = rememberLazyListState()
-            val reorderState = rememberReorderableLazyListState(listState) { from, to ->
-                val f = (from.key as? String)?.removePrefix("card_")
-                val t = (to.key as? String)?.removePrefix("card_")
-                if ((from.key as? String)?.startsWith("card_") == true && (to.key as? String)?.startsWith("card_") == true &&
-                    f != null && t != null
-                ) {
-                    editList = com.fitpal.app.domain.model.ScreenWidgets.resolveCards(
-                        com.fitpal.app.domain.model.ScreenWidgets.HOME,
-                        com.fitpal.app.domain.model.LayoutEdits.move(editList.map { it.setting }, f, t)
-                    )
-                    viewModel.moveCard(f, t)
-                }
-            }
             LazyColumn(
                 state = listState,
                 modifier = Modifier
@@ -634,8 +735,12 @@ fun HomeScreen(
                 }
 
                 // Cards below the header, in the user's layout (Settings → Home & screens, or the
-                // pencil in the header): order, shown/hidden, size and style. Two Small cards share a row.
-                if (!editing) {
+                // slider icon in the header — or hold a card): order, shown/hidden, size and style. Two
+                // Small cards share a row. The strip and the meals keep their own long-press.
+                run {
+                    val hold: (com.fitpal.app.domain.model.ResolvedCard) -> Modifier = { c ->
+                        if (c.key == com.fitpal.app.domain.model.ScreenWidgets.STRIP) Modifier else Modifier.holdToArrange(startArranging)
+                    }
                     if (stripTip) item(key = "strip_tip") { StripMovedTip(onDismiss = viewModel::dismissHomeStripTip) }
                     // The suggestion sits under the strip (or the main card without one), on today only.
                     val suggestionAnchor = shownCards.firstOrNull { it.key == com.fitpal.app.domain.model.ScreenWidgets.STRIP }?.key
@@ -675,60 +780,20 @@ fun HomeScreen(
                                 when {
                                     // Two cards in a row share a height, whatever their text or buttons.
                                     row.size == 2 -> Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                        row.forEach { homeCard(it, Modifier.weight(1f).fillMaxHeight()) }
+                                        row.forEach { homeCard(it, hold(it).weight(1f).fillMaxHeight()) }
                                     }
                                     first.size == com.fitpal.app.domain.model.CardSize.S -> Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                        homeCard(first, Modifier.weight(1f))
+                                        homeCard(first, hold(first).weight(1f))
                                         Spacer(Modifier.weight(1f))
                                     }
-                                    else -> homeCard(first, Modifier.fillMaxWidth())
+                                    else -> homeCard(first, hold(first).fillMaxWidth())
                                 }
                             }
                         }
                         if (row.any { it.key == suggestionAnchor }) suggestionCard()
                     }
-                } else {
-                    item(key = "edit_banner") { EditModeBanner(onDone = { editing = false }) }
-                    // Off features aren't arranged here either (Settings → Features turns them on).
-                    editList.filter { it.enabled && featureOn(it.key) }.forEachIndexed { index, card ->
-                        item(key = "card_${card.key}") {
-                            ReorderableItem(reorderState, key = "card_${card.key}") { dragging ->
-                                EditFrame(
-                                    card = card,
-                                    index = index,
-                                    dragging = dragging,
-                                    dragHandle = Modifier.draggableHandle(),
-                                    onSize = { viewModel.setCardSize(card.key, it) },
-                                    onVariant = { viewModel.setCardVariant(card.key, it) },
-                                    onPlacement = { viewModel.setPlacement(card.key, it) },
-                                    onHide = { viewModel.hideCard(card.key) }
-                                ) {
-                                    when {
-                                        card.key == "meals" -> MealsEditPlaceholder(sections.size)
-                                        // A tracker in the strip or on the main card, or one that's not in use.
-                                        card.def.isTracker && (!card.isOwnCard || !featureOn(card.key)) ->
-                                            PlacedElsewhere(trackers[card.key], card.def.label, card.placement, featureOn(card.key))
-                                        card.key == com.fitpal.app.domain.model.ScreenWidgets.STRIP && stripItems.isEmpty() ->
-                                            PlacedElsewhere(null, "Today strip", null, featureOn = true)
-                                        card.size == com.fitpal.app.domain.model.CardSize.S -> Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                            homeCard(card, Modifier.weight(1f))
-                                            Spacer(Modifier.weight(1f))
-                                        }
-                                        else -> homeCard(card, Modifier.fillMaxWidth())
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    item(key = "edit_tray") {
-                        HiddenCardsTray(
-                            hidden = editList.filterNot { it.enabled }.filter { featureOn(it.key) },
-                            onShow = viewModel::showCard,
-                            onReset = viewModel::resetLayout,
-                            onDone = { editing = false }
-                        )
-                    }
                 }
+            }
             }
         }
         }

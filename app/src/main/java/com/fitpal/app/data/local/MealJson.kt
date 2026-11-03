@@ -31,7 +31,7 @@ object MealJson {
         .put("difficulty", r.difficulty).put("whyItFits", r.whyItFits)
         .put("ingredients", JSONArray(encodeIngredients(r.ingredients.map { it.ingredient })))
         .put("have", JSONArray(r.ingredients.map { it.have }))
-        .put("steps", JSONArray(r.steps)).put("tips", JSONArray(r.tips))
+        .put("steps", JSONArray(r.steps.map { it.toJson() })).put("tips", JSONArray(r.tips))
         .put("allergens", JSONArray(r.allergens.toList()))
         .toString()
 
@@ -52,7 +52,8 @@ object MealJson {
                 difficulty = o.optString("difficulty"),
                 whyItFits = o.optString("whyItFits"),
                 ingredients = ingredients.mapIndexed { i, ing -> com.fitpal.app.domain.model.RecipeIngredient(ing, have?.optBoolean(i, false) ?: false) },
-                steps = strings("steps"),
+                // Plain strings before 2.15, step objects since (docs/redesign/14).
+                steps = com.fitpal.app.domain.model.RecipeStep.listFrom(o.optJSONArray("steps")),
                 tips = strings("tips"),
                 allergens = strings("allergens").toSet()
             )

@@ -307,6 +307,33 @@ class NutritionRepository @Inject constructor(
         )
     }
 
+    /**
+     * Like [lookupIngredient], but only a database food that is the same food: "Banana" →
+     * "Banana, raw", "Boiled potatoes" → "Potatoes, boiled", never "Hot cocoa, prepared with tap
+     * water" for "Tap water". Built-in simple foods first, shortest name first. Null when nothing
+     * matches that closely (the AI's own numbers then stay).
+     */
+    suspend fun lookupIngredientStrict(name: String, grams: Float): Ingredient? {
+        ensureSeeded()
+        val query = name.trim()
+        if (query.length < 2) return null
+        // The whole name first, then its longest word ("Boiled potato" → "potato" finds "Potatoes, boiled").
+        val terms = listOfNotNull(query, com.fitpal.app.domain.FoodNameMatch.mainWord(query)?.takeIf { !it.equals(query, ignoreCase = true) })
+        val food = terms.firstNotNullOfOrNull { term ->
+            val pool = nutritionDao.searchBasicFoods(term, limit = 40).ifEmpty { nutritionDao.searchFoods(term, limit = 40) }
+            pool.sortedBy { it.description.length }.firstOrNull { com.fitpal.app.domain.FoodNameMatch.sameFood(query, it.description) }
+        } ?: return null
+        return Ingredient(
+            name = food.description,
+            grams = grams,
+            caloriesPer100g = food.caloriesPer100g,
+            proteinPer100g = food.proteinPer100g,
+            fatPer100g = food.fatPer100g,
+            carbsPer100g = food.carbsPer100g,
+            fiberPer100g = food.fiberPer100g
+        )
+    }
+
     suspend fun isDatabasePopulated(): Boolean = nutritionDao.getCount() > 0
 
     /**

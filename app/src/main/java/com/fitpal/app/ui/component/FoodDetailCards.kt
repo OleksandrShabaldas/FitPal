@@ -1,5 +1,6 @@
 package com.fitpal.app.ui.component
 
+import com.fitpal.app.ui.component.kit.aiGlow
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -148,7 +149,7 @@ fun IngredientsCard(
             // permanent just because the meal was already saved.
             if (onEditWithAi != null) {
                 Row(
-                    modifier = Modifier.glassSoft(CircleShape).clickable(onClick = onEditWithAi).padding(horizontal = 14.dp, vertical = 8.dp),
+                    modifier = Modifier.aiGlow().glassSoft(CircleShape).clickable(onClick = onEditWithAi).padding(horizontal = 14.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = GoldLight, modifier = Modifier.size(18.dp))
@@ -220,7 +221,7 @@ fun AiInsightsArea(
                 insightsSource?.let { AiSourceBadge(it) }
                 if (modelReady) {
                     Row(
-                        modifier = Modifier.glassSoft(CircleShape).clickable(onClick = onRegenerate).padding(horizontal = 14.dp, vertical = 8.dp),
+                        modifier = Modifier.aiGlow().glassSoft(CircleShape).clickable(onClick = onRegenerate).padding(horizontal = 14.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = GoldLight, modifier = Modifier.size(16.dp))
@@ -240,7 +241,7 @@ fun AiInsightsArea(
                 Spacer(Modifier.height(10.dp))
                 if (modelReady) {
                     Row(
-                        modifier = Modifier.glassSoft(CircleShape).clickable(onClick = onGenerate).padding(horizontal = 14.dp, vertical = 8.dp),
+                        modifier = Modifier.aiGlow().glassSoft(CircleShape).clickable(onClick = onGenerate).padding(horizontal = 14.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = GoldLight, modifier = Modifier.size(16.dp))

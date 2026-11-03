@@ -56,11 +56,19 @@ class RecipeViewModel @Inject constructor(
     private val settings: SettingsRepository,
     private val weights: WeightRepository,
     private val steps: StepRepository,
-    private val exercise: ExerciseRepository
+    private val exercise: ExerciseRepository,
+    private val cookTimers: com.fitpal.app.ml.CookTimers
 ) : ViewModel() {
 
     private val id: Long = savedState.get<String>(Screen.PlannedMeal.ARG_ID)?.toLongOrNull()
         ?: savedState.get<Long>(Screen.PlannedMeal.ARG_ID) ?: -1L
+
+    /** Cook mode's step timers (docs/redesign/14), by [timerKey]. */
+    val timers: StateFlow<Map<String, com.fitpal.app.ml.CookTimers.Timer>> = cookTimers.timers
+    fun timerKey(step: Int): String = com.fitpal.app.ml.CookTimers.keyFor(id, step)
+    fun startTimer(step: Int, label: String, minutes: Int) = cookTimers.start(timerKey(step), label, minutes, id)
+    fun pauseTimer(step: Int) = cookTimers.pause(timerKey(step))
+    fun resetTimer(step: Int) = cookTimers.reset(timerKey(step))
 
     private val _entity = MutableStateFlow<PlannedMealEntity?>(null)
     val entity: StateFlow<PlannedMealEntity?> = _entity
