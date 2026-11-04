@@ -94,6 +94,9 @@ object FoodJsonParser {
     private fun significantWords(normalised: String): List<String> =
         normalised.split(" ").filter { it.length >= 4 && it !in SWAP_STOPWORDS }
 
+    /** Whether a reply carries a "choices" key at all — an empty list counts (Edit with AI, #8). */
+    fun hasChoicesKey(raw: String): Boolean = Regex("\"choices\"\\s*:").containsMatchIn(raw)
+
     fun parseFoods(raw: String): List<DetectedFood> {
         val json = extractJsonObject(raw)
 

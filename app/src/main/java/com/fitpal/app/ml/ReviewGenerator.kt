@@ -117,6 +117,18 @@ class ReviewGenerator @Inject constructor(
      * The logged totals [period]/[key] covers right now, in the same form saved with a review — so
      * the screen can tell when an overview was written before food that's since been logged.
      */
+    /**
+     * Whether [period]/[key] has anything to review: any food or drink but plain water
+     * ([com.fitpal.app.domain.OverviewRule], the 4 Nov review #3). False → the automatic overview
+     * isn't written or announced, and the overview screen says "Nothing logged yet".
+     */
+    suspend fun hasSomethingToReview(period: String, key: String): Boolean {
+        val (from, to, _) = rangeFor(period, key)
+        return com.fitpal.app.domain.OverviewRule.hasSomething(
+            mealRepository.getLoggedFoodsInRange(from, to).map { it.mealType to it.name }
+        )
+    }
+
     suspend fun currentSignature(period: String, key: String): String {
         val (from, to, _) = rangeFor(period, key)
         return dataSignature(mealRepository.getDailyNutritionRange(from, to).first())

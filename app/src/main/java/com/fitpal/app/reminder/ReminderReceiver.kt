@@ -64,14 +64,20 @@ class ReminderReceiver : BroadcastReceiver() {
         if (kind.isOverview && !entryPoint(context).settingsRepository().coachEnabled.value) return
         if (kind.isOverview) {
             val (period, key) = overviewTarget(kind)
-            // Post the notification immediately (it always works, generating on open if needed),
-            // then best-effort pre-generate in the background so opening it is instant.
-            postNotification(context, kind, Screen.AiReview.buildRoute(period, key), CHANNEL_OVERVIEWS, "AI overviews")
             val pending = goAsync()
             CoroutineScope(Dispatchers.IO).launch {
                 try {
-                    withTimeoutOrNull(45_000) {
-                        runCatching { entryPoint(context).reviewGenerator().generateAndCache(period, key) }
+                    val generator = entryPoint(context).reviewGenerator()
+                    // Nothing logged but water (the 4 Nov review, #3): no overview and no notification —
+                    // there's nothing to talk about. It can still be opened by hand from the Coach tab.
+                    val something = runCatching { generator.hasSomethingToReview(period, key) }.getOrDefault(true)
+                    if (something) {
+                        // Post the notification first (it always works, generating on open if needed),
+                        // then best-effort pre-generate so opening it is instant.
+                        postNotification(context, kind, Screen.AiReview.buildRoute(period, key), CHANNEL_OVERVIEWS, "AI overviews")
+                        withTimeoutOrNull(45_000) {
+                            runCatching { generator.generateAndCache(period, key) }
+                        }
                     }
                 } finally {
                     pending.finish()

@@ -1,6 +1,6 @@
 package com.fitpal.app.ui.component
 
-import com.fitpal.app.ui.component.kit.aiGlow
+import com.fitpal.app.ui.component.kit.AiGlowLabel
 import android.content.Context
 import android.net.Uri
 import androidx.compose.foundation.clickable
@@ -20,7 +20,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.QrCodeScanner
 import com.fitpal.app.ui.component.kit.FpAlertDialog
@@ -132,10 +131,9 @@ private fun DatabaseTab(
                 Spacer(Modifier.width(10.dp))
                 Text("Asking the AI…", style = MaterialTheme.typography.bodyMedium)
             }
-            query.isNotBlank() -> TextButton(onClick = { onAiAdd(query) }, modifier = Modifier.aiGlow()) {
-                Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Add \"${query.take(24)}\" with AI")
+            // Text-only: the glow on its words (the 4 Nov review, round 2).
+            query.isNotBlank() -> TextButton(onClick = { onAiAdd(query) }) {
+                AiGlowLabel("Add \"${query.take(24)}\" with AI")
             }
         }
         Spacer(Modifier.height(4.dp))

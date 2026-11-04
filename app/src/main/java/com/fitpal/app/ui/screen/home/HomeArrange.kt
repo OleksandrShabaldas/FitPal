@@ -27,6 +27,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreHoriz
@@ -87,6 +89,45 @@ private fun arrangeColor(): Color = when (LookState.style) {
     LookStyle.MATERIAL -> MaterialTheme.colorScheme.primary
     LookStyle.LIQUID -> if (LookState.colors.isLight) GoldLight else Color.White.copy(alpha = 0.8f)
     else -> GoldLight.copy(alpha = 0.75f)
+}
+
+/**
+ * The one-time tip (2.17, the 4 Nov review #2): the Arrange icon left the date line, so say once that
+ * holding a card is the way in. Drawn like the strip's old tip — a soft row, one sentence and an ×.
+ */
+@Composable
+internal fun HoldToArrangeTip(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier.fillMaxWidth().glassSoft().padding(start = 14.dp, top = 10.dp, bottom = 10.dp, end = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            "Hold any card to arrange Home.",
+            style = MaterialTheme.typography.bodySmall, color = CreamMuted, modifier = Modifier.weight(1f)
+        )
+        Icon(
+            Icons.Default.Close, contentDescription = "Dismiss", tint = CreamMuted,
+            modifier = Modifier.size(36.dp).clip(CircleShape).clickable(onClick = onDismiss).padding(8.dp)
+        )
+    }
+}
+
+/**
+ * The way into Arrange when Home has no card left to hold (every card hidden but the strip and the
+ * meals, which keep their own long-press): a small gold link at the end of Home.
+ */
+@Composable
+internal fun ArrangeHomeLink(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Box(modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        Row(
+            Modifier.clip(RoundedCornerShape(50)).clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Default.Tune, contentDescription = null, tint = GoldLight, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("Arrange Home", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = GoldLight)
+        }
+    }
 }
 
 /** Arrange mode's banner: what you can do here, and Done. */

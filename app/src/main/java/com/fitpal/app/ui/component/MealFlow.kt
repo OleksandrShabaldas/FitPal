@@ -26,7 +26,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -34,8 +33,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EditNote
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.DropdownMenu
@@ -68,14 +65,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.round
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupPositionProvider
 import coil.compose.AsyncImage
 import com.fitpal.app.domain.model.EatenAt
 import com.fitpal.app.domain.model.MealContext
@@ -107,9 +100,10 @@ import java.time.format.DateTimeFormatter
 enum class AnalysisPhase { READY, WORKING, FAILED, RESULTS, SAVING }
 
 /**
- * The meal's photo: 200 dp, cropped to fill. Tap it for the whole photo ([PhotoViewer]). While the
- * AI works ([working]) a gold light sweeps down it. Once there's a [source], the model sits on its
- * corner as frosted glass; tap it for the exact model in a bubble.
+ * The meal's photo: 200 dp, cropped to fill. The ↖↘ icon in its top-left corner opens the whole photo
+ * ([PhotoViewer]); the photo itself does nothing on a tap (the 4 Nov review, #5). While the AI works
+ * ([working]) a gold light sweeps down it. Once there's a [source], the model sits on its corner as
+ * frosted glass; tap it and it opens in place onto the exact model.
  */
 @Composable
 fun MealPhoto(model: Any?, source: AiSource?, reason: String? = null, working: Boolean = false, modifier: Modifier = Modifier) {
@@ -118,10 +112,11 @@ fun MealPhoto(model: Any?, source: AiSource?, reason: String? = null, working: B
     Box(modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(20.dp)).onSizeChanged { size = it }) {
         AsyncImage(
             model = model, contentDescription = "Food photo",
-            modifier = Modifier.fillMaxWidth().height(200.dp).clickable { viewing = true },
+            modifier = Modifier.fillMaxWidth().height(200.dp),
             contentScale = ContentScale.Crop
         )
         if (working) ScanSweep(Modifier.fillMaxWidth().height(200.dp))
+        PhotoOpenButton(onClick = { viewing = true }, modifier = Modifier.align(Alignment.TopStart))
         if (source != null) {
             FrostedModelBadge(model, size, source, reason, Modifier.align(Alignment.BottomEnd).padding(10.dp))
         }
@@ -160,17 +155,22 @@ internal fun ScanSweep(modifier: Modifier) {
 
 /**
  * The model that answered, on the photo's corner: the photo behind it blurred (frosted glass, no black
- * pill — real blur on Android 12+, a light smoky film before that). Tap → a bubble with the exact model
- * and, when it ran on the phone, why.
+ * pill — real blur on Android 12+, a light smoky film before that). Tap → the chip itself opens, towards
+ * the left (the 4 Nov review, #4): "Fallback 2 · gemini-3.5-flash", and on a second line why it ran on
+ * the phone when online couldn't. No popup — that one was placed against the whole photo and landed
+ * on the title bar.
  */
 @Composable
 private fun FrostedModelBadge(photo: Any?, photoSize: IntSize, source: AiSource, reason: String?, modifier: Modifier) {
     var pos by remember { mutableStateOf(IntOffset.Zero) }
     var open by remember { mutableStateOf(false) }
-    val label = aiSourceLabel(source, LocalAiModelSlots.current)
-    val shape = RoundedCornerShape(50)
+    val expandable = aiSourceExpandable(source, reason)
+    val shape = AiChipShape
     val blur = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && photoSize != IntSize.Zero
-    Box(modifier.onPlaced { pos = it.positionInParent().round() }.clip(shape).clickable { open = !open }) {
+    Box(
+        modifier.onPlaced { pos = it.positionInParent().round() }.clip(shape)
+            .then(if (expandable) Modifier.clickable { open = !open } else Modifier)
+    ) {
         if (blur) {
             // The photo again, laid out at full size and lined up with the real one, then blurred.
             AsyncImage(
@@ -185,41 +185,19 @@ private fun FrostedModelBadge(photo: Any?, photoSize: IntSize, source: AiSource,
         }
         Box(Modifier.matchParentSize().background(Color(0xFF140E0A).copy(alpha = if (blur) 0.30f else 0.45f)))
         Row(
-            Modifier.border(1.dp, Color.White.copy(alpha = 0.24f), shape).padding(start = 9.dp, end = 7.dp, top = 4.dp, bottom = 4.dp),
+            Modifier.border(1.dp, Color.White.copy(alpha = 0.24f), shape)
+                .padding(start = 9.dp, end = if (expandable) 7.dp else 9.dp, top = 4.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(Modifier.size(6.dp).clip(CircleShape).background(if (source.isOnline) GoldLight else Color.White.copy(alpha = 0.7f)))
             Spacer(Modifier.width(6.dp))
-            Text(label, style = MaterialTheme.typography.labelSmall, color = Color.White, maxLines = 1, modifier = Modifier.widthIn(max = 160.dp))
-            Icon(
-                if (open) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                contentDescription = if (open) "Hide AI details" else "Show which model answered",
-                tint = Color.White.copy(alpha = 0.8f), modifier = Modifier.size(14.dp)
+            AiChipText(
+                source = source, reason = reason, expanded = open,
+                color = Color.White, reasonColor = Color.White.copy(alpha = 0.78f), modifier = Modifier.weight(1f, fill = false)
             )
+            if (expandable) AiChipChevron(open, Color.White.copy(alpha = 0.8f))
         }
     }
-    if (open) {
-        Popup(popupPositionProvider = AboveAnchor, onDismissRequest = { open = false }) {
-            Column(
-                Modifier.widthIn(max = 280.dp).clip(RoundedCornerShape(14.dp)).background(Color(0xF2211710))
-                    .border(1.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(14.dp))
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
-            ) {
-                aiSourceDetail(source, reason).forEach { line ->
-                    Text(line, style = MaterialTheme.typography.labelMedium, color = Color(0xFFF5ECE0))
-                }
-            }
-        }
-    }
-}
-
-/** Places a popup just above its anchor, right edges lined up. */
-private object AboveAnchor : PopupPositionProvider {
-    override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize, layoutDirection: LayoutDirection, popupContentSize: IntSize): IntOffset =
-        IntOffset(
-            (anchorBounds.right - popupContentSize.width).coerceIn(0, (windowSize.width - popupContentSize.width).coerceAtLeast(0)),
-            (anchorBounds.top - popupContentSize.height - 12).coerceAtLeast(0)
-        )
 }
 
 /**
@@ -249,14 +227,15 @@ fun MealTimeLine(
             Modifier.clip(RoundedCornerShape(10.dp)).clickable(onClick = onClick).padding(horizontal = 4.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(Icons.Default.Schedule, contentDescription = null, tint = CreamMuted, modifier = Modifier.size(15.dp))
+            // 12 sp in every look (the 4 Nov review, #9) — a quiet line under the photo.
+            Icon(Icons.Default.Schedule, contentDescription = null, tint = CreamMuted, modifier = Modifier.size(13.dp))
             Spacer(Modifier.width(6.dp))
             Text(
-                parts.joinToString(" · "), style = MaterialTheme.typography.labelLarge, color = CreamMuted,
-                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false)
+                parts.joinToString(" · "), style = MaterialTheme.typography.labelLarge.copy(fontSize = 12.sp, lineHeight = 16.sp),
+                color = CreamMuted, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false)
             )
             Spacer(Modifier.width(6.dp))
-            Icon(Icons.Default.Edit, contentDescription = "Change when and where", tint = CreamFaint, modifier = Modifier.size(14.dp))
+            Icon(Icons.Default.Edit, contentDescription = "Change when and where", tint = CreamFaint, modifier = Modifier.size(12.dp))
         }
         val suggestion = eatenAt.photoSuggestion
         if (suggestion != null && onUsePhotoSuggestion != null && !eatenAt.isPhotoTime) {
@@ -580,7 +559,7 @@ fun LogBar(
                 style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = OnGold, maxLines = 1,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 modifier = Modifier.fillMaxWidth()
-                    .then(if (aiAction && actionEnabled) Modifier.aiGlow() else Modifier)
+                    .then(if (aiAction) Modifier.aiGlow(enabled = actionEnabled) else Modifier)
                     .alpha(if (actionEnabled) 1f else 0.4f).clip(RoundedCornerShape(50)).background(GoldLight)
                     .then(if (actionEnabled) Modifier.clickable(onClick = onAction) else Modifier)
                     .padding(vertical = 14.dp)
@@ -626,6 +605,6 @@ fun LogBar(
             }
             Spacer(Modifier.width(4.dp))
         }
-        GoldPill(actionLabel, onAction, enabled = actionEnabled, modifier = if (aiAction && actionEnabled) Modifier.aiGlow() else Modifier)
+        GoldPill(actionLabel, onAction, enabled = actionEnabled, modifier = if (aiAction) Modifier.aiGlow(enabled = actionEnabled) else Modifier)
     }
 }

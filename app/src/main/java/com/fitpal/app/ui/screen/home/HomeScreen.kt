@@ -225,6 +225,7 @@ fun HomeScreen(
     val caffeineView by viewModel.caffeineView.collectAsStateWithLifecycle()
     val stripBigger by viewModel.homeStripBigger.collectAsStateWithLifecycle()
     val stripTip by viewModel.homeStripTip.collectAsStateWithLifecycle()
+    val holdTip by viewModel.homeHoldTip.collectAsStateWithLifecycle()
     val stepGoal by viewModel.stepGoal.collectAsStateWithLifecycle()
     val wakeMin by viewModel.wakeMinutes.collectAsStateWithLifecycle()
     val bedMin by viewModel.bedMinutes.collectAsStateWithLifecycle()
@@ -544,7 +545,12 @@ fun HomeScreen(
     val startArranging = {
         haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
         editing = true
+        // Found the hold: the one-time tip has done its job.
+        viewModel.dismissHomeHoldTip()
     }
+    // Cards a hold can open Arrange from — every shown card but the strip and the meals, which keep
+    // their own long-press. None left → the "Arrange Home" link at the end of Home instead.
+    val holdable = shownCards.any { it.key != com.fitpal.app.domain.model.ScreenWidgets.STRIP && it.key != "meals" }
     val moveInEditList: (String, String) -> Unit = { f, t ->
         editList = com.fitpal.app.domain.model.ScreenWidgets.resolveCards(
             com.fitpal.app.domain.model.ScreenWidgets.HOME,
@@ -729,8 +735,7 @@ fun HomeScreen(
                         onNextDay = viewModel::goNextDay,
                         // With the Trail off the streak still shows; it opens Analytics' Habits instead.
                         onOpenTrail = if (trailOn) onOpenTrail else ({ viewModel.focusHabits(); onOpenAnalytics() }),
-                        trailPending = trailOn && trailPending,
-                        onCustomize = { editing = !editing }
+                        trailPending = trailOn && trailPending
                     )
                 }
 
@@ -742,6 +747,7 @@ fun HomeScreen(
                         if (c.key == com.fitpal.app.domain.model.ScreenWidgets.STRIP) Modifier else Modifier.holdToArrange(startArranging)
                     }
                     if (stripTip) item(key = "strip_tip") { StripMovedTip(onDismiss = viewModel::dismissHomeStripTip) }
+                    if (holdTip && holdable) item(key = "hold_tip") { HoldToArrangeTip(onDismiss = viewModel::dismissHomeHoldTip) }
                     // The suggestion sits under the strip (or the main card without one), on today only.
                     val suggestionAnchor = shownCards.firstOrNull { it.key == com.fitpal.app.domain.model.ScreenWidgets.STRIP }?.key
                         ?: shownCards.firstOrNull { it.key == "hero" }?.key
@@ -792,6 +798,8 @@ fun HomeScreen(
                         }
                         if (row.any { it.key == suggestionAnchor }) suggestionCard()
                     }
+                    // Nothing left to hold: a way into Arrange anyway, at the end of Home.
+                    if (!holdable) item(key = "arrange_link") { ArrangeHomeLink(onClick = { editing = true }) }
                 }
             }
             }
@@ -899,8 +907,7 @@ private fun HomeHeader(
     onPrevDay: () -> Unit,
     onNextDay: () -> Unit,
     onOpenTrail: () -> Unit,
-    trailPending: Boolean = false,
-    onCustomize: () -> Unit = {}
+    trailPending: Boolean = false
 ) {
     val isToday = date == LocalDate.now()
     val dateLabel = if (isToday) "Today" else date.format(DateTimeFormatter.ofPattern("EEE, d MMM"))
@@ -932,13 +939,7 @@ private fun HomeHeader(
                     tint = CreamFaint,
                     modifier = Modifier.size(15.dp).clickable(onClick = onPickDate)
                 )
-                Spacer(Modifier.width(10.dp))
-                Icon(
-                    Icons.Default.Tune,
-                    contentDescription = "Arrange Home",
-                    tint = CreamFaint,
-                    modifier = Modifier.size(15.dp).clickable(onClick = onCustomize)
-                )
+                // No Arrange icon here any more (the 4 Nov review, #2): hold a card to arrange Home.
                 if (!isToday) {
                     Spacer(Modifier.width(2.dp))
                     Icon(

@@ -1,6 +1,7 @@
 package com.fitpal.app.ui.component
 
 import androidx.compose.animation.core.animate
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -29,7 +30,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
@@ -43,9 +51,44 @@ import kotlinx.coroutines.launch
 import kotlin.math.abs
 
 /**
- * A meal's whole photo, uncropped (docs/redesign/16): tapping the photo on Analysis, the Meal page or a
- * saved food opens it on black, fitted to the screen. Pinch or double-tap to zoom and drag to look
- * around; swipe down, Back or × to close. Black in every look, like any photo viewer.
+ * The way into [PhotoViewer] (the 4 Nov review, #5): two small arrows pointing out to opposite corners
+ * (↖ ↘), white with a soft shadow and no background, for a photo's top-left corner. The photo itself
+ * no longer opens on a tap. A 20 dp mark in a 44 dp tap target.
+ */
+@Composable
+fun PhotoOpenButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Box(
+        modifier.size(44.dp).clip(CircleShape)
+            .clickable(onClickLabel = "Open the whole photo", onClick = onClick)
+            .semantics { contentDescription = "Open the whole photo" },
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(Modifier.size(20.dp)) {
+            val u = size.minDimension / 24f
+            fun p(x: Float, y: Float) = Offset(x * u, y * u)
+            val arrows = Path().apply {
+                // ↖ from the middle out to the top-left corner, its head along the two edges
+                moveTo(p(10f, 10f).x, p(10f, 10f).y); lineTo(p(4.5f, 4.5f).x, p(4.5f, 4.5f).y)
+                moveTo(p(4.5f, 9.5f).x, p(4.5f, 9.5f).y); lineTo(p(4.5f, 4.5f).x, p(4.5f, 4.5f).y); lineTo(p(9.5f, 4.5f).x, p(9.5f, 4.5f).y)
+                // ↘ the same, out to the bottom-right corner
+                moveTo(p(14f, 14f).x, p(14f, 14f).y); lineTo(p(19.5f, 19.5f).x, p(19.5f, 19.5f).y)
+                moveTo(p(19.5f, 14.5f).x, p(19.5f, 14.5f).y); lineTo(p(19.5f, 19.5f).x, p(19.5f, 19.5f).y); lineTo(p(14.5f, 19.5f).x, p(14.5f, 19.5f).y)
+            }
+            fun stroke(width: Float) = Stroke(width = width * u, cap = StrokeCap.Round, join = StrokeJoin.Round)
+            // A soft shadow under the white so it reads on a light plate as well as a dark one.
+            translate(top = 0.6.dp.toPx()) {
+                drawPath(arrows, Color.Black.copy(alpha = 0.18f), style = stroke(6.5f))
+                drawPath(arrows, Color.Black.copy(alpha = 0.35f), style = stroke(4f))
+            }
+            drawPath(arrows, Color.White, style = stroke(2.1f))
+        }
+    }
+}
+
+/**
+ * A meal's whole photo, uncropped (docs/redesign/16): the corner icon ([PhotoOpenButton]) on Analysis,
+ * the Meal page or a saved food opens it on black, fitted to the screen. Pinch or double-tap to zoom
+ * and drag to look around; swipe down, Back or × to close. Black in every look, like any photo viewer.
  */
 @Composable
 fun PhotoViewer(model: Any?, onDismiss: () -> Unit) {

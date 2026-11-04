@@ -635,6 +635,8 @@ class AnalysisViewModel @Inject constructor(
      * "no cheese", "it's grilled not fried"). Unlike add-ingredient, the AI rebalances every
      * ingredient's weight to fit the original total and may add/remove/rename items — then it
      * replaces the food in place. On failure (no AI / unparseable) the food is left unchanged.
+     * The AI also sees the dish's "Not sure about" groups (the 4 Nov review, #8), so "add everything
+     * from those variations" works, and the answer's `choices` are what's still unsure afterwards.
      */
     fun refineFoodWithAi(foodIndex: Int, instruction: String) {
         if (instruction.isBlank()) return

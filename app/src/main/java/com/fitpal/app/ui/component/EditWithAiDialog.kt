@@ -1,6 +1,6 @@
 package com.fitpal.app.ui.component
 
-import com.fitpal.app.ui.component.kit.aiGlow
+import com.fitpal.app.ui.component.kit.AiGlowLabel
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
 import com.fitpal.app.ui.component.kit.FpAlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -73,10 +72,11 @@ fun EditWithAiDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onSubmit(text) }, enabled = text.isNotBlank() && !loading, modifier = Modifier.aiGlow()) {
-                Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Update")
+            // A text button: its glow sits on the words, never a halo round a button you can't see
+            // (the 4 Nov review, round 2) — and none at all while it's greyed out (#7).
+            val canUpdate = text.isNotBlank() && !loading
+            TextButton(onClick = { onSubmit(text) }, enabled = canUpdate) {
+                AiGlowLabel("Update", enabled = canUpdate)
             }
         },
         dismissButton = { TextButton(onClick = onDismiss, enabled = !loading) { Text("Cancel") } }

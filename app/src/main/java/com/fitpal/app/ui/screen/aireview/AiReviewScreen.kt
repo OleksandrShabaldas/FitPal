@@ -48,6 +48,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -58,6 +60,7 @@ import com.fitpal.app.ui.component.GlassTopBar
 import com.fitpal.app.ui.component.MarkdownText
 import com.fitpal.app.ui.component.GradientBackdrop
 import com.fitpal.app.ui.theme.Cream
+import com.fitpal.app.ui.theme.CreamFaint
 import com.fitpal.app.ui.theme.CreamMuted
 import com.fitpal.app.ui.theme.GoldLight
 import com.fitpal.app.ui.theme.ScoreGreen
@@ -101,6 +104,12 @@ fun AiReviewScreen(
                             onSkip = viewModel::skipQuestion
                         )
                     }
+
+                    state.nothingLogged -> NothingLogged(
+                        title = state.emptyTitle,
+                        subtitle = state.subtitle,
+                        onWriteAnyway = viewModel::writeAnyway
+                    )
 
                     state.isLoading -> Column(
                         modifier = Modifier.fillMaxSize().padding(32.dp),
@@ -209,6 +218,39 @@ fun AiReviewScreen(
                 }
             }
         }
+    }
+}
+
+/**
+ * An overview with nothing to talk about (the 4 Nov review, #3): only water was logged. Says so, and
+ * "Write it anyway" carries on as usual — a text button that starts the AI, so its words glow (round 2).
+ */
+@Composable
+private fun NothingLogged(title: String, subtitle: String, onWriteAnyway: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = GoldLight, modifier = Modifier.size(32.dp))
+        Spacer(Modifier.height(12.dp))
+        Text(title, style = MaterialTheme.typography.titleLarge, color = Cream, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "Log a meal or a drink and your overview will have something to talk about.",
+            style = MaterialTheme.typography.bodyMedium, color = CreamMuted, textAlign = TextAlign.Center
+        )
+        if (subtitle.isNotEmpty()) {
+            Spacer(Modifier.height(6.dp))
+            Text(subtitle, style = MaterialTheme.typography.labelMedium, color = CreamFaint, textAlign = TextAlign.Center)
+        }
+        Spacer(Modifier.height(16.dp))
+        com.fitpal.app.ui.component.kit.AiGlowLabel(
+            "Write it anyway",
+            color = GoldLight,
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.clip(CircleShape).clickable(onClick = onWriteAnyway).padding(horizontal = 16.dp, vertical = 12.dp)
+        )
     }
 }
 

@@ -525,6 +525,18 @@ class SettingsRepository @Inject constructor(
         _caffeineQuickDrinks.value = clean
     }
 
+    private val _caffeinePlannerOpen = MutableStateFlow(prefs.getBoolean(KEY_CAFFEINE_PLANNER_OPEN, true))
+    /**
+     * The Caffeine page's "Planning another one?" (2.17, the 4 Nov review #1): open until you fold it,
+     * then folded on every visit until you open it again. Backed up.
+     */
+    val caffeinePlannerOpen: StateFlow<Boolean> = _caffeinePlannerOpen
+
+    fun setCaffeinePlannerOpen(open: Boolean) {
+        prefs.edit().putBoolean(KEY_CAFFEINE_PLANNER_OPEN, open).apply()
+        _caffeinePlannerOpen.value = open
+    }
+
     // --- Home hero: the little drawer of food-limit + caffeine rings, open or closed ---
     // Persisted (not a remember) so it stays the way you left it across screens and restarts.
 
@@ -695,6 +707,19 @@ class SettingsRepository @Inject constructor(
     fun dismissHomeStripTip() {
         prefs.edit().putBoolean(KEY_HOME_STRIP_TIP, false).apply()
         _homeStripTip.value = false
+    }
+
+    private val _homeHoldTip = MutableStateFlow(prefs.getBoolean(KEY_HOME_HOLD_TIP, true))
+    /**
+     * True until the one-time "Hold any card to arrange Home" tip is gone (2.17, the 4 Nov review #2:
+     * the Arrange icon left the date line). Shown on updated and new installs alike.
+     */
+    val homeHoldTip: StateFlow<Boolean> = _homeHoldTip
+
+    fun dismissHomeHoldTip() {
+        if (!_homeHoldTip.value) return
+        prefs.edit().putBoolean(KEY_HOME_HOLD_TIP, false).apply()
+        _homeHoldTip.value = false
     }
 
     /**
@@ -1275,9 +1300,11 @@ class SettingsRepository @Inject constructor(
         private const val KEY_CAFFEINE_HALF_LIFE = "caffeine_half_life_h"
         private const val KEY_CAFFEINE_DRINKS = "caffeine_drinks"
         private const val KEY_CAFFEINE_QUICK = "caffeine_quick_drinks"
+        private const val KEY_CAFFEINE_PLANNER_OPEN = "caffeine_planner_open"
         // "hero_drawer_open" (the drawer's open/closed state) is no longer read — the strip replaced it.
         private const val KEY_HOME_STRIP_BIGGER = "home_strip_bigger"
         private const val KEY_HOME_STRIP_TIP = "home_strip_tip"
+        private const val KEY_HOME_HOLD_TIP = "home_hold_tip"
         private const val KEY_HOME_STRIP_MIGRATED = "home_strip_migrated"
         private const val KEY_ANALYTICS_TILES_MIGRATED = "analytics_tiles_off_migrated"
         private const val KEY_ANALYTICS_COLLAPSED = "analytics_collapsed"

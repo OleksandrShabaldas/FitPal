@@ -155,6 +155,10 @@ class HomeViewModel @Inject constructor(
     val homeStripTip: StateFlow<Boolean> = settingsRepository.homeStripTip
     fun dismissHomeStripTip() = settingsRepository.dismissHomeStripTip()
 
+    /** The one-time "Hold any card to arrange Home" tip (2.17). */
+    val homeHoldTip: StateFlow<Boolean> = settingsRepository.homeHoldTip
+    fun dismissHomeHoldTip() = settingsRepository.dismissHomeHoldTip()
+
     val stepGoal: StateFlow<Int> = settingsRepository.stepGoal
     val wakeMinutes: StateFlow<Int> = settingsRepository.wakeMinutes
     val bedMinutes: StateFlow<Int> = settingsRepository.bedMinutes

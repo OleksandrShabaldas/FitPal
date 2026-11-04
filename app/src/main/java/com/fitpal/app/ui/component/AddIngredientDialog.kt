@@ -1,6 +1,6 @@
 package com.fitpal.app.ui.component
 
-import com.fitpal.app.ui.component.kit.aiGlow
+import com.fitpal.app.ui.component.kit.AiGlowLabel
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,7 +15,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
 import com.fitpal.app.ui.component.kit.FpAlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -71,10 +70,9 @@ fun AddIngredientDialog(
                         Spacer(Modifier.width(10.dp))
                         Text("Asking the AI…", style = MaterialTheme.typography.bodyMedium)
                     }
-                    query.isNotBlank() -> TextButton(onClick = { onAiAdd(query) }, modifier = Modifier.aiGlow()) {
-                        Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("$aiVerb \"${query.take(24)}\" with AI")
+                    // Text-only: the glow on its words (the 4 Nov review, round 2).
+                    query.isNotBlank() -> TextButton(onClick = { onAiAdd(query) }) {
+                        AiGlowLabel("$aiVerb \"${query.take(24)}\" with AI")
                     }
                 }
 

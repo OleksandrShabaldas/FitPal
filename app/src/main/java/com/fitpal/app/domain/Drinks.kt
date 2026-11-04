@@ -125,6 +125,28 @@ object Drinks {
         "oolong", "čaj", "чай"
     )
 
+    /**
+     * Plain water of any kind — tap, still, sparkling, mineral, a water brand — with nothing in it. A day
+     * with only water logged has nothing for an AI overview to talk about (the 4 Nov review, #3). Coffee,
+     * tea, diet sodas and flavoured, vitamin or coconut water are not plain water.
+     */
+    fun isPlainWater(name: String): Boolean {
+        if (!isDrink(name, null)) return false
+        if (!TextMatch.containsAny(name, plainWaterWords)) return false
+        return !TextMatch.containsAny(name, caloricDrinkWords + coffeeTeaWords + dietDrinks)
+    }
+
+    private val plainWaterWords = listOf(
+        "water", "tap water", "still water", "sparkling water", "mineral water", "soda water", "seltzer", "club soda",
+        "minerálka", "minerálna voda", "minerální voda", "voda", "вода", "мінеральна вода",
+        "rajec", "bonaqua", "mattoni", "evian", "vittel", "borjomi", "san pellegrino"
+    )
+
+    private val coffeeTeaWords = listOf(
+        "coffee", "espresso", "ristretto", "doppio", "americano", "long black", "káv*", "kava", "кава", "кофе",
+        "tea", "rooibos", "earl grey", "oolong", "čaj", "чай"
+    )
+
     /** Water per 100 ml for a drink, estimated from its macros (most of a drink is water). */
     fun estimateWaterPer100(carbs: Float, protein: Float, fat: Float): Float {
         val solids = (carbs + protein + fat).coerceAtLeast(0f)

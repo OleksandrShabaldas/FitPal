@@ -130,7 +130,7 @@ fun DescribeExerciseScreen(
                     Button(
                         onClick = viewModel::estimate,
                         enabled = state.query.isNotBlank() && !state.isEstimating,
-                        modifier = Modifier.aiGlow().fillMaxWidth()
+                        modifier = Modifier.aiGlow(enabled = state.query.isNotBlank() && !state.isEstimating).fillMaxWidth()
                     ) {
                         if (state.isEstimating) {
                             CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)

@@ -79,6 +79,8 @@ class DataManager @Inject constructor(
             // Your drinks and the three on the caffeine planner (2.15).
             root.put("caffeine_drinks", JSONArray(com.fitpal.app.domain.Caffeine.drinksToJson(settings.caffeineDrinks.value)))
             root.put("caffeine_quick_drinks", JSONArray(settings.caffeineQuickDrinks.value))
+            // The caffeine planner left open or folded (2.17).
+            root.put("caffeine_planner_open", settings.caffeinePlannerOpen.value)
             context.contentResolver.openOutputStream(uri)?.use { out ->
                 out.write(root.toString().toByteArray(Charsets.UTF_8))
             } ?: return@withContext false
@@ -148,6 +150,7 @@ class DataManager @Inject constructor(
             root.optJSONArray("caffeine_quick_drinks")?.let { arr ->
                 settings.setCaffeineQuickDrinks((0 until arr.length()).mapNotNull { arr.optString(it).takeIf { s -> s.isNotBlank() } })
             }
+            if (root.has("caffeine_planner_open")) settings.setCaffeinePlannerOpen(root.optBoolean("caffeine_planner_open", true))
             root.optJSONArray("analytics_collapsed")?.let { arr ->
                 settings.setAnalyticsCollapsed((0 until arr.length()).mapNotNull { arr.optString(it).takeIf { s -> s.isNotBlank() } }.toSet())
             }

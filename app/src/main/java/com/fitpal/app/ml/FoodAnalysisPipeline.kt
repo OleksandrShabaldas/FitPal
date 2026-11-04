@@ -197,7 +197,22 @@ class FoodAnalysisPipeline @Inject constructor(
     suspend fun refineFood(food: DetectedFood, instruction: String): DetectedFood? {
         if (instruction.isBlank()) return null
         val (response, _) = generateRawTextWithSource(FoodPrompts.editFood(food, instruction))
-        return FoodJsonParser.parseFoods(response).firstOrNull()?.let { enrichZeros(it) }
+        val refined = FoodJsonParser.parseFoods(response).firstOrNull()?.let { enrichZeros(it) } ?: return null
+        return withChoicesAfterEdit(food, refined, FoodJsonParser.hasChoicesKey(response))
+    }
+
+    companion object {
+        /**
+         * "Not sure about" after an Edit with AI (the 4 Nov review, #8): the AI was shown the dish's
+         * groups and answers with what's still uncertain — a group the correction settled is gone. An
+         * answer with no "choices" key at all (a model that ignored it) keeps the old groups that still
+         * point at one of the dish's items, rather than wiping them.
+         */
+        internal fun withChoicesAfterEdit(before: DetectedFood, refined: DetectedFood, answered: Boolean): DetectedFood {
+            if (answered || before.choices.isEmpty()) return refined
+            val kept = before.choices.filter { g -> refined.ingredients.any { it.name.equals(g.current?.name, ignoreCase = true) } }
+            return refined.copy(choices = kept)
+        }
     }
 
     // ---- Source-reporting variants: try online, silently fall back to on-device, and tell the

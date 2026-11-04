@@ -93,9 +93,10 @@ fun DetectedFood.toMealItemContent(): MealItemContent = MealItemContent(
  * supports and the matching controls appear.
  *
  * Open by default (the user folds what they like). Its header is the dish's name, kcal, a ⋯ with the
- * dish's own actions and the fold chevron; a meal's only dish ([showName] false) is just "What's in
- * it", since its name is the page's title and its numbers are in the nutrition card above. Each
- * ingredient row has its own food/drink cup.
+ * dish's own actions and the fold chevron; a meal's only dish ([showName] false) has no header at all,
+ * since its name is the page's title and its numbers are in the nutrition card above. Then the groups,
+ * 22 dp apart (the 4 Nov review, #6): Amount · Total and water · the ingredients (each with its own
+ * food/drink cup) · Add ingredient / Edit with AI · Not sure about.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -170,124 +171,135 @@ fun MealItemCard(
     }
 
     Column(modifier = modifier.fillMaxWidth().glass().padding(16.dp)) {
-        // Header — the dish's name, kcal, its ⋯ and the fold chevron.
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (showName) {
-                Text(
-                    content.name, style = MaterialTheme.typography.titleMedium, color = Cream,
-                    maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
+        // Header — a dish in a meal of several: its name, kcal, its ⋯ and the fold chevron. A meal's
+        // only dish has none (its name is the page's title, its numbers are in the nutrition card).
+        val hasMenu = onToggleSave != null || onCopy != null || onRemove != null || (showName && onRename != null)
+        val header = showName || hasMenu || onExpand != null
+        if (header) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (showName) {
+                    Text(
+                        content.name, style = MaterialTheme.typography.titleMedium, color = Cream,
+                        maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("${content.calories.toInt()} kcal", style = MaterialTheme.typography.titleSmall, color = CalorieColor)
+                } else {
+                    Spacer(Modifier.weight(1f))
+                }
+                DishMenu(
+                    name = content.name,
+                    onRename = if (showName && onRename != null) ({ renaming = true }) else null,
+                    onToggleSave = onToggleSave, saved = saved, onCopy = onCopy, onRemove = onRemove
                 )
-                Spacer(Modifier.width(8.dp))
-                Text("${content.calories.toInt()} kcal", style = MaterialTheme.typography.titleSmall, color = CalorieColor)
-            } else {
-                Text("What's in it", style = MaterialTheme.typography.titleSmall, color = Cream, modifier = Modifier.weight(1f))
+                if (onExpand != null) CardIcon(Icons.Default.KeyboardArrowUp, "Fold ${content.name}", CreamMuted, onExpand)
             }
-            DishMenu(
-                name = content.name,
-                onRename = if (showName && onRename != null) ({ renaming = true }) else null,
-                onToggleSave = onToggleSave, saved = saved, onCopy = onCopy, onRemove = onRemove
-            )
-            if (onExpand != null) CardIcon(Icons.Default.KeyboardArrowUp, "Fold ${content.name}", CreamMuted, onExpand)
+            AlternativesLine(content.name, alternatives, onPickAlternative)
+            Spacer(Modifier.height(DishHeaderGap))
         }
-        AlternativesLine(content.name, alternatives, onPickAlternative)
 
-        // Its weight ("320 g", "170 g + 200 ml") and how many of it. A meal's only dish has its weight in
-        // the nutrition card above, so its row is just the amount.
-        if (showName || onServingsChanged != null) Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                if (showName) weightLabel(content.ingredients, content.grams, content.isDrink) else "Amount",
-                style = if (showName) MaterialTheme.typography.bodySmall else MaterialTheme.typography.titleSmall,
-                color = if (showName) CreamMuted else Cream, modifier = Modifier.weight(1f)
-            )
+        // The groups, in this order and 22 dp apart (the 4 Nov review, #6): Amount · Total and water ·
+        // the ingredients · Add ingredient / Edit with AI · Not sure about. A group with nothing to show
+        // is left out.
+        Column(verticalArrangement = Arrangement.spacedBy(DishGroupGap)) {
+            // How many of it — the weight is in the Total field below.
             if (onServingsChanged != null) {
-                RoundStepButton(Icons.Default.Remove, "One fewer", enabled = content.servings > 1) { onServingsChanged(content.servings - 1) }
-                Text(
-                    "${content.servings}",
-                    style = MaterialTheme.typography.titleMedium, color = Cream,
-                    textAlign = TextAlign.Center, modifier = Modifier.width(36.dp)
-                )
-                RoundStepButton(Icons.Default.Add, "One more") { onServingsChanged(content.servings + 1) }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Amount", style = MaterialTheme.typography.titleSmall, color = Cream, modifier = Modifier.weight(1f))
+                    RoundStepButton(Icons.Default.Remove, "One fewer", enabled = content.servings > 1) { onServingsChanged(content.servings - 1) }
+                    Text(
+                        "${content.servings}",
+                        style = MaterialTheme.typography.titleMedium, color = Cream,
+                        textAlign = TextAlign.Center, modifier = Modifier.width(36.dp)
+                    )
+                    RoundStepButton(Icons.Default.Add, "One more") { onServingsChanged(content.servings + 1) }
+                }
             }
-        }
-        Spacer(Modifier.height(6.dp))
 
-        // Presets only make sense for a single-item food/drink (under a dish's ingredients they'd be noise).
-        val single = content.ingredients.size == 1
-        content.ingredients.forEachIndexed { index, ingredient ->
-            EditableFoodItemRow(
-                ingredient = ingredient,
-                onGramsChanged = { onIngredientGramsChanged(index, it) },
-                onRemove = { onIngredientRemoved(index) },
-                presets = if (single) (if (ingredient.isDrink) drinkPresets else mealPresets) else emptyList(),
-                unit = if (ingredient.isDrink) "ml" else "g",
-                // Edits may hit the database (the Meal page) — don't write a phantom 0 on clear.
-                commitZero = false,
-                onToggleDrink = onIngredientDrinkChanged?.let { change -> { change(index, !ingredient.isDrink) } },
-                onReplace = onReplaceIngredient?.let { replace -> { replace(index) } }
-            )
-        }
+            // The whole dish's weight (scales every ingredient) and the water the AI found, side by side.
+            val total = content.ingredients.size > 1 && onTotalGramsChanged != null
+            if (total || onWaterChanged != null) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    if (total) {
+                        Text("Total", style = MaterialTheme.typography.labelLarge, color = CreamMuted)
+                        Spacer(Modifier.width(8.dp))
+                        GramsField(
+                            grams = content.grams, onGramsChanged = onTotalGramsChanged!!, modifier = Modifier.width(100.dp),
+                            unit = if (content.ingredients.all { it.isDrink }) "ml" else "g"
+                        )
+                    }
+                    Spacer(Modifier.weight(1f))
+                    if (onWaterChanged != null) {
+                        Text("💧", style = MaterialTheme.typography.labelLarge)
+                        Spacer(Modifier.width(6.dp))
+                        GramsField(grams = content.waterMl, onGramsChanged = onWaterChanged, modifier = Modifier.width(100.dp), unit = "ml", commitZero = true)
+                    }
+                }
+            }
 
-        // Not sure about — pre-log only (docs/redesign/15): a part of the dish the AI couldn't tell,
-        // one row each; a chip swaps that ingredient in place, nothing is ever added. A row whose
-        // ingredient was removed or renamed since goes away.
-        if (content.choices.isNotEmpty() && onPickChoice != null) {
-            val shown = content.choices.withIndex().filter { (_, g) ->
+            // Presets only make sense for a single-item food/drink (under a dish's ingredients they'd be noise).
+            if (content.ingredients.isNotEmpty()) {
+                Column {
+                    val single = content.ingredients.size == 1
+                    content.ingredients.forEachIndexed { index, ingredient ->
+                        EditableFoodItemRow(
+                            ingredient = ingredient,
+                            onGramsChanged = { onIngredientGramsChanged(index, it) },
+                            onRemove = { onIngredientRemoved(index) },
+                            presets = if (single) (if (ingredient.isDrink) drinkPresets else mealPresets) else emptyList(),
+                            unit = if (ingredient.isDrink) "ml" else "g",
+                            // Edits may hit the database (the Meal page) — don't write a phantom 0 on clear.
+                            commitZero = false,
+                            onToggleDrink = onIngredientDrinkChanged?.let { change -> { change(index, !ingredient.isDrink) } },
+                            onReplace = onReplaceIngredient?.let { replace -> { replace(index) } }
+                        )
+                    }
+                }
+            }
+
+            if (onAddIngredient != null || onEditWithAi != null) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (onAddIngredient != null) SetupPill("+ Add ingredient", selected = false, onClick = onAddIngredient)
+                    if (onEditWithAi != null) SetupPill("✦ Edit with AI", selected = false, modifier = Modifier.aiGlow(), onClick = onEditWithAi)
+                }
+            }
+
+            // Not sure about — pre-log only (docs/redesign/15): a part of the dish the AI couldn't tell,
+            // one row each; a chip swaps that ingredient in place, nothing is ever added. A row whose
+            // ingredient was removed or renamed since goes away.
+            val shown = if (onPickChoice == null) emptyList() else content.choices.withIndex().filter { (_, g) ->
                 content.ingredients.any { it.name.equals(g.current?.name, ignoreCase = true) }
             }
-            if (shown.isNotEmpty()) {
-                Spacer(Modifier.height(10.dp))
-                Text("Not sure about", style = MaterialTheme.typography.titleSmall, color = Cream, modifier = Modifier.padding(bottom = 6.dp))
-                shown.forEach { (g, group) ->
-                    Row(Modifier.fillMaxWidth().padding(bottom = 6.dp), verticalAlignment = Alignment.Top) {
-                        Text(
-                            group.label, style = MaterialTheme.typography.labelMedium, color = CreamFaint, maxLines = 2,
-                            modifier = Modifier.width(68.dp).padding(top = 5.dp, end = 6.dp)
-                        )
-                        FlowRow(
-                            modifier = Modifier.weight(1f),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            group.options.forEachIndexed { o, option ->
-                                ChoiceChip(option.name, selected = o == group.selected) { onPickChoice(g, o) }
+            if (shown.isNotEmpty() && onPickChoice != null) {
+                Column {
+                    Text("Not sure about", style = MaterialTheme.typography.titleSmall, color = Cream, modifier = Modifier.padding(bottom = 6.dp))
+                    shown.forEachIndexed { i, (g, group) ->
+                        Row(Modifier.fillMaxWidth().padding(top = if (i > 0) 6.dp else 0.dp), verticalAlignment = Alignment.Top) {
+                            Text(
+                                group.label, style = MaterialTheme.typography.labelMedium, color = CreamFaint, maxLines = 2,
+                                modifier = Modifier.width(68.dp).padding(top = 5.dp, end = 6.dp)
+                            )
+                            FlowRow(
+                                modifier = Modifier.weight(1f),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                group.options.forEachIndexed { o, option ->
+                                    ChoiceChip(option.name, selected = o == group.selected) { onPickChoice(g, o) }
+                                }
                             }
                         }
                     }
                 }
             }
         }
-
-        if (onAddIngredient != null || onEditWithAi != null) {
-            FlowRow(
-                modifier = Modifier.padding(top = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                if (onAddIngredient != null) SetupPill("+ Add ingredient", selected = false, onClick = onAddIngredient)
-                if (onEditWithAi != null) SetupPill("✦ Edit with AI", selected = false, modifier = Modifier.aiGlow(), onClick = onEditWithAi)
-            }
-        }
-
-        // The whole dish's weight (scales every ingredient) and the water the AI found, side by side.
-        val total = content.ingredients.size > 1 && onTotalGramsChanged != null
-        if (total || onWaterChanged != null) {
-            Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (total) {
-                    Text("Total", style = MaterialTheme.typography.labelLarge, color = CreamMuted)
-                    Spacer(Modifier.width(8.dp))
-                    GramsField(
-                        grams = content.grams, onGramsChanged = onTotalGramsChanged!!, modifier = Modifier.width(100.dp),
-                        unit = if (content.ingredients.all { it.isDrink }) "ml" else "g"
-                    )
-                }
-                Spacer(Modifier.weight(1f))
-                if (onWaterChanged != null) {
-                    Text("💧", style = MaterialTheme.typography.labelLarge)
-                    Spacer(Modifier.width(6.dp))
-                    GramsField(grams = content.waterMl, onGramsChanged = onWaterChanged, modifier = Modifier.width(100.dp), unit = "ml", commitZero = true)
-                }
-            }
-        }
     }
 }
+
+/** Space between a dish card's groups — the user's pick on the 4 Nov review (#6). */
+private val DishGroupGap = 22.dp
+
+/** Under a dish's name, in a meal of several dishes — 22 dp like every other gap (the 4 Nov review, round 2). */
+private val DishHeaderGap = 22.dp
 
 /** The dish's own actions behind a ⋯: rename, save to collection, copy, remove. Nothing to show → no ⋯. */
 @Composable

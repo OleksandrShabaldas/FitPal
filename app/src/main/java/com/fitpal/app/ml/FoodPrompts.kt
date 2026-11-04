@@ -106,7 +106,7 @@ object FoodPrompts {
             A user is correcting a dish already identified from a photo: "${food.label}"
             (${if (food.isDrink) "a drink" else "a food"}), total about $total $unit, made of:
             $current
-
+            ${notSureAbout(food)}
             The user's correction: "$instruction".
 
             Re-evaluate the WHOLE dish with this correction. You may ADD, REMOVE, RENAME or RE-WEIGH
@@ -127,6 +127,37 @@ object FoodPrompts {
             A ready-made sauce, dressing, condiment, cheese or bread stays ONE item named as itself —
             never split it into its recipe.
         """.trimIndent()
+    }
+
+    /**
+     * The dish's "Not sure about" groups for [editFood] (the 4 Nov review, #8), so a correction can
+     * point at them — "add everything from those variations", "it was the cabbage one". Only the groups
+     * the user can see: those whose chosen option is still one of the dish's items. Asks for what's
+     * still uncertain back in "choices" (read by `FoodJsonParser.parseChoices`). Empty when there are none.
+     */
+    internal fun notSureAbout(food: DetectedFood): String {
+        val groups = food.choices.mapNotNull { g ->
+            val now = g.current ?: return@mapNotNull null
+            val inDish = food.ingredients.firstOrNull { it.name.equals(now.name, ignoreCase = true) } ?: return@mapNotNull null
+            val options = g.options.mapIndexed { i, o ->
+                if (i == g.selected) "${o.name} (in the dish now, ${inDish.grams.toInt()}${if (inDish.isDrink) "ml" else "g"})"
+                else "${o.name} (${o.caloriesPer100g.toInt()} kcal/100${if (o.isDrink) "ml" else "g"})"
+            }
+            "- ${g.label}: " + options.joinToString(" | ")
+        }
+        if (groups.isEmpty()) return ""
+        return "\n" + """
+NOT SURE ABOUT: what couldn't be told from the photo, shown to the user under the dish as choices.
+The user may call these "variations", "options", "those", "them" or use a group's name:
+${groups.joinToString("\n")}
+If the correction refers to them, use these options (their names and nutrition). When the user wants
+several options of one group at once ("all of them", "both", "everything from those"), put each in as
+its own item and split the weight of the one in the dish now between them; keep the dish's total unless
+they say there was more.
+In "choices" return ONLY what is still uncertain after the correction, in the same shape:
+{"label":"<the group>","item":"<the item in your items>","options":[that item first, then the other
+options, as item objects]}. Drop a group the correction settles; [] if nothing is left uncertain.
+""".trimIndent() + "\n"
     }
 
     /** Vision path: identify every food in a photo. [note] is optional user context. */

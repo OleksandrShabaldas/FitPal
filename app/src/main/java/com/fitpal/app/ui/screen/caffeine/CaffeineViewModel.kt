@@ -72,6 +72,11 @@ class CaffeineViewModel @Inject constructor(
         return true
     }
 
+    /** "Planning another one?" open or folded — remembered, so a fold stays until it's opened again. */
+    val plannerOpen: StateFlow<Boolean> = settingsRepository.caffeinePlannerOpen
+
+    fun setPlannerOpen(open: Boolean) = settingsRepository.setCaffeinePlannerOpen(open)
+
     private companion object {
         const val CHART_VIEW_KEY = "tracker:caffeine"
     }

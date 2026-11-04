@@ -56,7 +56,13 @@ data class AiReviewUiState(
      * so its numbers, and any "target missed" it mentions, may no longer hold. The screen shows it
      * with a refresh. Null = up to date (or nothing to say).
      */
-    val staleNote: String? = null
+    val staleNote: String? = null,
+    /**
+     * Nothing but water logged in this period and no overview written yet (the 4 Nov review, #3): the
+     * screen says so ([emptyTitle]) with "Write it anyway" instead of writing an overview of nothing.
+     */
+    val nothingLogged: Boolean = false,
+    val emptyTitle: String = ""
 )
 
 @HiltViewModel
@@ -97,21 +103,55 @@ class AiReviewViewModel @Inject constructor(
                 _uiState.update { it.copy(staleNote = staleNoteFor(saved)) }
                 return@launch
             }
-            if (!reviewGenerator.canGenerate()) {
-                _uiState.update {
-                    it.copy(isLoading = false, modelReady = false,
-                        error = "Set up the AI model (or add an online AI key) to generate this overview.")
-                }
+            // Nothing but water logged (the 4 Nov review, #3): say so instead of writing an overview of
+            // nothing — it needs no AI, so it comes before the "set up the AI" message. "Write it
+            // anyway" carries on below.
+            if (!runCatching { reviewGenerator.hasSomethingToReview(period, periodKey) }.getOrDefault(true)) {
+                _uiState.update { it.copy(isLoading = false, nothingLogged = true, emptyTitle = emptyTitleFor(period, periodKey)) }
                 return@launch
             }
-            // When the day/week looks unusual, ask one AI-generated check-in question first; its
-            // answer feeds the review. Any failure just falls through to generating directly.
-            val question = runCatching { contextQuestionGenerator.maybeGenerate(period, periodKey) }.getOrNull()
-            if (question != null) {
-                _uiState.update { it.copy(isLoading = false, contextQuestion = question) }
-                return@launch
+            askOrGenerate()
+        }
+    }
+
+    /** "Write it anyway" on an empty period: the usual way on — the check-in question, then the overview. */
+    fun writeAnyway() {
+        if (!_uiState.value.nothingLogged) return
+        _uiState.update { it.copy(nothingLogged = false, isLoading = true, progress = "") }
+        viewModelScope.launch { askOrGenerate() }
+    }
+
+    /**
+     * No AI to write with → say how to set one up. Otherwise, when the day/week looks unusual, ask one
+     * AI-generated check-in question first; its answer feeds the review. Any failure just falls through
+     * to generating directly.
+     */
+    private suspend fun askOrGenerate() {
+        if (!reviewGenerator.canGenerate()) {
+            _uiState.update {
+                it.copy(isLoading = false, modelReady = false,
+                    error = "Set up the AI model (or add an online AI key) to generate this overview.")
             }
-            generate()
+            return
+        }
+        val question = runCatching { contextQuestionGenerator.maybeGenerate(period, periodKey) }.getOrNull()
+        if (question != null) {
+            _uiState.update { it.copy(isLoading = false, contextQuestion = question) }
+            return
+        }
+        generate()
+    }
+
+    /** "Nothing logged yet" for today; "… this week / that day" for the rest. */
+    private fun emptyTitleFor(period: String, key: String): String {
+        val today = LocalDate.now()
+        return when (period) {
+            "weekly" -> {
+                val start = parseDateOr(key, today.minusDays(6))
+                if (!today.isBefore(start) && !today.isAfter(start.plusDays(6))) "Nothing logged this week yet" else "Nothing logged that week"
+            }
+            "monthly" -> if (parseMonthOr(key, YearMonth.now()) == YearMonth.now()) "Nothing logged this month yet" else "Nothing logged that month"
+            else -> if (parseDateOr(key, today) == today) "Nothing logged yet" else "Nothing logged that day"
         }
     }
 

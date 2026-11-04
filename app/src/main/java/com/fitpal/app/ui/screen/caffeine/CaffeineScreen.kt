@@ -127,6 +127,7 @@ fun CaffeineScreen(
     val chartView by viewModel.chartView.collectAsStateWithLifecycle()
     val drinks by viewModel.drinks.collectAsStateWithLifecycle()
     val starred by viewModel.quickDrinks.collectAsStateWithLifecycle()
+    val plannerOpen by viewModel.plannerOpen.collectAsStateWithLifecycle()
     val isToday = viewModel.isToday
 
     // A once-a-minute clock, so "in you now" keeps draining while the page is open.
@@ -262,10 +263,11 @@ fun CaffeineScreen(
             }
         }
 
-        // ---- Planning another one? (today only, folded) ----
+        // ---- Planning another one? (today only; open until you fold it, and remembered) ----
         if (isToday) {
             Planner(
                 view = view, nowMillis = now, bedMinute = bedMin, drinks = drinks, starred = starred,
+                open = plannerOpen, onOpenChange = viewModel::setPlannerOpen,
                 onToggleStar = viewModel::toggleQuickDrink, onChange = { whatIf = it }
             )
         }
@@ -404,7 +406,8 @@ private fun CaffeineCurve(
 }
 
 /**
- * "Planning another one?" — folded until opened. Your three starred drinks (the rest behind "More…",
+ * "Planning another one?" — open until you fold it; [open] is remembered (2.17), so a fold stays on
+ * every later visit until it's opened again. Your three starred drinks (the rest behind "More…",
  * where the stars are set) and a time; the answer is one sentence, and the drink is drawn on the
  * curve above. Nothing is logged.
  */
@@ -416,11 +419,12 @@ private fun Planner(
     bedMinute: Int,
     drinks: List<CaffeinePreset>,
     starred: List<String>,
+    open: Boolean,
+    onOpenChange: (Boolean) -> Unit,
     onToggleStar: (String) -> Boolean,
     onChange: (CaffeineDose?) -> Unit
 ) {
     val timePicker = com.fitpal.app.ui.component.kit.rememberTimePicker()
-    var open by remember { mutableStateOf(false) }
     var label by remember { mutableStateOf<String?>(null) }
     var mg by remember { mutableIntStateOf(0) }
     var atMinute by remember { mutableStateOf<Int?>(null) }
@@ -438,7 +442,7 @@ private fun Planner(
                 if (open) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                 contentDescription = if (open) "Fold" else "Open the planner",
                 tint = CreamMuted,
-                modifier = Modifier.size(28.dp).clip(CircleShape).clickable { open = !open }
+                modifier = Modifier.size(28.dp).clip(CircleShape).clickable { onOpenChange(!open) }
             )
         }
     ) {
@@ -446,7 +450,7 @@ private fun Planner(
             Text(
                 "See what a coffee now would do to tonight",
                 style = MaterialTheme.typography.bodySmall, color = CreamFaint,
-                modifier = Modifier.clickable { open = true }
+                modifier = Modifier.clickable { onOpenChange(true) }
             )
         }
         AnimatedVisibility(visible = open) {

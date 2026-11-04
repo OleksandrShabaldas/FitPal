@@ -177,14 +177,19 @@ fun GalleryFoodDetailScreen(
                     ) {
                         if (!state.photoPath.isNullOrBlank()) {
                             item {
-                                // Tap for the whole photo, uncropped (docs/redesign/16).
+                                // The ↖↘ icon opens the whole photo, uncropped; the photo itself doesn't
+                                // react to a tap (the 4 Nov review, #5).
                                 var viewing by remember { mutableStateOf(false) }
-                                AsyncImage(
-                                    model = state.photoPath, contentDescription = state.name,
-                                    modifier = Modifier.fillMaxWidth().height(210.dp).clip(RoundedCornerShape(20.dp))
-                                        .clickable { viewing = true },
-                                    contentScale = ContentScale.Crop
-                                )
+                                Box(Modifier.fillMaxWidth().height(210.dp).clip(RoundedCornerShape(20.dp))) {
+                                    AsyncImage(
+                                        model = state.photoPath, contentDescription = state.name,
+                                        modifier = Modifier.fillMaxWidth().height(210.dp),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                    com.fitpal.app.ui.component.PhotoOpenButton(
+                                        onClick = { viewing = true }, modifier = Modifier.align(Alignment.TopStart)
+                                    )
+                                }
                                 if (viewing) com.fitpal.app.ui.component.PhotoViewer(state.photoPath) { viewing = false }
                             }
                         }
