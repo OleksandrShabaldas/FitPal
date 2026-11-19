@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -110,6 +111,7 @@ fun PhotoCaptureOverlay(
                 textAlign = TextAlign.Center,
                 modifier = Modifier
                     .align(Alignment.TopCenter)
+                    .systemBarsPadding()
                     .padding(top = 20.dp, start = 64.dp, end = 64.dp)
                     .clip(RoundedCornerShape(10.dp))
                     .background(Color.Black.copy(alpha = 0.5f))
@@ -118,15 +120,15 @@ fun PhotoCaptureOverlay(
 
             IconButton(
                 onClick = onClose,
-                modifier = Modifier.align(Alignment.TopStart).padding(12.dp).size(44.dp)
+                modifier = Modifier.align(Alignment.TopStart).systemBarsPadding().padding(12.dp).size(44.dp)
                     .background(Color.Black.copy(alpha = 0.4f), CircleShape)
             ) {
                 Icon(Icons.Default.Close, contentDescription = "Close camera", tint = Color.White)
             }
 
             CameraControlEffect(camera, camControl)
-            FlashToggle(camControl, hasFlash, Modifier.align(Alignment.TopEnd).padding(16.dp))
-            ZoomSlider(camControl, Modifier.align(Alignment.BottomCenter).padding(bottom = 124.dp))
+            FlashToggle(camControl, hasFlash, Modifier.align(Alignment.TopEnd).systemBarsPadding().padding(16.dp))
+            ZoomSlider(camControl, Modifier.align(Alignment.BottomCenter).systemBarsPadding().padding(bottom = 124.dp))
 
             FloatingActionButton(
                 onClick = {
@@ -149,7 +151,7 @@ fun PhotoCaptureOverlay(
                         }
                     )
                 },
-                modifier = Modifier.align(Alignment.BottomCenter).padding(32.dp).size(72.dp),
+                modifier = Modifier.align(Alignment.BottomCenter).systemBarsPadding().padding(32.dp).size(72.dp),
                 containerColor = GoldLight,
                 contentColor = com.fitpal.app.ui.theme.OnGold
             ) {
@@ -161,7 +163,7 @@ fun PhotoCaptureOverlay(
             if (onPickFromGallery != null) {
                 IconButton(
                     onClick = onPickFromGallery,
-                    modifier = Modifier.align(Alignment.BottomStart).padding(start = 28.dp, bottom = 54.dp).size(52.dp)
+                    modifier = Modifier.align(Alignment.BottomStart).systemBarsPadding().padding(start = 28.dp, bottom = 54.dp).size(52.dp)
                         .background(Color.Black.copy(alpha = 0.4f), CircleShape)
                 ) {
                     Icon(Icons.Default.PhotoLibrary, contentDescription = "Pick from gallery", tint = Color.White, modifier = Modifier.size(26.dp))

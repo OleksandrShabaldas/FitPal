@@ -137,7 +137,21 @@ class InsightsWorker(
         )
         val goal = "${profile.fitnessGoal.label} — ${profile.fitnessGoal.description}"
 
-        val prompt = FoodPrompts.mealCoachingTip(mealFoods, facts + "\n" + whenEaten(meal.timestamp, settings), goal)
+        // Who this person is (the coach memory) and the meal's own tags, so the note fits their life (2.18).
+        val memory = runCatching { entry.coachMemoryRepository().current() }.getOrDefault(emptyList())
+        val about = buildString {
+            listOfNotNull(
+                meal.context?.takeIf { it.isNotBlank() }?.let { "where/who with: $it" },
+                meal.feelings?.takeIf { it.isNotBlank() }?.let { "felt: $it" }
+            ).takeIf { it.isNotEmpty() }?.let { appendLine("THIS MEAL'S TAGS: " + it.joinToString(" · ")) }
+            if (memory.isNotEmpty()) {
+                appendLine("WHAT YOU KNOW ABOUT THIS PERSON (background, so the tip fits their life; never quote it back):")
+                appendLine(com.fitpal.app.domain.model.CoachMemoryParser.promptBlock(memory, withIds = false))
+            }
+        }.trimEnd()
+        val prompt = FoodPrompts.mealCoachingTip(
+            mealFoods, facts + "\n" + whenEaten(meal.timestamp, settings) + (if (about.isEmpty()) "" else "\n$about"), goal
+        )
         val response = aux.generate(prompt, jsonMode = true) ?: return
         val tip = FoodJsonParser.parseCoachingTip(response)
         // Save the result (a tip, or null when the model declined — leaving no card).

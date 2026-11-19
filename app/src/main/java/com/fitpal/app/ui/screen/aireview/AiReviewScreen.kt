@@ -53,7 +53,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.fitpal.app.domain.model.ContextQuestion
 import com.fitpal.app.ui.component.AiSourceBadge
 import com.fitpal.app.ui.component.BackdropTheme
 import com.fitpal.app.ui.component.GlassTopBar
@@ -94,17 +93,6 @@ fun AiReviewScreen(
 
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 when {
-                    state.contextQuestion != null -> Column(
-                        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        ContextQuestionCard(
-                            question = state.contextQuestion!!,
-                            onAnswer = viewModel::answerQuestion,
-                            onSkip = viewModel::skipQuestion
-                        )
-                    }
-
                     state.nothingLogged -> NothingLogged(
                         title = state.emptyTitle,
                         subtitle = state.subtitle,
@@ -424,47 +412,3 @@ private fun FollowUpAnswerInput(question: String, options: List<String>, onAnswe
     }
 }
 
-/**
- * The pre-review check-in: one AI-written question with tappable answer chips, or a quiet "Skip".
- * The chosen answer is remembered and folded into this review (and future ones).
- */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun ContextQuestionCard(
-    question: ContextQuestion,
-    onAnswer: (String) -> Unit,
-    onSkip: () -> Unit
-) {
-    Column(modifier = Modifier.fillMaxWidth().glass().padding(20.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = GoldLight, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(8.dp))
-            Text("A quick check-in", style = MaterialTheme.typography.titleSmall, color = Cream)
-        }
-        Spacer(Modifier.height(10.dp))
-        Text(question.question, style = MaterialTheme.typography.bodyLarge, color = Cream)
-        Spacer(Modifier.height(16.dp))
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            question.options.forEach { option ->
-                Box(
-                    modifier = Modifier
-                        .glassSoft(CircleShape)
-                        .clickable { onAnswer(option) }
-                        .padding(horizontal = 16.dp, vertical = 10.dp)
-                ) {
-                    Text(option, style = MaterialTheme.typography.labelLarge, color = Cream)
-                }
-            }
-        }
-        Spacer(Modifier.height(14.dp))
-        Text(
-            "Skip",
-            style = MaterialTheme.typography.labelLarge,
-            color = CreamMuted,
-            modifier = Modifier.clickable { onSkip() }.padding(vertical = 4.dp, horizontal = 4.dp)
-        )
-    }
-}

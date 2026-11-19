@@ -1,5 +1,6 @@
 package com.fitpal.app.ui.screen.meal
 
+import androidx.compose.foundation.layout.systemBarsPadding
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -155,7 +156,7 @@ fun MealScreen(
             // A logged meal moves to another day by copying, so no day choice here.
             logDate = null, onPickDay = null,
             eatenAt = state.eatenAt, onPickTime = viewModel::setMealTime,
-            tags = MealContext.parse(state.context), onToggleTag = viewModel::toggleMealContext,
+            tags = state.tags, onToggleTag = viewModel::toggleMealContext,
             onDismiss = { showDetails = false }
         )
     }
@@ -340,7 +341,7 @@ fun MealScreen(
                         else -> state.mealName ?: dishesTitle(dishes.map { it.item.name })
                     },
                     onBack = onBack,
-                    titleMaxLines = 2,
+                    marquee = true,
                     onTitleClick = if (dishes.isNotEmpty()) ({ renaming = true }) else null,
                     actions = {
                         if (dishes.isNotEmpty()) {
@@ -374,10 +375,12 @@ fun MealScreen(
                         val i = dishes.indexOfFirst { it.item.id == state.focusItemId }
                         if (!focused && !oneDish && i >= 0) { focused = true; listState.animateScrollToItem(lead + i) }
                     }
+                    // The list runs under the meal pills, fading where it meets them (#10).
+                    com.fitpal.app.ui.component.FloatingBottomBox(Modifier.weight(1f).fillMaxWidth(), content = { listFade, bottomPad ->
                     LazyColumn(
                         state = listState,
-                        modifier = Modifier.weight(1f).fillMaxWidth(),
-                        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 16.dp),
+                        modifier = Modifier.fillMaxSize().then(listFade),
+                        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = bottomPad),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         if (photo != null) {
@@ -389,7 +392,7 @@ fun MealScreen(
                         item(key = "time") {
                             MealTimeLine(
                                 logDate = state.date, eatenAt = state.eatenAt,
-                                tags = MealContext.parse(state.context), onClick = { showDetails = true }
+                                tags = state.tags, onClick = { showDetails = true }
                             )
                         }
                         state.plannedMealId?.let { pid -> item(key = "recipe") { ViewRecipeRow { onOpenRecipe(pid) } } }
@@ -414,6 +417,7 @@ fun MealScreen(
                                 onReplaceIngredient = { i -> viewModel.clearSearch(); replacing = id to i },
                                 onTotalGramsChanged = { g -> viewModel.scaleDishToGrams(id, g) },
                                 onServingsChanged = { n -> viewModel.setServings(id, n) },
+                                onWaterChanged = { ml -> viewModel.setWater(id, ml) },
                                 onAddIngredient = { viewModel.clearSearch(); addingTo = id },
                                 onEditWithAi = { editingWithAi = id },
                                 onRename = { viewModel.renameDish(id, it) },
@@ -452,8 +456,10 @@ fun MealScreen(
                             }
                         }
                     }
+                    }) {
                     // Which meal it was: the same pills as before logging, in the same place.
                     MealTypePills(state.mealType, viewModel::setMealType, Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp))
+                    }
                 }
             }
         }
@@ -471,7 +477,7 @@ fun MealScreen(
                 )
                 IconButton(
                     onClick = { showScanner = false; addingTo = reopenAddFor },
-                    modifier = Modifier.align(Alignment.TopStart).padding(16.dp).size(48.dp).background(Color.Black.copy(alpha = 0.4f), CircleShape)
+                    modifier = Modifier.align(Alignment.TopStart).systemBarsPadding().padding(16.dp).size(48.dp).background(Color.Black.copy(alpha = 0.4f), CircleShape)
                 ) {
                     Icon(Icons.Default.Close, contentDescription = "Close scanner", tint = Color.White)
                 }
@@ -525,7 +531,9 @@ private fun MealDish.toMealItemContent(): MealItemContent = MealItemContent(
     carbs = item.carbs,
     fiber = item.fiber,
     isDrink = item.isDrink,
-    waterMl = item.waterMl,
+    // From the ingredients when they carry it, so an edit shows at once (the saved total follows); older
+    // entries whose parts have no water keep the saved total.
+    waterMl = ingredients.sumOf { it.waterMl.toDouble() }.toFloat().takeIf { it > 0f || item.waterMl <= 0f } ?: item.waterMl,
     servings = item.servings.coerceAtLeast(1),
     ingredients = ingredients
 )

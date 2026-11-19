@@ -1,5 +1,7 @@
 package com.fitpal.app.data.local
 
+import com.fitpal.app.data.local.dao.CoachMemoryDao
+import com.fitpal.app.data.local.entity.CoachMemoryEntity
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
@@ -41,6 +43,7 @@ import com.fitpal.app.data.local.entity.WeightEntryEntity
     entities = [
         AiReviewEntity::class,
         ChallengeEntity::class,
+        CoachMemoryEntity::class,
         ContextNoteEntity::class,
         ExerciseEntryEntity::class,
         FoodExtrasEntity::class,
@@ -59,12 +62,13 @@ import com.fitpal.app.data.local.entity.WeightEntryEntity
         UsdaFoodEntity::class,
         WeightEntryEntity::class
     ],
-    version = 35,
+    version = 36,
     exportSchema = true
 )
 abstract class FitPalDatabase : RoomDatabase() {
     abstract fun aiReviewDao(): AiReviewDao
     abstract fun challengeDao(): ChallengeDao
+    abstract fun coachMemoryDao(): CoachMemoryDao
     abstract fun contextNoteDao(): ContextNoteDao
     abstract fun exerciseDao(): ExerciseDao
     abstract fun foodExtrasDao(): FoodExtrasDao
@@ -583,6 +587,22 @@ abstract class FitPalDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE meal_log_items ADD COLUMN drinkWaterMl REAL NOT NULL DEFAULT 0")
                 db.execSQL("UPDATE meal_log_items SET drinkWaterMl = waterMl WHERE isDrink = 1")
+            }
+        }
+
+        /**
+         * 35 → 36 (docs/redesign/18): a meal's "how you felt" tags get their own column (#4), and what the
+         * AI coach knows about the user gets its own table (#2).
+         */
+        val MIGRATION_35_36 = object : Migration(35, 36) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE meal_logs ADD COLUMN feelings TEXT")
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS coach_memory (" +
+                        "id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, section TEXT NOT NULL, text TEXT NOT NULL, " +
+                        "sourceDate TEXT NOT NULL, mine INTEGER NOT NULL DEFAULT 0, createdAt INTEGER NOT NULL, " +
+                        "updatedAt INTEGER NOT NULL)"
+                )
             }
         }
     }

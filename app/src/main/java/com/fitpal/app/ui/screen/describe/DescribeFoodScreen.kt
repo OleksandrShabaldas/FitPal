@@ -77,6 +77,7 @@ fun DescribeFoodScreen(
     val fastingGuard = rememberFastingGuard()
     val context = androidx.compose.ui.platform.LocalContext.current
     var addIngredientFor by remember { mutableStateOf<Int?>(null) }
+    var editWithAiFor by remember { mutableStateOf<Int?>(null) }
     var showDatePicker by remember { mutableStateOf(false) }
 
     LaunchedEffect(state.saved) { if (state.saved) onLogged() }
@@ -171,6 +172,21 @@ fun DescribeFoodScreen(
         }
     }
 
+    editWithAiFor?.let { foodIndex ->
+        // Closes itself once the correction is in (the same dialog and flow as the photo review, #5).
+        var started by remember { mutableStateOf(false) }
+        LaunchedEffect(state.aiEditingFoodIndex) {
+            if (state.aiEditingFoodIndex == foodIndex) started = true
+            else if (started) { started = false; editWithAiFor = null }
+        }
+        com.fitpal.app.ui.component.EditWithAiDialog(
+            foodLabel = state.foods.getOrNull(foodIndex)?.label ?: "this item",
+            loading = state.aiEditingFoodIndex == foodIndex,
+            onSubmit = { text -> viewModel.refineFoodWithAi(foodIndex, text) },
+            onDismiss = { editWithAiFor = null }
+        )
+    }
+
     GradientBackdrop(theme = BackdropTheme.TODAY) {
         Column(modifier = Modifier.fillMaxSize()) {
             GlassTopBar(
@@ -180,13 +196,15 @@ fun DescribeFoodScreen(
                     else -> state.mealName ?: dishesTitle(state.foods.map { it.label })
                 },
                 onBack = onBack,
-                titleMaxLines = 2,
+                marquee = true,
                 onTitleClick = if (results) ({ renaming = true }) else null
             )
 
+            // The list runs under the pills and the Log bar, fading where it meets them (#10).
+            com.fitpal.app.ui.component.FloatingBottomBox(Modifier.weight(1f).fillMaxWidth(), content = { listFade, bottomPad ->
             LazyColumn(
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 16.dp),
+                modifier = Modifier.fillMaxSize().then(listFade),
+                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = bottomPad),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 val fade: @Composable androidx.compose.foundation.lazy.LazyItemScope.() -> Modifier =
@@ -313,6 +331,9 @@ fun DescribeFoodScreen(
                                 onIngredientRemoved = { ii -> viewModel.removeIngredient(index, ii) },
                                 onIngredientDrinkChanged = { ii, drink -> viewModel.setIngredientDrink(index, ii, drink) },
                                 onPickChoice = { g, o -> viewModel.pickChoice(index, g, o) },
+                                onServingsChanged = { n -> viewModel.setServings(index, n) },
+                                onWaterChanged = { ml -> viewModel.setFoodWater(index, ml) },
+                                onEditWithAi = { editWithAiFor = index },
                                 onRemove = if (oneDish) null else ({ folded = emptySet(); viewModel.removeFood(index) }),
                                 onTotalGramsChanged = { g -> viewModel.scaleFoodToGrams(index, g) },
                                 onAddIngredient = { addIngredientFor = index },
@@ -329,7 +350,7 @@ fun DescribeFoodScreen(
                     }
                 }
             }
-
+            }) {
             MealTypePills(mealType, viewModel::setMealType, Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp))
             val analyse = editing || (phase == AnalysisPhase.FAILED && state.onlineFailedReason == null)
             LogBar(
@@ -364,6 +385,7 @@ fun DescribeFoodScreen(
                     "Save all to collection" to { viewModel.saveAllToGallery() }
                 ) else emptyList()
             )
+            }
         }
     }
 }

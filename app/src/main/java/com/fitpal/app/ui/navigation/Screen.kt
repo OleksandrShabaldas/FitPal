@@ -45,6 +45,8 @@ sealed class Screen(val route: String) {
     data object Coach : Screen("coach")
     /** "Your food profile" — the planner's permanent form. */
     data object FoodProfile : Screen("food_profile")
+    /** What the AI coach knows about the user (the 17 Nov review, #2). */
+    data object CoachMemory : Screen("coach_memory")
     /** One plan's recipes (a meal, a day or a week); "saved" lists the ideas kept for later. */
     data object PlanResults : Screen("plan_results/{requestId}") {
         const val ARG_REQUEST_ID = "requestId"

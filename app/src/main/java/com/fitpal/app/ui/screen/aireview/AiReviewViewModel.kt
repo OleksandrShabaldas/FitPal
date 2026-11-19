@@ -9,9 +9,7 @@ import com.fitpal.app.data.repository.MealRepository
 import com.fitpal.app.data.repository.SettingsRepository
 import com.fitpal.app.data.repository.WeightRepository
 import com.fitpal.app.domain.BmrCalculator
-import com.fitpal.app.domain.model.ContextQuestion
 import com.fitpal.app.ml.AiSource
-import com.fitpal.app.ml.ContextQuestionGenerator
 import com.fitpal.app.ml.FoodAnalysisPipeline
 import com.fitpal.app.ml.ModelManager
 import com.fitpal.app.ml.ReviewText
@@ -44,8 +42,6 @@ data class AiReviewUiState(
     val aiSource: AiSource? = null,
     /** Live stage shown while generating (gathering data → sending → waiting → …). */
     val progress: String = "",
-    /** A check-in question to ask before generating; when non-null, shown instead of the review. */
-    val contextQuestion: ContextQuestion? = null,
     /** The coach's question at the end of the overview (QUESTION: line), and its tap-answers. */
     val followUpQuestion: String? = null,
     val followUpOptions: List<String> = emptyList(),
@@ -73,7 +69,6 @@ class AiReviewViewModel @Inject constructor(
     private val weightRepository: WeightRepository,
     private val aiReviewRepository: AiReviewRepository,
     private val contextNoteRepository: ContextNoteRepository,
-    private val contextQuestionGenerator: ContextQuestionGenerator,
     private val pipeline: FoodAnalysisPipeline,
     private val modelManager: ModelManager,
     private val reviewGenerator: com.fitpal.app.ml.ReviewGenerator
@@ -114,7 +109,7 @@ class AiReviewViewModel @Inject constructor(
         }
     }
 
-    /** "Write it anyway" on an empty period: the usual way on — the check-in question, then the overview. */
+    /** "Write it anyway" on an empty period: the overview is written the usual way. */
     fun writeAnyway() {
         if (!_uiState.value.nothingLogged) return
         _uiState.update { it.copy(nothingLogged = false, isLoading = true, progress = "") }
@@ -122,9 +117,8 @@ class AiReviewViewModel @Inject constructor(
     }
 
     /**
-     * No AI to write with → say how to set one up. Otherwise, when the day/week looks unusual, ask one
-     * AI-generated check-in question first; its answer feeds the review. Any failure just falls through
-     * to generating directly.
+     * No AI to write with → say how to set one up; otherwise write the overview straight away. (The
+     * check-in question that used to come first is gone: the 17 Nov review, #7.)
      */
     private suspend fun askOrGenerate() {
         if (!reviewGenerator.canGenerate()) {
@@ -132,11 +126,6 @@ class AiReviewViewModel @Inject constructor(
                 it.copy(isLoading = false, modelReady = false,
                     error = "Set up the AI model (or add an online AI key) to generate this overview.")
             }
-            return
-        }
-        val question = runCatching { contextQuestionGenerator.maybeGenerate(period, periodKey) }.getOrNull()
-        if (question != null) {
-            _uiState.update { it.copy(isLoading = false, contextQuestion = question) }
             return
         }
         generate()
@@ -155,34 +144,13 @@ class AiReviewViewModel @Inject constructor(
         }
     }
 
-    /** User picked an answer chip (or typed one) — remember it, then generate with it in context. */
-    fun answerQuestion(answer: String) {
-        val q = _uiState.value.contextQuestion ?: return
-        val clean = answer.trim().ifBlank { return }
-        viewModelScope.launch {
-            runCatching { contextNoteRepository.save(periodKey, period, q.question, clean) }
-            _uiState.update { it.copy(contextQuestion = null, isLoading = true, progress = "") }
-            generate()
-        }
-    }
-
-    /** User dismissed the question — record the skip (so we don't re-ask) and generate anyway. */
-    fun skipQuestion() {
-        val q = _uiState.value.contextQuestion ?: return
-        viewModelScope.launch {
-            runCatching { contextNoteRepository.save(periodKey, period, q.question, "skipped") }
-            _uiState.update { it.copy(contextQuestion = null, isLoading = true, progress = "") }
-            generate()
-        }
-    }
-
-    /** Allow the user to discard and regenerate. Skips the check-in question (already handled once). */
+    /** Allow the user to discard and regenerate. */
     fun regenerate() {
         if (!reviewGenerator.canGenerate()) return
         viewModelScope.launch {
             aiReviewRepository.delete(period, periodKey)
             _uiState.update {
-                it.copy(isLoading = true, review = null, error = null, contextQuestion = null, staleNote = null)
+                it.copy(isLoading = true, review = null, error = null, staleNote = null)
             }
             generate()
         }

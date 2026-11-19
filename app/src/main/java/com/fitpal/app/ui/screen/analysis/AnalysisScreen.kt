@@ -244,7 +244,7 @@ fun AnalysisScreen(
                     else -> state.mealName ?: dishesTitle(foods.map { it.label })
                 },
                 onBack = onBack,
-                titleMaxLines = 2,
+                marquee = true,
                 onTitleClick = if (results && foods.isNotEmpty()) ({ renaming = true }) else null
             )
 
@@ -270,9 +270,11 @@ fun AnalysisScreen(
                 }
 
                 else -> {
+                    // The list runs under the pills and the Log bar, fading where it meets them (#10).
+                    com.fitpal.app.ui.component.FloatingBottomBox(Modifier.weight(1f).fillMaxWidth(), content = { listFade, bottomPad ->
                     LazyColumn(
-                        modifier = Modifier.weight(1f).fillMaxWidth(),
-                        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 16.dp),
+                        modifier = Modifier.fillMaxSize().then(listFade),
+                        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = bottomPad),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         val fade: @Composable androidx.compose.foundation.lazy.LazyItemScope.() -> Modifier =
@@ -420,7 +422,7 @@ fun AnalysisScreen(
                             }
                         }
                     }
-
+                    }) {
                     // ---- The meal pills and the log bar: the same place in every phase ----
                     MealTypePills(mealType, viewModel::setMealType, Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp))
                     LogBar(
@@ -448,6 +450,7 @@ fun AnalysisScreen(
                             "Save all to collection" to { viewModel.saveAllToGallery() }
                         ) else emptyList()
                     )
+                    }
                 }
             }
         }

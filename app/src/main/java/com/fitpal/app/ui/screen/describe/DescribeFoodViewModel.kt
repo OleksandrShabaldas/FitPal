@@ -1,5 +1,7 @@
 package com.fitpal.app.ui.screen.describe
 
+import com.fitpal.app.domain.model.withServings
+import com.fitpal.app.domain.model.withWaterTotal
 import com.fitpal.app.domain.model.withChoice
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -62,7 +64,9 @@ data class DescribeFoodUiState(
     /** Pending dietary-rule warning shown before analysis; null when none. */
     val dietaryWarning: DietaryWarning? = null,
     /** The whole meal's name, if the user gave it one before logging (written by logMeal). */
-    val mealName: String? = null
+    val mealName: String? = null,
+    /** The dish an "Edit with AI" correction is being worked out for (null when none). */
+    val aiEditingFoodIndex: Int? = null
 ) {
     val totalCalories: Float get() = foods.sumOf { it.totalCalories.toDouble() }.toFloat()
 
@@ -336,6 +340,48 @@ class DescribeFoodViewModel @Inject constructor(
                 foods[foodIndex] = food.copy(ingredients = ingredients)
             }
             state.copy(foods = foods)
+        }
+    }
+
+    /** The 💧 field: this dish's water (ml), spread over its ingredients — as on the photo review (#5, #8). */
+    fun setFoodWater(foodIndex: Int, newTotalMl: Float) {
+        _uiState.update { state ->
+            val foods = state.foods.toMutableList()
+            val food = foods.getOrNull(foodIndex) ?: return@update state
+            foods[foodIndex] = food.withWaterTotal(newTotalMl) ?: return@update state
+            state.copy(foods = foods)
+        }
+    }
+
+    /** The Amount stepper: how many of this dish, scaling every ingredient — as on the photo review (#5). */
+    fun setServings(foodIndex: Int, newServings: Int) {
+        _uiState.update { state ->
+            val foods = state.foods.toMutableList()
+            val food = foods.getOrNull(foodIndex) ?: return@update state
+            foods[foodIndex] = food.withServings(newServings) ?: return@update state
+            state.copy(foods = foods)
+        }
+    }
+
+    /**
+     * "Edit with AI" on a described dish (#5): the same correction as the photo review — the AI rebalances
+     * the dish from a free-text note and sees its "Not sure about" groups; the dish is replaced in place.
+     * On failure it's left unchanged.
+     */
+    fun refineFoodWithAi(foodIndex: Int, instruction: String) {
+        if (instruction.isBlank()) return
+        val food = _uiState.value.foods.getOrNull(foodIndex) ?: return
+        _uiState.update { it.copy(aiEditingFoodIndex = foodIndex) }
+        viewModelScope.launch {
+            val refined = runCatching { pipeline.refineFood(food, instruction) }.getOrNull()
+            _uiState.update { state ->
+                val foods = state.foods.toMutableList()
+                if (refined != null && foodIndex in foods.indices) {
+                    // A correction shouldn't flip food↔drink or blank the name; keep those anchored.
+                    foods[foodIndex] = refined.copy(label = refined.label.ifBlank { food.label }, isDrink = food.isDrink)
+                }
+                state.copy(foods = foods, aiEditingFoodIndex = null)
+            }
         }
     }
 

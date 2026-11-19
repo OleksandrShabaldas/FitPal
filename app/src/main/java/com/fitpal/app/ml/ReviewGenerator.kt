@@ -34,8 +34,9 @@ import kotlin.math.roundToInt
  * Three things keep the coach honest and moving forward (all fed through the prompt's extra context):
  *  - a **TARGET CHECK** computed here, exactly, so the model can't say a target was missed when the
  *    numbers say it was met (it once told a user fibre fell short on a 51 g day against a 30 g goal);
- *  - its **memory** — the advice from the last few overviews and the user's answers to its questions,
- *    so it checks follow-through instead of repeating itself;
+ *  - its **memory** — what it knows about the user ([CoachMemoryRepository], 2.18: patterns, triggers,
+ *    what helps, their life), folded in inside this same call from the answers given since the last
+ *    overview; plus the advice from the last few overviews, so it checks follow-through;
  *  - an **in-progress** note when the period isn't over, plus a [dataSignature] saved with the review
  *    so a later visit can tell it was written before the rest of the day was logged.
  */
@@ -48,6 +49,7 @@ class ReviewGenerator @Inject constructor(
     private val stepRepository: StepRepository,
     private val aiReviewRepository: AiReviewRepository,
     private val contextNoteRepository: ContextNoteRepository,
+    private val coachMemory: com.fitpal.app.data.repository.CoachMemoryRepository,
     private val nutritionAnalytics: NutritionAnalytics,
     private val pipeline: FoodAnalysisPipeline,
     private val modelManager: ModelManager
@@ -96,16 +98,29 @@ class ReviewGenerator @Inject constructor(
             val isDaily = period.equals("daily", ignoreCase = true) || totalDays <= 1
             val reviewLabel = reviewLabelFor(period, from, to, isDaily)
             onProgress("Looking back at your earlier overviews…")
-            val extraContext = buildExtraContext(period, key, from, to, isDaily, reviewLabel, rows, targets, meals)
+            // The coach memory and the answers it hasn't taken in yet, read once so the diff it writes back
+            // is checked against exactly what it was shown (2.18, the 17 Nov review #2).
+            val startedAt = System.currentTimeMillis()
+            val memory = runCatching { coachMemory.current() }.getOrDefault(emptyList())
+            val pending = runCatching { contextNoteRepository.answersSince(settingsRepository.memoryFoldedAt.value) }.getOrDefault(emptyList())
+            val oldNotes = settingsRepository.habitSummary.value.trim()
+            // Only ask for memory changes when there's something to fold in: new answers, the old notes,
+            // or a week/month to learn patterns from. A plain daily overview spends no tokens on it.
+            val askMemory = pending.isNotEmpty() || oldNotes.isNotEmpty() || !isDaily
+            val extraContext = buildExtraContext(period, key, from, to, isDaily, reviewLabel, rows, targets, meals, memory, pending, oldNotes, askMemory)
 
             val (rawReview, source) = pipeline.generateNutritionReviewWithSource(
                 period, rows, totalDays, profile, targets, weights, foodLog, extraContext
             ) { msg -> onProgress(msg) }
 
-            // The model may append a private "HABITS:" line (weekly/monthly) — pull it out as the
-            // updated long-term memory and keep it out of what the user reads.
-            val (review, newHabits) = splitHabits(rawReview)
-            if (!newHabits.isNullOrBlank()) settingsRepository.setHabitSummary(newHabits)
+            // The private "MEMORY:" line (and an older model's "HABITS:" line) never reach the user.
+            val (withoutMemory, memoryRaw) = com.fitpal.app.domain.model.CoachMemoryParser.split(rawReview)
+            val review = splitHabits(withoutMemory).first
+            if (askMemory) {
+                com.fitpal.app.domain.model.CoachMemoryParser.parse(memoryRaw, memory, to)?.let { diff ->
+                    runCatching { coachMemory.apply(diff, startedAt) }
+                }
+            }
             aiReviewRepository.save(period, key, review, source, dataSignature(rows))
             review
         } catch (e: Exception) {
@@ -183,7 +198,11 @@ class ReviewGenerator @Inject constructor(
         reviewLabel: String,
         rows: List<DailyNutritionRow>,
         targets: DailyTargets?,
-        meals: List<CoachMeal>
+        meals: List<CoachMeal>,
+        memory: List<com.fitpal.app.domain.model.MemoryLine>,
+        pending: List<com.fitpal.app.data.local.entity.ContextNoteEntity>,
+        oldNotes: String,
+        askMemory: Boolean
     ): String {
         val schedule = settingsRepository.fastingSchedule.value
         val grace = settingsRepository.fastingGrace.value.keys
@@ -232,9 +251,22 @@ class ReviewGenerator @Inject constructor(
                 appendLine()
                 appendLine("PERSONAL CONTEXT / LIMITATIONS (respect these, never suggest what they rule out): $it")
             }
-            settingsRepository.habitSummary.value.trim().takeIf { it.isNotBlank() }?.let {
+            // What the coach knows about this person — its memory (2.18).
+            appendLine()
+            if (memory.isEmpty()) {
+                appendLine("WHAT YOU KNOW ABOUT THIS PERSON: nothing yet — this is where your memory of them starts.")
+            } else {
+                appendLine("WHAT YOU KNOW ABOUT THIS PERSON (your memory of them — background for understanding, not a verdict on this period; each line has the date it came from; \"their words\" = written by them):")
+                appendLine(com.fitpal.app.domain.model.CoachMemoryParser.promptBlock(memory, withIds = askMemory))
+            }
+            if (pending.isNotEmpty()) {
                 appendLine()
-                appendLine("LONG-TERM HABIT NOTES (what we've learned about this user over time — background, not a verdict on this period): $it")
+                appendLine("NEW SINCE YOUR MEMORY WAS LAST UPDATED (their own answers, newest first — weigh these heavily when explaining WHY):")
+                pending.forEach { appendLine("- ${it.date} (${it.period}): \"${it.question}\" → \"${it.answer}\"") }
+            }
+            if (oldNotes.isNotEmpty()) {
+                appendLine()
+                appendLine("OLDER NOTES (from before your memory existed — fold what's still true into it): $oldNotes")
             }
 
             // Pre-computed pattern/trend brief — lets the coach judge "is this unusual / does it matter".
@@ -244,39 +276,38 @@ class ReviewGenerator @Inject constructor(
                     appendLine(it)
                 }
 
-            // The user's own answers to earlier check-in questions — context the numbers can't show.
-            val since = runCatching { LocalDate.parse(to).minusDays(30).toString() }.getOrDefault(to)
-            val notes = runCatching { contextNoteRepository.getRecentAnswers(since) }.getOrDefault(emptyList())
-            if (notes.isNotEmpty()) {
-                appendLine()
-                appendLine("RECENT CHECK-IN NOTES (the user's own words on days/weeks that looked unusual — weigh these heavily when explaining WHY):")
-                notes.forEach { appendLine("- ${it.date} (${it.period}): \"${it.question}\" → \"${it.answer}\"") }
-            }
-
             // The coach's own earlier advice + the user's answers to its questions.
             runCatching { previousCoaching(period, key, to) }.getOrDefault("").takeIf { it.isNotBlank() }?.let {
                 appendLine()
                 appendLine(it)
             }
 
-            if (!isDaily) {
+            if (askMemory) {
                 appendLine()
-                append(
-                    "AFTER the FOCUS, WATCH, QUESTION and ANSWERS lines, as the very last line of all, on a new line " +
-                        "starting exactly with \"HABITS:\", output an updated, " +
-                        "concise (<=200 words) running profile of this user. Cover, in plain sentences: " +
-                        "eating PATTERNS (meal timing, frequency, consistency, how they keep their fast); common " +
-                        "TRIGGERS — emotional and situational (stress, boredom, tiredness, weekends, social/family " +
-                        "meals) — and which tools have helped with them; STRENGTHS they show consistently; recurring " +
-                        "PROBLEM AREAS (nutrients chronically low, portion control); typical meal CONTEXTS " +
-                        "(home vs restaurant vs on-the-go, from the tags); what they've said in answer to your " +
-                        "questions, and which of your advice they've taken up. Merge the existing notes above with " +
-                        "what this period shows — keep what's still true, update what changed (if a 'problem area' " +
-                        "is now being met, say so). That single line is internal memory; keep it " +
-                        "out of the review the user reads."
-                )
+                append(memoryInstruction(isDaily))
             }
         }.trim()
+    }
+
+    /**
+     * How the coach updates its memory, inside this same reply (no extra call): one `MEMORY:` line of JSON
+     * after the closing lines, read by [com.fitpal.app.domain.model.CoachMemoryParser].
+     */
+    private fun memoryInstruction(isDaily: Boolean): String {
+        val sections = com.fitpal.app.domain.model.MemorySection.entries.joinToString("; ") { "\"${it.id}\" = ${it.title} (${it.hint})" }
+        return "AFTER the FOCUS, WATCH, QUESTION and ANSWERS lines, as the very last line of all, on a new line starting " +
+            "exactly with \"MEMORY:\", update your memory of this person as ONE line of JSON: " +
+            "{\"add\":[{\"section\":\"<id>\",\"text\":\"<one plain sentence>\",\"date\":\"YYYY-MM-DD\"}]," +
+            "\"update\":[{\"id\":<id>,\"text\":\"<new sentence>\"}],\"remove\":[<id>]} (the ids are the numbers in " +
+            "square brackets in WHAT YOU KNOW). Sections: $sections. " +
+            "Fold in EVERY new answer above: understand the context behind it (a short answer is a hint about their " +
+            "situation, not the whole story) and write what it tells you about them — a trigger, a pattern, what " +
+            "helps, their life right now — not a transcript of what they said. " +
+            (if (isDaily) "" else "Add the patterns this period shows. ") +
+            "Merge duplicates, update lines that changed, remove what's no longer true or was answered (an open " +
+            "question they've answered becomes a fact). Never change or remove a line marked \"their words\". " +
+            "Keep the whole memory under 40 lines, plain and kind, no diagnosis words. Use [] for parts with no " +
+            "change. That line is private memory; keep it out of the overview the user reads."
     }
 
     /**
@@ -350,7 +381,11 @@ class ReviewGenerator @Inject constructor(
                 CoachMeal(
                     date = head.date,
                     type = head.mealType,
-                    context = head.context?.takeIf { it.isNotBlank() },
+                    // "Home, Family meal · felt Tired": where and who with, then how they felt (2.18, #4).
+                    context = listOfNotNull(
+                        head.context?.takeIf { it.isNotBlank() },
+                        head.feelings?.takeIf { it.isNotBlank() }?.let { "felt $it" }
+                    ).joinToString(" · ").takeIf { it.isNotEmpty() },
                     timestamp = head.timestamp,
                     kcal = items.sumOf { it.calories.toDouble() }.toFloat(),
                     items = items,
@@ -670,10 +705,12 @@ class ReviewGenerator @Inject constructor(
             appendLine("- Don't repeat earlier advice or observations in the same words. If a point still applies, say " +
                 "it has come up before and change the angle (a smaller first step, a different example, or what's " +
                 "getting in the way); otherwise move on to what's new.")
-            appendLine("- Treat their answers as their own context — build on them, never contradict them.")
-            append("- An answer is context for ALL your coaching, not a thread to keep pulling: \"I don't like plain protein " +
-                "foods\" means respect it in what you suggest — not ask about protein again next time. Follow what's happening " +
-                "in THIS period instead.")
+            appendLine("- Use WHAT YOU KNOW ABOUT THIS PERSON to understand them: tailor your advice to their real situation, " +
+                "the triggers that apply and what has helped them before. When this period matches a pattern you know, " +
+                "connect it and suggest what fits their life. Read their answers for the context behind them, not word " +
+                "for word, and never contradict them.")
+            append("- Never quote them back (\"you said…\", \"yesterday you mentioned…\") and don't carry on a conversation: " +
+                "your QUESTION is always about THIS period's biggest unexplained moment, never a follow-up to their last answer.")
         }
     }
 

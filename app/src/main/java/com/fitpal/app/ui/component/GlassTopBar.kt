@@ -1,5 +1,6 @@
 package com.fitpal.app.ui.component
 
+import com.fitpal.app.ui.component.kit.MarqueeText
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -50,7 +51,8 @@ import com.fitpal.app.ui.theme.glass
  * Liquid and Material collapse through [LocalTopBarScroll], which the screen's backdrop provides.
  *
  * [onTitleClick] makes the title tappable with a small pencil after it (a meal's name, renamed in
- * place); [titleMaxLines] lets a long one take two lines in Glow and Paper (docs/redesign/16).
+ * place); [titleMaxLines] lets a long one take two lines in Glow and Paper (docs/redesign/16); [marquee]
+ * keeps it on one line that slides to show the rest, in every look (the meal page, the 17 Nov review, #9).
  */
 @Composable
 fun GlassTopBar(
@@ -59,11 +61,12 @@ fun GlassTopBar(
     onBack: (() -> Unit)? = null,
     titleMaxLines: Int = 1,
     onTitleClick: (() -> Unit)? = null,
+    marquee: Boolean = false,
     actions: @Composable RowScope.() -> Unit = {}
 ) {
     when (LookState.style) {
-        LookStyle.LIQUID -> LiquidTopBar(title, modifier, onBack, onTitleClick, actions)
-        LookStyle.MATERIAL -> MaterialTopBar(title, modifier, onBack, onTitleClick, actions)
+        LookStyle.LIQUID -> LiquidTopBar(title, modifier, onBack, onTitleClick, marquee, actions)
+        LookStyle.MATERIAL -> MaterialTopBar(title, modifier, onBack, onTitleClick, marquee, actions)
         else -> Row(
             modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -87,14 +90,18 @@ fun GlassTopBar(
                 Modifier.weight(1f).then(if (onTitleClick != null) Modifier.clickable(onClick = onTitleClick) else Modifier),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    title,
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = Cream,
-                    maxLines = titleMaxLines,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false)
-                )
+                if (marquee) {
+                    MarqueeText(title, MaterialTheme.typography.headlineSmall, Cream, Modifier.weight(1f, fill = false))
+                } else {
+                    Text(
+                        title,
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = Cream,
+                        maxLines = titleMaxLines,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                }
                 TitlePencil(title, onTitleClick)
             }
             actions()
@@ -104,7 +111,7 @@ fun GlassTopBar(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun LiquidTopBar(title: String, modifier: Modifier, onBack: (() -> Unit)?, onTitleClick: (() -> Unit)?, actions: @Composable RowScope.() -> Unit) {
+private fun LiquidTopBar(title: String, modifier: Modifier, onBack: (() -> Unit)?, onTitleClick: (() -> Unit)?, marquee: Boolean, actions: @Composable RowScope.() -> Unit) {
     val behavior = LocalTopBarScroll.current
     // With a back button the large title sits under the button row and the bar loses that row as
     // it collapses; without one (a tab's root) the large title simply turns into the small one.
@@ -136,14 +143,19 @@ private fun LiquidTopBar(title: String, modifier: Modifier, onBack: (() -> Unit)
                 }
             }
             Box(Modifier.weight(1f).padding(horizontal = 8.dp), contentAlignment = Alignment.Center) {
-                Text(
-                    title,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Cream,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.alpha(((f - 0.55f) / 0.45f).coerceIn(0f, 1f))
-                )
+                val smallAlpha = Modifier.alpha(((f - 0.55f) / 0.45f).coerceIn(0f, 1f))
+                if (marquee) {
+                    MarqueeText(title, MaterialTheme.typography.titleMedium, Cream, smallAlpha)
+                } else {
+                    Text(
+                        title,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Cream,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = smallAlpha
+                    )
+                }
             }
             actions()
         }
@@ -156,14 +168,18 @@ private fun LiquidTopBar(title: String, modifier: Modifier, onBack: (() -> Unit)
                 .then(if (onTitleClick != null) Modifier.clickable(onClick = onTitleClick) else Modifier),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                title,
-                style = MaterialTheme.typography.headlineLarge,
-                color = Cream,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false)
-            )
+            if (marquee) {
+                MarqueeText(title, MaterialTheme.typography.headlineLarge, Cream, Modifier.weight(1f, fill = false))
+            } else {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.headlineLarge,
+                    color = Cream,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+            }
             TitlePencil(title, onTitleClick)
         }
     }
@@ -171,7 +187,7 @@ private fun LiquidTopBar(title: String, modifier: Modifier, onBack: (() -> Unit)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MaterialTopBar(title: String, modifier: Modifier, onBack: (() -> Unit)?, onTitleClick: (() -> Unit)?, actions: @Composable RowScope.() -> Unit) {
+private fun MaterialTopBar(title: String, modifier: Modifier, onBack: (() -> Unit)?, onTitleClick: (() -> Unit)?, marquee: Boolean, actions: @Composable RowScope.() -> Unit) {
     val behavior = LocalTopBarScroll.current
     val scheme = MaterialTheme.colorScheme
     val colors = TopAppBarDefaults.mediumTopAppBarColors(
@@ -186,7 +202,11 @@ private fun MaterialTopBar(title: String, modifier: Modifier, onBack: (() -> Uni
             Modifier.then(if (onTitleClick != null) Modifier.clickable(onClick = onTitleClick) else Modifier),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+            if (marquee) {
+                MarqueeText(title, androidx.compose.material3.LocalTextStyle.current, androidx.compose.material3.LocalContentColor.current, Modifier.weight(1f, fill = false))
+            } else {
+                Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+            }
             TitlePencil(title, onTitleClick)
         }
     }

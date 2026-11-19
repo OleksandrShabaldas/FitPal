@@ -46,7 +46,7 @@ const val SETTINGS_FEEDBACK = "feedback"
 
 private val FEATURES get() = SettingsCategoryInfo("features", "Features", "Fasting, caffeine, food limits, the Trail — on or off", Icons.Default.ToggleOn)
 private val PROFILE get() = SettingsCategoryInfo("profile", "Profile & goals", "You, your goal, calorie and macro targets", Icons.Default.Person)
-private val LOGGING get() = SettingsCategoryInfo("presets", "Logging & meal times", "Quick-add amounts and when each meal counts", Icons.Default.Restaurant)
+private val LOGGING get() = SettingsCategoryInfo("presets", "Logging & meal times", "Quick-add amounts, meal times and your meal tags", Icons.Default.Restaurant)
 private val FASTING get() = SettingsCategoryInfo("fasting", "Fasting", "Your eating window, the timer and how strict it is", Icons.Default.HourglassEmpty, FastingColor)
 private val LIMITS get() = SettingsCategoryInfo("rules", "Food limits", "Daily caps for dessert, fried food and sugary drinks", Icons.Default.Icecream, DessertColor)
 private val CAFFEINE get() = SettingsCategoryInfo("caffeine", "Caffeine", "What's still in your body and when it wears off", Icons.Default.Coffee, CaffeineColor)
@@ -115,6 +115,8 @@ val SETTINGS_SEARCH_INDEX = listOf(
     SettingsSearchEntry("Step goal", "activity", "steps_goal", "step goal daily steps walking target automatic average"),
     SettingsSearchEntry("Water goal", "presets", "water", "water goal hydration drink daily ml litres liters quick add water buttons"),
     SettingsSearchEntry("Meal times", "presets", "meal_times", "breakfast lunch dinner snack time window"),
+    SettingsSearchEntry("Situation tags", "presets", "tags", "tags situation where who with home restaurant family meal work school social on the go travel rename hide add own custom"),
+    SettingsSearchEntry("How you felt", "presets", "tags", "feelings mood felt hungry stressed tired bored celebrating rushed emotion tags coach"),
     // Fasting
     SettingsSearchEntry("Intermittent fasting", "fasting", "fasting", "fast eating window 16:8 18:6 omad timer ring bar intensity intense strict warn notify notification drinks drink coffee black coffee tea water diet soda zero calorie protein shake break"),
     // Food limits

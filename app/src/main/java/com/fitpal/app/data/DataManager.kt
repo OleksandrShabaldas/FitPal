@@ -38,7 +38,9 @@ class DataManager @Inject constructor(
         // (Older backups don't have it — restore skips a table the file doesn't contain.)
         "context_notes",
         // The meal planner's ideas and scheduled meals (2.13).
-        "planned_meals"
+        "planned_meals",
+        // What the AI coach knows about you (2.18).
+        "coach_memory"
     )
 
     /** Write all user data as JSON to [uri]. Returns true on success. */
@@ -76,6 +78,11 @@ class DataManager @Inject constructor(
             root.put("food_profile", JSONObject(settings.foodProfile.value.toJson()))
             settings.lastPlanRequest.takeIf { it.isNotBlank() }?.let { root.put("last_plan_request", JSONObject(it)) }
             root.put("dismissed_suggestions", JSONArray(settings.dismissedSuggestions.value.toList()))
+            // Skipped weeks and months removed from the Coach tab (2.18).
+            root.put("dismissed_reviews", JSONArray(settings.dismissedReviews.value.toList()))
+            // Your meal tags, and when the coach memory last took in your answers (2.18).
+            root.put("tag_settings", settings.tagSettings.value.toJson())
+            root.put("memory_folded_at", settings.memoryFoldedAt.value)
             // Your drinks and the three on the caffeine planner (2.15).
             root.put("caffeine_drinks", JSONArray(com.fitpal.app.domain.Caffeine.drinksToJson(settings.caffeineDrinks.value)))
             root.put("caffeine_quick_drinks", JSONArray(settings.caffeineQuickDrinks.value))
@@ -144,6 +151,13 @@ class DataManager @Inject constructor(
             root.optJSONArray("dismissed_suggestions")?.let { arr ->
                 settings.setDismissedSuggestions((0 until arr.length()).mapNotNull { arr.optString(it).takeIf { s -> s.isNotBlank() } }.toSet())
             }
+            root.optJSONArray("dismissed_reviews")?.let { arr ->
+                settings.setDismissedReviews((0 until arr.length()).mapNotNull { arr.optString(it).takeIf { s -> s.isNotBlank() } }.toSet())
+            }
+            root.optString("tag_settings").takeIf { it.isNotBlank() }?.let {
+                settings.setTagSettings(com.fitpal.app.domain.model.TagSettings.fromJson(it))
+            }
+            if (root.has("memory_folded_at")) settings.setMemoryFoldedAt(root.optLong("memory_folded_at", 0L))
             root.optJSONArray("caffeine_drinks")?.let { arr ->
                 com.fitpal.app.domain.Caffeine.drinksFromJson(arr.toString())?.let(settings::setCaffeineDrinks)
             }

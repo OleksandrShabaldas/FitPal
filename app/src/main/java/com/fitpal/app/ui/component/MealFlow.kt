@@ -50,6 +50,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -288,7 +290,7 @@ fun MealDetailsPanel(
         }
         Spacer(Modifier.height(2.dp))
         PanelLabel("Where & who with (optional)")
-        MealContextSelector(selected = tags, onToggle = onToggleTag)
+        MealContextSelector(selected = tags, onToggle = onToggleTag, feelingsLabel = { PanelLabel("How you felt (optional)") })
     }
 }
 
@@ -341,6 +343,51 @@ fun MealTypePills(selected: String, onSelected: (String) -> Unit, modifier: Modi
         }
     }
 }
+
+/**
+ * A meal page's list with its bottom controls floating over it (the 17 Nov review, #10, option B). The list
+ * runs to the bottom of the screen and scrolls behind the meal pills (and the Log bar); there's no strip
+ * behind them. Instead the list itself fades out where it meets them (a mask, not a painted band, so the
+ * look's backdrop or the user's photo shows through), and its bottom padding follows the controls' height
+ * so the last card can scroll up above them.
+ *
+ * [content] gets the modifier that draws the fade (put it on the list) and the bottom padding to give it.
+ */
+@Composable
+fun FloatingBottomBox(
+    modifier: Modifier = Modifier,
+    content: @Composable (fade: Modifier, bottomPadding: androidx.compose.ui.unit.Dp) -> Unit,
+    bottom: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit
+) {
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    var barPx by remember { mutableStateOf(0) }
+    val fadePx = with(density) { FLOAT_FADE.toPx() }
+    val fade = Modifier
+        .graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }
+        .drawWithContent {
+            drawContent()
+            if (barPx > 0) {
+                // Fully there above the controls, faint behind them (still visibly scrolling past).
+                drawRect(
+                    brush = Brush.verticalGradient(
+                        0f to Color.Black, 1f to Color.Black.copy(alpha = 0.14f),
+                        startY = size.height - barPx - fadePx, endY = size.height - barPx * 0.35f
+                    ),
+                    blendMode = androidx.compose.ui.graphics.BlendMode.DstIn
+                )
+            }
+        }
+    Box(modifier) {
+        content(fade, with(density) { barPx.toDp() } + 16.dp)
+        Column(
+            Modifier.align(Alignment.BottomCenter).fillMaxWidth().onSizeChanged { barPx = it.height },
+            content = bottom
+        )
+    }
+}
+
+/** How far above the floating controls the list starts to fade. */
+private val FLOAT_FADE = 28.dp
 
 /**
  * The note for the AI before the photo is analysed: always open (about four lines, growing as you

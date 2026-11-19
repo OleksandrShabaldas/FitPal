@@ -32,6 +32,7 @@ interface WearWorkerEntryPoint {
     fun stepRepository(): com.fitpal.app.data.repository.StepRepository
     fun weightRepository(): WeightRepository
     fun settingsRepository(): SettingsRepository
+    fun coachMemoryRepository(): com.fitpal.app.data.repository.CoachMemoryRepository
     fun appForegroundState(): AppForegroundState
     fun statsPublisher(): WearStatsPublisher
 }

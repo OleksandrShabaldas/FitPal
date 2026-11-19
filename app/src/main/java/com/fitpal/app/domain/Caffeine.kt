@@ -36,6 +36,9 @@ sealed interface SleepVerdict {
     data object NotWithin36h : SleepVerdict
 }
 
+/** A stretch where caffeine is near its top — see [Caffeine.peakWindows]. */
+data class PeakWindow(val startMillis: Long, val endMillis: Long, val peakAtMillis: Long, val peakMg: Float)
+
 /** One caffeinated thing eaten or drunk: when, how much, and whether the amount is a rough guess. */
 data class CaffeineDose(
     val atMillis: Long,
@@ -254,6 +257,51 @@ object Caffeine {
             }.distinctBy { it.label.lowercase() }.sortedWith(drinkOrder).takeIf { it.isNotEmpty() }
         }.getOrNull()
     }
+
+    /**
+     * Where caffeine does its job — the "peak focus" columns on the caffeine curve (the 17 Nov review, #1).
+     * The alertness effect follows how much is in the blood, strongest around the top of the curve, so each
+     * local top of the summed level that reaches [CaffeineSettings.SLEEP_FRIENDLY_MG] (below that, caffeine
+     * does little either way) gets a window: the stretch around it where the level stays at or above
+     * [PEAK_SHARE] of that top. It follows the user's half-life by itself. Windows that touch merge.
+     */
+    fun peakWindows(
+        doses: List<CaffeineDose>,
+        fromMillis: Long,
+        toMillis: Long,
+        halfLifeHours: Float,
+        stepMinutes: Int = 5
+    ): List<PeakWindow> {
+        if (doses.isEmpty() || toMillis <= fromMillis || stepMinutes <= 0) return emptyList()
+        val step = stepMinutes * 60_000L
+        val times = generateSequence(fromMillis) { it + step }.takeWhile { it <= toMillis }.toList()
+        if (times.size < 3) return emptyList()
+        val levels = times.map { amountAt(doses, it, halfLifeHours) }
+        val found = mutableListOf<PeakWindow>()
+        for (i in 1 until levels.size - 1) {
+            val top = levels[i]
+            if (top < CaffeineSettings.SLEEP_FRIENDLY_MG || top <= levels[i - 1] || top < levels[i + 1]) continue
+            var a = i
+            var b = i
+            while (a > 0 && levels[a - 1] >= PEAK_SHARE * top) a--
+            while (b < levels.size - 1 && levels[b + 1] >= PEAK_SHARE * top) b++
+            found += PeakWindow(times[a], times[b], times[i], top)
+        }
+        // Overlapping or touching windows (two drinks close together) become one, keeping the higher top.
+        return found.sortedBy { it.startMillis }.fold(mutableListOf()) { acc, w ->
+            val last = acc.lastOrNull()
+            if (last != null && w.startMillis <= last.endMillis + step) {
+                acc[acc.lastIndex] = PeakWindow(
+                    last.startMillis, maxOf(last.endMillis, w.endMillis),
+                    if (w.peakMg > last.peakMg) w.peakAtMillis else last.peakAtMillis, maxOf(last.peakMg, w.peakMg)
+                )
+            } else acc += w
+            acc
+        }
+    }
+
+    /** How close to its top the level must stay to count as "peak focus" — within a quarter (the user's pick). */
+    const val PEAK_SHARE = 0.75f
 
     /** The level sampled evenly from [fromMillis] to [toMillis] — the detail chart's line. */
     fun curve(doses: List<CaffeineDose>, fromMillis: Long, toMillis: Long, points: Int, halfLifeHours: Float): List<Float> {

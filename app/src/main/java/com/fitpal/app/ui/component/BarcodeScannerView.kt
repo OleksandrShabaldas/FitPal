@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PhotoLibrary
@@ -83,13 +84,13 @@ fun BarcodeScannerView(
         }
 
         CameraControlEffect(camera, camControl)
-        FlashToggle(camControl, hasFlash, Modifier.align(Alignment.TopEnd).padding(16.dp))
-        ZoomSlider(camControl, Modifier.align(Alignment.BottomCenter).padding(bottom = 32.dp))
+        FlashToggle(camControl, hasFlash, Modifier.align(Alignment.TopEnd).systemBarsPadding().padding(16.dp))
+        ZoomSlider(camControl, Modifier.align(Alignment.BottomCenter).systemBarsPadding().padding(bottom = 32.dp))
 
         // Pick an existing photo of a barcode instead of scanning live.
         IconButton(
             onClick = onPickFromGallery,
-            modifier = Modifier.align(Alignment.BottomStart).padding(start = 24.dp, bottom = 24.dp).size(52.dp)
+            modifier = Modifier.align(Alignment.BottomStart).systemBarsPadding().padding(start = 24.dp, bottom = 24.dp).size(52.dp)
                 .background(Color.Black.copy(alpha = 0.4f), CircleShape)
         ) {
             Icon(Icons.Default.PhotoLibrary, contentDescription = "Pick barcode from gallery", tint = Color.White, modifier = Modifier.size(26.dp))

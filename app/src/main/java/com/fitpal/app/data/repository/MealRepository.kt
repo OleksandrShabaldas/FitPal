@@ -55,6 +55,11 @@ data class MealLogMeta(
     val timeSource: TimeSource = TimeSource.LOGGED,
     /** Situation tags, already joined (see [com.fitpal.app.domain.model.MealContext.format]). */
     val context: String? = null,
+    /**
+     * Every tag chosen on the screen, both rows; split into situation and feelings when the meal is
+     * written, by the user's lists (2.18). Wins over [context] when not empty.
+     */
+    val tags: Set<String> = emptySet(),
     /** "Log anyway" during a fast — see [MealLogEntity.loggedDuringFast]. */
     val loggedDuringFast: Boolean = false,
     /** The whole meal's own name, when the user gave it one before logging ([MealLogEntity.name]). */
@@ -83,6 +88,7 @@ fun mealLogMeta(
         eatenAt = time?.let { com.fitpal.app.domain.model.EatenAt(it).epochMillis(logDate) },
         timeSource = source,
         context = com.fitpal.app.domain.model.MealContext.format(tags),
+        tags = tags,
         loggedDuringFast = decision.loggedDuringFast
     )
 }
@@ -411,10 +417,30 @@ class MealRepository @Inject constructor(
     }
 
     /** The meal row for a new log, carrying its eaten time, tags and fasting outcome. */
-    private fun newMealLog(logDate: String, mealType: String, meta: MealLogMeta) = MealLogEntity(
+    private fun newMealLog(logDate: String, mealType: String, meta: MealLogMeta): MealLogEntity {
+        val (context, feelings) = if (meta.tags.isNotEmpty()) tagColumns(meta.tags) else meta.context to null
+        return newMealLogRow(logDate, mealType, meta, context, feelings)
+    }
+
+    /** A meal's tag set as its two columns: (situation tags, feelings), each joined in the user's order. */
+    fun tagColumns(tags: Set<String>): Pair<String?, String?> {
+        val lists = settingsRepository.tagSettings.value
+        val (situation, feelings) = lists.split(tags)
+        return com.fitpal.app.domain.model.MealContext.format(situation, lists.situation.map { it.name }) to
+            com.fitpal.app.domain.model.MealContext.format(feelings, lists.feelings.map { it.name })
+    }
+
+    /** Set every tag on a whole meal (both rows) — the meal page's "When and where" panel. */
+    suspend fun updateMealTags(mealLogId: Long, tags: Set<String>) {
+        val (context, feelings) = tagColumns(tags)
+        mealLogDao.updateMealTags(mealLogId, context, feelings)
+    }
+
+    private fun newMealLogRow(logDate: String, mealType: String, meta: MealLogMeta, context: String?, feelings: String?) = MealLogEntity(
         date = logDate,
         mealType = mealType,
-        context = meta.context,
+        context = context,
+        feelings = feelings,
         timestamp = meta.eatenAt ?: defaultTimestamp(logDate),
         timeSource = if (meta.eatenAt == null) null else meta.timeSource.dbValue,
         loggedDuringFast = meta.loggedDuringFast,
@@ -744,6 +770,7 @@ class MealRepository @Inject constructor(
         val mealLog = copyMealLog(date, type, decision).copy(
             name = mealLogDao.getMealName(mealLogId),
             context = original?.context,
+            feelings = original?.feelings,
             // Carry the coach's note too — a copy of the meal keeps its note (it's judged against the
             // day, and a copy lands on a nearby day, so it stays relevant). Copies bypass
             // InsightsWorker, so nothing overwrites it.

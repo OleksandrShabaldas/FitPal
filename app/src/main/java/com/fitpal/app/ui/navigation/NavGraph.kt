@@ -181,7 +181,10 @@ fun FitPalNavHost(
     }
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background
+        containerColor = MaterialTheme.colorScheme.background,
+        // No system-bar insets here: each screen's backdrop draws under the status and gesture bars and
+        // pads its own content (GradientBackdrop), so no strip of window colour shows above it (#11).
+        contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0)
     ) { innerPadding ->
         // How much of the bottom the bar covers on this screen, for screens that weren't built as tabs.
         androidx.compose.runtime.CompositionLocalProvider(LocalBottomBarInset provides (if (showBottomBar) 110.dp else 0.dp)) {
@@ -325,12 +328,16 @@ fun FitPalNavHost(
                     onOpenPlan = { id -> navController.navigate(Screen.PlanResults.buildRoute(id)) },
                     onOpenRecipe = { id -> navController.navigate(Screen.PlannedMeal.buildRoute(id)) },
                     onOpenFoodProfile = { navController.navigate(Screen.FoodProfile.route) },
+                    onOpenMemory = { navController.navigate(Screen.CoachMemory.route) },
                     onSwipeRight = neighbour(com.fitpal.app.domain.model.NavTab.COACH, -1),
                     onSwipeLeft = neighbour(com.fitpal.app.domain.model.NavTab.COACH, +1)
                 )
             }
             composable(Screen.FoodProfile.route) {
                 com.fitpal.app.ui.screen.coach.FoodProfileScreen(onBack = safeBack)
+            }
+            composable(Screen.CoachMemory.route) {
+                com.fitpal.app.ui.screen.coach.CoachMemoryScreen(onBack = safeBack)
             }
             composable(
                 route = Screen.PlanResults.route,

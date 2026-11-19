@@ -231,6 +231,31 @@ class SettingsRepository @Inject constructor(
         _habitSummary.value = clean
     }
 
+    // --- What the coach knows: when its memory last took in the user's answers (2.18, the 17 Nov review #2) ---
+
+    private val _memoryFoldedAt = MutableStateFlow(prefs.getLong(KEY_MEMORY_FOLDED_AT, 0L))
+    /**
+     * When the coach memory last took in the user's answers (epoch ms, 0 = never). Answers newer than this
+     * are "pending" and go into the next overview's call, which folds them into the memory (no extra call).
+     */
+    val memoryFoldedAt: StateFlow<Long> = _memoryFoldedAt
+
+    fun setMemoryFoldedAt(millis: Long) {
+        prefs.edit().putLong(KEY_MEMORY_FOLDED_AT, millis).apply()
+        _memoryFoldedAt.value = millis
+    }
+
+    // --- Meal tags: where and who with, how you felt (2.18, the 17 Nov review #4) ---
+
+    private val _tagSettings = MutableStateFlow(com.fitpal.app.domain.model.TagSettings.fromJson(prefs.getString(KEY_TAG_SETTINGS, null)))
+    /** The two rows of tags on a meal's panel, in the user's order (Settings → Logging & meal times). */
+    val tagSettings: StateFlow<com.fitpal.app.domain.model.TagSettings> = _tagSettings
+
+    fun setTagSettings(value: com.fitpal.app.domain.model.TagSettings) {
+        prefs.edit().putString(KEY_TAG_SETTINGS, value.toJson()).apply()
+        _tagSettings.value = value
+    }
+
     // --- Daily log reminder (off by default; time stored as minutes since midnight) ---
 
     private val _reminderEnabled = MutableStateFlow(prefs.getBoolean(KEY_REMINDER_ENABLED, false))
@@ -675,6 +700,20 @@ class SettingsRepository @Inject constructor(
     fun setDismissedSuggestions(ids: Set<String>) {
         prefs.edit().putStringSet(KEY_DISMISSED_SUGGESTIONS, ids).apply()
         _dismissedSuggestions.value = ids
+    }
+
+    private val _dismissedReviews = MutableStateFlow(
+        prefs.getStringSet(KEY_DISMISSED_REVIEWS, emptySet())?.toSet() ?: emptySet()
+    )
+    /**
+     * Skipped weeks and months removed from the Coach tab with × (the 17 Nov review, #3), as
+     * `SkippedReviews.Skipped.id` ("weekly|2026-11-03"). They don't come back. In the backup.
+     */
+    val dismissedReviews: StateFlow<Set<String>> = _dismissedReviews
+
+    fun setDismissedReviews(ids: Set<String>) {
+        prefs.edit().putStringSet(KEY_DISMISSED_REVIEWS, ids).apply()
+        _dismissedReviews.value = ids
     }
 
     /** The day the current week's suggestion was first shown (ISO), and the day "Not now" hid it. */
@@ -1261,6 +1300,8 @@ class SettingsRepository @Inject constructor(
         private const val KEY_ONLINE_AI_ENABLED = "online_ai_enabled"
         private const val KEY_PERSONAL_CONTEXT = "personal_context"
         private const val KEY_HABIT_SUMMARY = "habit_summary"
+        private const val KEY_MEMORY_FOLDED_AT = "memory_folded_at"
+        private const val KEY_TAG_SETTINGS = "tag_settings"
         private const val KEY_WATCH_STEPS = "watch_steps_by_date"
         private const val KEY_AUTO_CHECK_UPDATES = "auto_check_updates"
         private const val KEY_AUTO_INSTALL_UPDATES = "auto_install_updates"
@@ -1318,6 +1359,7 @@ class SettingsRepository @Inject constructor(
         private const val KEY_NAV_COACH_MIGRATED = "nav_coach_migrated"
         private const val KEY_SEEN_REVIEWS = "seen_reviews"
         private const val KEY_DISMISSED_SUGGESTIONS = "dismissed_suggestions"
+        private const val KEY_DISMISSED_REVIEWS = "dismissed_reviews"
         private const val KEY_SUGGESTION_SHOWN = "suggestion_shown_on"
         private const val KEY_SUGGESTION_HIDDEN = "suggestion_hidden_on"
         private const val KEY_APPEARANCE = "appearance"

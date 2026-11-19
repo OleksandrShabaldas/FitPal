@@ -146,6 +146,7 @@ fun SettingsCategoryScreen(
                     SettingsAnchor("presets", focus) { PresetsSection(viewModel) }
                     SettingsAnchor("water", focus) { WaterGoalSection(viewModel) }
                     SettingsAnchor("meal_times", focus) { MealTimesSection(viewModel) }
+                    SettingsAnchor("tags", focus) { TagsSection(viewModel) }
                 }
                 "fasting" -> {
                     SettingsAnchor("fasting", focus) { FastingSection(viewModel, onWhereOnHome = { onOpenCategory("personalize", "trackers") }) }

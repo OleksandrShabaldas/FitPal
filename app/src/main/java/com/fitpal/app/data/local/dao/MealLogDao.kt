@@ -28,6 +28,8 @@ data class LoggedFoodRow(
     val mealLogId: Long = 0,
     /** The situation tag the user set on that meal ("Restaurant"/…), or null if untagged. */
     val context: String? = null,
+    /** How the user felt at that meal ("Tired, Stressed"), or null (2.18). */
+    val feelings: String? = null,
     /** When the meal was eaten (epoch millis) — so the coach sees timing, late meals and the fast. */
     val timestamp: Long = 0L,
     val isDrink: Boolean = false,
@@ -401,6 +403,10 @@ interface MealLogDao {
     @Query("UPDATE meal_logs SET context = :context WHERE id = :mealLogId")
     suspend fun updateMealContext(mealLogId: Long, context: String?)
 
+    /** Both rows of a meal's tags at once: where and who with, and how the user felt (2.18). */
+    @Query("UPDATE meal_logs SET context = :context, feelings = :feelings WHERE id = :mealLogId")
+    suspend fun updateMealTags(mealLogId: Long, context: String?, feelings: String?)
+
     /** Save (or clear) the cached meal-level coaching tip JSON on a whole meal. */
     @Query("UPDATE meal_logs SET coachingTipJson = :coachingTipJson WHERE id = :mealLogId")
     suspend fun updateCoachingTip(mealLogId: Long, coachingTipJson: String?)
@@ -576,7 +582,7 @@ interface MealLogDao {
     /** Every logged food in a date range (so the AI review can see WHAT was eaten, not just totals). */
     @Query("""
         SELECT m.date AS date, i.name AS name, i.calories AS calories, m.mealType AS mealType,
-               m.id AS mealLogId, m.context AS context, m.timestamp AS timestamp,
+               m.id AS mealLogId, m.context AS context, m.feelings AS feelings, m.timestamp AS timestamp,
                i.isDrink AS isDrink, m.loggedDuringFast AS loggedDuringFast
         FROM meal_log_items i JOIN meal_logs m ON i.mealLogId = m.id
         WHERE m.date BETWEEN :from AND :to

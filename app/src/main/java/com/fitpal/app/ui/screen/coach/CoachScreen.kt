@@ -1,5 +1,10 @@
 package com.fitpal.app.ui.screen.coach
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.filled.Close
 import com.fitpal.app.ui.component.kit.aiGlow
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -77,6 +82,7 @@ fun CoachScreen(
     onOpenPlan: (requestId: String) -> Unit,
     onOpenRecipe: (Long) -> Unit,
     onOpenFoodProfile: () -> Unit,
+    onOpenMemory: () -> Unit = {},
     onSwipeLeft: () -> Unit = {},
     onSwipeRight: () -> Unit = {},
     viewModel: CoachViewModel = hiltViewModel()
@@ -96,6 +102,16 @@ fun CoachScreen(
     var recent by remember { mutableStateOf(emptyList<String>()) }
     var left by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     var showEarlier by remember { mutableStateOf(false) }
+    var showSkipped by remember { mutableStateOf(false) }
+    val snackbar = remember { androidx.compose.material3.SnackbarHostState() }
+    // × on a skipped week or month, with Undo (the 17 Nov review, #3).
+    fun dismiss(item: com.fitpal.app.domain.SkippedReviews.Skipped) {
+        viewModel.dismissSkipped(item)
+        scope.launch {
+            val r = snackbar.showSnackbar("${item.title} removed", actionLabel = "Undo", duration = androidx.compose.material3.SnackbarDuration.Short)
+            if (r == androidx.compose.material3.SnackbarResult.ActionPerformed) viewModel.undoDismissSkipped(item)
+        }
+    }
     LaunchedEffect(requestSheet != null) {
         if (requestSheet != null) {
             recent = viewModel.recentIngredients()
@@ -109,6 +125,7 @@ fun CoachScreen(
     }
 
     GradientBackdrop(theme = BackdropTheme.TRENDS) {
+        Box(Modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier.fillMaxSize().swipeNavigation(onSwipeLeft = onSwipeLeft, onSwipeRight = onSwipeRight),
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 110.dp),
@@ -151,10 +168,33 @@ fun CoachScreen(
                         if (i > 0) Divider()
                         LinkRow(row.title, row.subtitle, ready = row.ready) { openReview(row.period, row.key) }
                     }
+                    // Finished weeks and months that never got an overview: the newest three, then the rest.
+                    if (ui.skipped.isNotEmpty()) {
+                        Spacer(Modifier.height(10.dp))
+                        Text(
+                            "SKIPPED", style = MaterialTheme.typography.labelSmall, color = CreamFaint,
+                            letterSpacing = 1.2.sp
+                        )
+                        ui.skipped.take(SKIPPED_SHOWN).forEachIndexed { i, item ->
+                            if (i > 0) Divider()
+                            SkippedRow(item, onWrite = { openReview(item.period, item.key) }, onDismiss = { dismiss(item) })
+                        }
+                        val more = ui.skipped.size - SKIPPED_SHOWN
+                        if (more > 0) {
+                            Divider()
+                            LinkRow("$more more", "Older skipped weeks and months") { showSkipped = true }
+                        }
+                    }
                     if (ui.earlier.isNotEmpty()) {
                         Divider()
                         LinkRow("Earlier reviews", "${ui.earlier.size} kept") { showEarlier = true }
                     }
+                    // What the coach has learned about you from your answers (2.18, #2).
+                    Divider()
+                    LinkRow(
+                        "What your coach knows",
+                        when (ui.memoryCount) { 0 -> "It learns from your answers"; 1 -> "1 thing"; else -> "${ui.memoryCount} things" }
+                    ) { onOpenMemory() }
                 }
             }
 
@@ -210,6 +250,27 @@ fun CoachScreen(
                 }
             }
         }
+        androidx.compose.material3.SnackbarHost(
+            snackbar,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(start = 16.dp, end = 16.dp, bottom = 104.dp)
+        )
+        }
+    }
+
+    if (showSkipped) {
+        TrackerSheet(title = "Skipped reviews", onDismiss = { showSkipped = false }) {
+            // Up to three months of weeks and months: scrolls inside the sheet.
+            Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState())) {
+            ui.skipped.forEachIndexed { i, item ->
+                if (i > 0) Divider()
+                SkippedRow(
+                    item,
+                    onWrite = { showSkipped = false; openReview(item.period, item.key) },
+                    onDismiss = { dismiss(item); if (ui.skipped.size <= 1) showSkipped = false }
+                )
+            }
+            }
+        }
     }
 
     requestSheet?.let { initial ->
@@ -229,6 +290,8 @@ fun CoachScreen(
 
     if (showEarlier) {
         TrackerSheet(title = "Earlier reviews", onDismiss = { showEarlier = false }) {
+            // Up to 30 kept: scrolls inside the sheet (it used to run off the bottom).
+            Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState())) {
             ui.earlier.forEachIndexed { i, r ->
                 if (i > 0) Divider()
                 val title = when (r.period) {
@@ -238,6 +301,7 @@ fun CoachScreen(
                 }
                 val firstLine = com.fitpal.app.ml.ReviewText.parse(r.text).prose.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty()
                 LinkRow(title, firstLine) { showEarlier = false; openReview(r.period, r.periodKey) }
+            }
             }
         }
     }
@@ -275,6 +339,26 @@ private fun LinkRow(title: String, subtitle: String?, ready: Boolean = false, on
         }
         if (ready) ReadyDot()
         Icon(Icons.Default.ChevronRight, contentDescription = null, tint = CreamFaint)
+    }
+}
+
+/** How many skipped periods sit right in the Reviews card; the rest are one row away. */
+private const val SKIPPED_SHOWN = 3
+
+/** A finished week or month with no overview: its name and how much was logged, "✦ Write" and ×. */
+@Composable
+private fun SkippedRow(item: com.fitpal.app.domain.SkippedReviews.Skipped, onWrite: () -> Unit, onDismiss: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(item.title, style = MaterialTheme.typography.bodyLarge, color = Cream, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(item.subtitle, style = MaterialTheme.typography.bodySmall, color = CreamMuted, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+        Spacer(Modifier.width(8.dp))
+        SetupPill("✦ Write", selected = false, modifier = Modifier.aiGlow(), onClick = onWrite)
+        Icon(
+            Icons.Default.Close, contentDescription = "Remove ${item.title}", tint = CreamMuted,
+            modifier = Modifier.padding(start = 2.dp).size(40.dp).clip(CircleShape).clickable(onClick = onDismiss).padding(11.dp)
+        )
     }
 }
 

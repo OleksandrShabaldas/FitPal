@@ -1,7 +1,6 @@
 package com.fitpal.app.ml
 
 import com.fitpal.app.data.repository.AiReviewRepository
-import com.fitpal.app.data.repository.ContextNoteRepository
 import com.fitpal.app.data.repository.ExerciseRepository
 import com.fitpal.app.data.repository.GalleryRepository
 import com.fitpal.app.data.repository.MealRepository
@@ -33,9 +32,9 @@ class PlannerContextBuilder @Inject constructor(
     private val weights: WeightRepository,
     private val steps: StepRepository,
     private val exercise: ExerciseRepository,
-    private val notes: ContextNoteRepository,
     private val reviews: AiReviewRepository,
-    private val gallery: GalleryRepository
+    private val gallery: GalleryRepository,
+    private val coachMemory: com.fitpal.app.data.repository.CoachMemoryRepository
 ) {
     /** The facts block for planning [day] under [request]. */
     suspend fun build(request: PlanRequest, day: LocalDate): String = buildString {
@@ -156,16 +155,26 @@ class PlannerContextBuilder @Inject constructor(
         return if (lines.isEmpty()) null else (listOf("WHAT THEY NEED (fact, last 14 days):") + lines).joinToString("\n")
     }
 
-    /** The coach's recent advice and what they answered — so plans follow through on it. */
+    /**
+     * The coach's recent advice, and what it knows about this person (the coach memory, 2.18: patterns,
+     * triggers, what helps, their life) — so plans fit their real days and follow through on the advice.
+     */
     private suspend fun memoryBlock(): String? {
         val advice = runCatching { reviews.recent(3) }.getOrDefault(emptyList()).mapNotNull { r ->
             val p = ReviewText.parse(r.text)
             listOfNotNull(p.focus?.let { "focus: $it" }, p.watch?.let { "watch: $it" }).joinToString("; ").takeIf { it.isNotEmpty() }
         }
-        val answers = runCatching { notes.getRecentAnswers(LocalDate.now().minusDays(30).toString(), 5) }.getOrDefault(emptyList())
-            .filter { it.answer != "skipped" }.map { "\"${it.question}\" → \"${it.answer}\"" }
-        if (advice.isEmpty() && answers.isEmpty()) return null
-        return (listOf("COACH'S RECENT ADVICE (follow it where it fits):") + advice.map { "- $it" } + answers.map { "- They said: $it" })
-            .joinToString("\n")
+        val memory = runCatching { coachMemory.current() }.getOrDefault(emptyList())
+        if (advice.isEmpty() && memory.isEmpty()) return null
+        return buildString {
+            if (advice.isNotEmpty()) {
+                appendLine("COACH'S RECENT ADVICE (follow it where it fits):")
+                advice.forEach { appendLine("- $it") }
+            }
+            if (memory.isNotEmpty()) {
+                appendLine("WHAT THE COACH KNOWS ABOUT THEM (plan around it — their schedule, triggers and what helps):")
+                appendLine(com.fitpal.app.domain.model.CoachMemoryParser.promptBlock(memory, withIds = false))
+            }
+        }.trimEnd()
     }
 }

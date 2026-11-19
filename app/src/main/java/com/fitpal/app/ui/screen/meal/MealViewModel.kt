@@ -1,5 +1,6 @@
 package com.fitpal.app.ui.screen.meal
 
+import com.fitpal.app.domain.model.withWaterTotal
 import android.graphics.RectF
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -59,6 +60,8 @@ data class MealUiState(
     val mealName: String? = null,
     /** The one-tap situation tags on this meal ("Home, Family meal"), or null if untagged. */
     val context: String? = null,
+    /** How the user felt at this meal ("Tired"), or null (2.18). */
+    val feelings: String? = null,
     /** When this meal was eaten (its time source says whether it came from the photo). */
     val eatenAt: EatenAt = EatenAt(),
     /** A meal-aware coaching note the background worker may attach; null when there's nothing useful. */
@@ -89,6 +92,9 @@ data class MealUiState(
     /** One-shot confirmation after "copy to another day" — a toast, then cleared. */
     val copyConfirmation: String? = null
 ) {
+    /** Every tag on this meal, both rows. */
+    val tags: Set<String> get() = com.fitpal.app.domain.model.MealContext.parse(context) + com.fitpal.app.domain.model.MealContext.parse(feelings)
+
     val totalCalories: Float get() = dishes.sumOf { it.item.calories.toDouble() }.toFloat()
     val totalProtein: Float get() = dishes.sumOf { it.item.protein.toDouble() }.toFloat()
     val totalFat: Float get() = dishes.sumOf { it.item.fat.toDouble() }.toFloat()
@@ -188,6 +194,7 @@ class MealViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         context = meal?.context,
+                        feelings = meal?.feelings,
                         coachingTip = meal?.let { m -> mealRepository.coachingTipFor(m) },
                         plannedMealId = meal?.plannedMealId,
                         eatenAt = meal?.let { m -> com.fitpal.app.domain.model.eatenAtOf(m.timestamp, m.timeSource) } ?: it.eatenAt
@@ -237,13 +244,12 @@ class MealViewModel @Inject constructor(
 
     // ---- The meal: when, where, which meal, its name ----
 
-    /** Toggle one situation tag on this meal (a meal can carry several). */
+    /** Toggle one tag on this meal — where and who with, or how they felt (a meal can carry several). */
     fun toggleMealContext(tag: String) {
-        val next = com.fitpal.app.domain.model.MealContext.format(
-            com.fitpal.app.domain.model.MealContext.toggle(com.fitpal.app.domain.model.MealContext.parse(_uiState.value.context), tag)
-        )
-        _uiState.update { it.copy(context = next) }
-        viewModelScope.launch { mealRepository.updateMealContext(mealLogId, next) }
+        val next = com.fitpal.app.domain.model.MealContext.toggle(_uiState.value.tags, tag)
+        val (context, feelings) = mealRepository.tagColumns(next)
+        _uiState.update { it.copy(context = context, feelings = feelings) }
+        viewModelScope.launch { mealRepository.updateMealTags(mealLogId, next) }
     }
 
     /** Move this meal to another time on its day. Free — it never spends or refunds a fasting pass. */
@@ -342,6 +348,11 @@ class MealViewModel @Inject constructor(
         viewModelScope.launch { mealRepository.updateItemServings(itemId, n) }
         val factor = n.toFloat() / current
         editDish(itemId) { list -> list.map { it.withGrams(it.grams * factor) } }
+    }
+
+    /** The 💧 field on a logged dish (#8): its water in ml, spread over its ingredients; the day's water follows. */
+    fun setWater(itemId: Long, ml: Float) {
+        editDish(itemId) { list -> list.withWaterTotal(ml) ?: list }
     }
 
     /** Remove one dish; the last one leaves the page. */

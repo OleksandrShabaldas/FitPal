@@ -1,6 +1,8 @@
 package com.fitpal.app.ui.screen.analysis
 
 import com.fitpal.app.domain.model.withChoice
+import com.fitpal.app.domain.model.withServings
+import com.fitpal.app.domain.model.withWaterTotal
 import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
@@ -396,22 +398,10 @@ class AnalysisViewModel @Inject constructor(
 
     /** Override a food's identified water content (ml), spread across its ingredients by weight. */
     fun setFoodWater(foodIndex: Int, newTotalMl: Float) {
-        if (newTotalMl < 0f) return
         _uiState.update { state ->
             val foods = state.detectedFoods.toMutableList()
             val food = foods.getOrNull(foodIndex) ?: return@update state
-            val totalGrams = food.ingredients.sumOf { it.grams.toDouble() }.toFloat()
-            if (totalGrams <= 0f) return@update state
-            val currentWater = food.ingredients.sumOf { it.waterMl.toDouble() }.toFloat()
-            val updated = if (currentWater > 0f) {
-                val factor = newTotalMl / currentWater
-                food.ingredients.map { it.copy(waterMlPer100g = it.waterMlPer100g * factor) }
-            } else {
-                // No water yet — spread the requested amount uniformly per 100 g across the dish.
-                val per100 = newTotalMl / totalGrams * 100f
-                food.ingredients.map { it.copy(waterMlPer100g = per100) }
-            }
-            foods[foodIndex] = food.copy(ingredients = updated)
+            foods[foodIndex] = food.withWaterTotal(newTotalMl) ?: return@update state
             state.copy(detectedFoods = foods)
         }
     }
@@ -423,17 +413,10 @@ class AnalysisViewModel @Inject constructor(
      * shortcut that already applied; the next +/− scales from whatever's currently there.
      */
     fun setServings(foodIndex: Int, newServings: Int) {
-        val n = newServings.coerceIn(1, 50)
         _uiState.update { state ->
             val foods = state.detectedFoods.toMutableList()
             val food = foods.getOrNull(foodIndex) ?: return@update state
-            val current = food.servings.coerceAtLeast(1)
-            if (n == current) return@update state
-            val factor = n.toFloat() / current
-            foods[foodIndex] = food.copy(
-                servings = n,
-                ingredients = food.ingredients.map { it.withGrams(it.grams * factor) }
-            )
+            foods[foodIndex] = food.withServings(newServings) ?: return@update state
             state.copy(detectedFoods = foods)
         }
     }

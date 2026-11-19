@@ -151,10 +151,8 @@ fun MealItemCard(
                 .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    content.name, style = MaterialTheme.typography.titleMedium, color = Cream,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
-                )
+                // One line that slides when it's long (the 17 Nov review, #9: dish names too).
+                com.fitpal.app.ui.component.kit.MarqueeText(content.name, MaterialTheme.typography.titleMedium, Cream, Modifier.weight(1f))
                 Spacer(Modifier.width(8.dp))
                 Text("${content.calories.toInt()} kcal", style = MaterialTheme.typography.titleSmall, color = CalorieColor)
                 if (onExpand != null) {
@@ -178,10 +176,7 @@ fun MealItemCard(
         if (header) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (showName) {
-                    Text(
-                        content.name, style = MaterialTheme.typography.titleMedium, color = Cream,
-                        maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
-                    )
+                    com.fitpal.app.ui.component.kit.MarqueeText(content.name, MaterialTheme.typography.titleMedium, Cream, Modifier.weight(1f))
                     Spacer(Modifier.width(8.dp))
                     Text("${content.calories.toInt()} kcal", style = MaterialTheme.typography.titleSmall, color = CalorieColor)
                 } else {
@@ -227,8 +222,16 @@ fun MealItemCard(
                             grams = content.grams, onGramsChanged = onTotalGramsChanged!!, modifier = Modifier.width(100.dp),
                             unit = if (content.ingredients.all { it.isDrink }) "ml" else "g"
                         )
+                        Spacer(Modifier.weight(1f))
+                    } else {
+                        // No Total (one ingredient would only repeat its weight): the row says what the
+                        // field is instead of leaving half of it empty (the 17 Nov review, #12).
+                        Text(
+                            if (content.isDrink) "Water from this drink" else "Water from this food",
+                            style = MaterialTheme.typography.labelLarge, color = CreamMuted,
+                            maxLines = 2, modifier = Modifier.weight(1f).padding(end = 8.dp)
+                        )
                     }
-                    Spacer(Modifier.weight(1f))
                     if (onWaterChanged != null) {
                         Text("💧", style = MaterialTheme.typography.labelLarge)
                         Spacer(Modifier.width(6.dp))

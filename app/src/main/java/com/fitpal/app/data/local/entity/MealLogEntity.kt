@@ -27,6 +27,11 @@ data class MealLogEntity(
      */
     val context: String? = null,
     /**
+     * How the user felt at this meal ("Tired", "Stressed", …), joined like [context] — the second row of
+     * tags on the meal's panel (the 17 Nov review, #4). Null = none, the norm.
+     */
+    val feelings: String? = null,
+    /**
      * A cached, meal-aware coaching tip as JSON (see [com.fitpal.app.domain.model.CoachingTip]) —
      * one short green note about *this* plate given the day so far. Null = no tip (the norm: only
      * generated when genuinely useful, for meals over ~200 kcal, online).

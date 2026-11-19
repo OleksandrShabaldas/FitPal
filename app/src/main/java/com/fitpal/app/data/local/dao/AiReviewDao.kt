@@ -25,6 +25,10 @@ interface AiReviewDao {
     @Query("SELECT * FROM ai_reviews ORDER BY generatedAt DESC LIMIT :limit")
     suspend fun recent(limit: Int): List<AiReviewEntity>
 
+    /** Every written week and month overview as "weekly|2026-11-03" — for the skipped list (2.18). */
+    @Query("SELECT period || '|' || periodKey FROM ai_reviews WHERE period IN ('weekly', 'monthly')")
+    suspend fun writtenWeekAndMonthIds(): List<String>
+
     /** Housekeeping: drop saved reviews older than the given cutoff (epoch millis). */
     @Query("DELETE FROM ai_reviews WHERE generatedAt < :cutoffMillis")
     suspend fun deleteOlderThan(cutoffMillis: Long)

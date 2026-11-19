@@ -35,13 +35,14 @@ object FoodPrompts {
         is an item INSIDE the dish it comes with. A ready-made sauce, dressing, condiment, cheese or
         bread is ONE item named as itself ("Tartar sauce"), never split into its recipe. Anything that is drunk — water, coffee, tea, juice, soda, energy drinks, milk, kefir, smoothies, shakes (protein shakes too), beer, wine, cocktails — is a DRINK: "isDrink":true, amount in ml. If the user states a total weight (e.g.
         "650g"), make the item weights sum to it.
-        Then add a "choices" array ONLY for a part of the dish the words genuinely don't tell you
-        (at most 2): "okroshka" doesn't say whether the base is kefir or kvass, "pierogi" don't say
-        the filling. Each choice: {"label":"<what's unknown in 1-2 words: Base, Filling, Meat>",
+        Then give EVERY dish with 2 or more items a "choices" array with AT LEAST ONE choice (at most
+        2): the part of THIS dish the words don't tell you that changes its nutrition most — which
+        meat, the cooking fat, fried or baked, the sauce, base or filling ("okroshka" doesn't say
+        kefir or kvass, "pierogi" don't say the filling). A single-item food or a drink gets none:
+        "choices":[]. Each choice: {"label":"<1-2 words: Meat, Fried in, Base, Filling, Sauce>",
         "item":"<the name of the item in your items you guessed>","options":[2-4 item objects: your
         guess first, then what people commonly use in THIS dish for that part instead]}. An option
-        REPLACES that one item: never an extra, never a "healthier" swap, never another dish. Most
-        dishes need none: "choices":[].
+        REPLACES that one item: never an extra, never a "healthier" swap, never another dish.
         For each item set "waterMlPer100" = real water content per 100 ml/g (water=100, cola≈89,
         juice≈85, milk≈88; fruit/veg 80-96, soup 88-92, cooked grains 65-70, bread 35, cheese 37,
         nuts 4, oil 0). Estimate honestly for EVERY item, foods included.
@@ -73,12 +74,14 @@ object FoodPrompts {
           dish it comes with. A ready-made product (sauce, dressing, condiment, cheese, bread) is ONE
           item named as itself ("Tartar sauce"), never split into its recipe.
         - Anything that is drunk — water, coffee, tea, juice, soda, energy drinks, milk, kefir, smoothies, shakes (protein shakes too), beer, wine, cocktails — is a DRINK: "isDrink":true, amount in ml.
-        - "choices": ONLY for a part of a dish the words genuinely don't tell (at most 3 per dish):
-          okroshka's base (kefir / kvass / water with sour cream), its meat (ham / boiled beef), a
-          pierogi filling. Each {"label":"<1-2 words: Base, Filling, Meat>","item":"<the item in
-          your items you guessed>","options":[2-4 item objects, your guess first]}. An option
+        - "choices": EVERY dish with 2 or more items gets AT LEAST ONE (up to 3, most important
+          first): the parts the words don't tell that change its nutrition most — which meat or fish,
+          the cooking fat, fried or baked, a sauce, base or filling, the cheese (okroshka's base:
+          kefir / kvass / water with sour cream; a pierogi filling). A single-item food or a drink
+          gets none: []. Each {"label":"<1-2 words: Meat, Fried in, Base, Filling, Sauce>","item":"<the
+          item in your items you guessed>","options":[2-4 item objects, your guess first]}. An option
           REPLACES that item: never an extra, never a healthier swap, never another dish; only what
-          is commonly used in exactly this dish. Most foods need none: [].
+          is commonly used in exactly this dish.
         Each item, per 100 g/ml: name, grams (this item's weight), kcalPer100g, proteinPer100g,
         fatPer100g, carbsPer100g, fiberPer100g, waterMlPer100 (water 100, cola 89, juice 85,
         milk 88, fruit/veg 80-96, cooked grains 65-70, bread 35, cheese 37, oil 0), then micros:
@@ -234,14 +237,16 @@ options, as item objects]}. Drop a group the correction settles; [] if nothing i
         - A ready-made product (a sauce, dressing, condiment, cheese, bread, a packaged food) is ONE item
           named as itself ("Tartar sauce", "Ketchup", "Pesto"), never split into its recipe (no
           mayonnaise + pickles + capers for tartar sauce).
-        - "choices": ONLY for a part of a dish you genuinely CAN'T tell from the photo (at most 3 per
-          dish): a hidden filling (pierogi, dumplings, pies), a soup's base (okroshka: kefir / kvass /
-          water with sour cream), which meat (ham / boiled beef), tomato or red pepper. Each
-          {"label":"<1-2 words: Filling, Base, Meat>","item":"<the item in this dish's items you
-          guessed>","options":[2-4 item objects, your guess first]}. An option REPLACES that item:
-          never an extra or a topping to add, never a healthier swap, never another dish, never
-          something the photo rules out (no brown rice when the rice is clearly white). Only what is
-          commonly used in exactly this dish. Most foods need none: [].
+        - "choices": EVERY dish with 2 or more items gets AT LEAST ONE (up to 3 per dish, most
+          important first): the parts you can't be sure of from the photo that change its nutrition
+          most — which meat or fish (a breaded cutlet: pork / chicken / veal), the cooking fat, fried
+          or baked, a hidden filling (pierogi, dumplings, pies), a soup's base (okroshka: kefir / kvass
+          / water with sour cream), a sauce, the cheese, tomato or red pepper. A single-item food or a
+          drink gets none: []. Each {"label":"<1-2 words: Meat, Fried in, Filling, Base, Sauce>",
+          "item":"<the item in this dish's items you guessed>","options":[2-4 item objects, your guess
+          first]}. An option REPLACES that item: never an extra or a topping to add, never a
+          healthier swap, never another dish, never something the photo rules out (no brown rice
+          when the rice is clearly white). Only what is commonly used in exactly this dish.
         - Mark drinks "isDrink":true (ml); solids false (g). Anything that is drunk — water, coffee, tea, juice, soda, energy drinks, milk, kefir, smoothies, shakes (protein shakes too), beer, wine, cocktails — is a DRINK: "isDrink":true, amount in ml. Every drink
           you can see (plain water, beer and wine too) is its OWN food — never part of a dish.
         - Use any fork/coin/bank card in shot for SCALE (a bank card is 8.6 cm wide) to judge real portions.
@@ -278,12 +283,13 @@ options, as item objects]}. Drop a group the correction settles; [] if nothing i
             (copy their names; every listed item in one dish). If it's all one dish, give one entry and put
             1-2 other likely names for it in "also" (e.g. a round base with dough, cheese, ham and
             mushrooms = Pizza, also ["Calzone"]).$noteLine
-            For EACH dish, ONLY if you genuinely can't tell a part of it from the photo (a hidden
-            filling, a soup's base, which meat, tomato or red pepper), add "choices" — at most 2:
-            {"label":"<Filling, Base or Meat>","item":"<the listed item you're unsure about>",
-            "options":[2-4 item objects: that item first, then what people commonly use in THIS dish
-            instead]}. An option REPLACES that item: never an extra, never another dish, never
-            something the photo rules out. Most dishes need none: "choices":[].
+            EVERY dish with 2 or more items gets "choices" with AT LEAST ONE choice (at most 2): the
+            part you can't be sure of from the photo that changes its nutrition most (which meat, the
+            cooking fat, a hidden filling, a soup's base, a sauce, tomato or red pepper):
+            {"label":"<Meat, Fried in, Filling, Base or Sauce>","item":"<the listed item you're unsure
+            about>","options":[2-4 item objects: that item first, then what people commonly use in THIS
+            dish instead]}. An option REPLACES that item: never an extra, never another dish, never
+            something the photo rules out. A dish of one item gets "choices":[].
             NEVER suggest alcohol, plain water, or anything not actually eaten.
             Give each option a realistic per-100 nutrition (light soups 25-60 kcal/100g, oils ~880).
             Reply with ONLY a JSON object in exactly this format and nothing else:
@@ -373,7 +379,7 @@ options, as item objects]}. Drop a group the correction settles; [] if nothing i
               late-evening eating, evening or weekend spikes and grazing often have a cause: real hunger from eating
               too little earlier, stress, boredom, tiredness, a social setting, habit. Be curious about the WHY, not
               only the food.
-            - When their answers, check-ins or habit notes name a trigger (stress, boredom, tiredness, social plans…),
+            - When what you know about them, or their answers, name a trigger (stress, boredom, tiredness, social plans…),
               engage with it directly and give ONE practical tool for that moment — a short pause to ask "am I hungry,
               bored, stressed or tired?", a planned evening snack inside their eating window instead of open-ended
               grazing, a non-food thing for the trigger moment (a walk, a call, a shower, a tea), trigger foods out of
@@ -530,7 +536,7 @@ options, as item objects]}. Drop a group the correction settles; [] if nothing i
             - Length: ${if (isDaily) "roughly 250–400 words" else "roughly 300–450 words"} of flowing
               prose — thorough enough to actually explain, never padded.
 
-            After the prose (and BEFORE the HABITS line if you were asked for one), output exactly these
+            After the prose (and BEFORE the MEMORY line if you were asked for one), output exactly these
             four lines — each on its own line. FOCUS and WATCH are each ONE sentence under ~30 words,
             grounded in a SPECIFIC number/food/pattern from THIS data, never generic, and never a repeat of
             earlier coaching unless you say why it still matters:
@@ -628,7 +634,7 @@ options, as item objects]}. Drop a group the correction settles; [] if nothing i
             changing, say so and stop.
             Length: ${if (isDaily) "roughly 250–400" else "roughly 300–450"} words of flowing prose, thorough but not padded.
 
-            After the prose (and BEFORE the HABITS line if you were asked for one), output exactly these
+            After the prose (and BEFORE the MEMORY line if you were asked for one), output exactly these
             four lines. FOCUS and WATCH are each ONE sentence under ~30 words, grounded in a SPECIFIC
             number/food/pattern from this data, never generic, and never a repeat of earlier coaching
             unless you say why it still matters:
@@ -736,27 +742,6 @@ options, as item objects]}. Drop a group the correction settles; [] if nothing i
         - Neutral tone, no moral words ("bad", "cheat", "guilty"). One sentence, under 25 words.
         - type: portion=too big for the budget (only when the CHECK says OVER), swap=replace a component,
           addition=round it out, timing=when to eat it, goal=how it serves their goal, balance=macro/plate balance.
-    """.trimIndent()
-
-    /**
-     * ONE check-in question the coach asks before a review, when a day/period looks unusual — with
-     * concrete, data-specific answer chips. Returns JSON so the screen can render tappable options.
-     */
-    fun contextQuestion(briefSummary: String, period: String): String = """
-        Here is a user's recent nutrition picture:
-        $briefSummary
-
-        Ask ONE short question that would help you explain an UNUSUAL pattern in this $period — the
-        kind of context the numbers can't show (a family dinner, a stressful stretch, a skipped meal,
-        travel, illness). Then offer concrete answer options tailored to THIS data.
-
-        Reply with ONLY this JSON:
-        {"question":"<the question, under 15 words>","options":["<opt1>","<opt2>","<opt3>","<opt4>"]}
-
-        Rules:
-        - The question must be specific to THIS data — never a generic wellness question.
-        - 3 to 5 options, each a concrete, plausible explanation. No "Other" or "I don't know".
-        - Keep each option under 5 words. Neutral, non-judgmental wording.
     """.trimIndent()
 
     // ---- The meal planner (docs/redesign/10). Online and on-device get their own prompts, as everywhere. ----

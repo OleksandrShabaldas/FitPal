@@ -68,7 +68,8 @@ object DatabaseModule {
                 FitPalDatabase.MIGRATION_31_32,
                 FitPalDatabase.MIGRATION_32_33,
                 FitPalDatabase.MIGRATION_33_34,
-                FitPalDatabase.MIGRATION_34_35
+                FitPalDatabase.MIGRATION_34_35,
+                FitPalDatabase.MIGRATION_35_36
             )
             .build()
         // TODO: When USDA database is ready, use .createFromAsset("usda_foods.db")
@@ -113,4 +114,7 @@ object DatabaseModule {
 
     @Provides
     fun provideWeightDao(db: FitPalDatabase): WeightDao = db.weightDao()
+
+    @Provides
+    fun provideCoachMemoryDao(db: FitPalDatabase): com.fitpal.app.data.local.dao.CoachMemoryDao = db.coachMemoryDao()
 }

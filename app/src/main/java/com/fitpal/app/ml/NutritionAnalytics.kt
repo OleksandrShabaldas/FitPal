@@ -181,8 +181,7 @@ data class NutritionBrief(
 
 /**
  * Computes a [NutritionBrief] from existing logged data — pure Kotlin math over the repositories,
- * no new persistence. Shared by [ReviewGenerator] (to enrich the review prompt) and
- * [ContextQuestionGenerator] (to decide whether to ask a check-in question).
+ * no new persistence. Used by [ReviewGenerator] to enrich the review prompt.
  */
 @Singleton
 class NutritionAnalytics @Inject constructor(

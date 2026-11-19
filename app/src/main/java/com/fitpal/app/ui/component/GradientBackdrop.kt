@@ -1,5 +1,8 @@
 package com.fitpal.app.ui.component
 
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -199,7 +202,10 @@ fun GradientBackdrop(
                 LookStyle.MATERIAL -> drawRect(colors.inkBlack)
             }
         }
-        if (topBarScroll != null) CompositionLocalProvider(LocalTopBarScroll provides topBarScroll) { content() } else content()
+        // The world reaches under the status and gesture bars; the content stays clear of them (#11, 17 Nov).
+        Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.systemBars)) {
+            if (topBarScroll != null) CompositionLocalProvider(LocalTopBarScroll provides topBarScroll) { content() } else content()
+        }
     }
 }
 

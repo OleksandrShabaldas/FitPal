@@ -141,3 +141,40 @@ fun DetectedFood.withChoice(group: Int, option: Int): DetectedFood? {
     val picked = choices.toMutableList().apply { this[group] = g.copy(selected = option) }
     return copy(ingredients = swapped, choices = picked)
 }
+
+/**
+ * This dish with [totalMl] of water in it, spread over its ingredients — the 💧 field on every dish card
+ * (photo, describe and logged meals). Null when it can't change (negative, or a dish with no weight).
+ */
+fun DetectedFood.withWaterTotal(totalMl: Float): DetectedFood? =
+    ingredients.withWaterTotal(totalMl)?.let { copy(ingredients = it) }
+
+/**
+ * These ingredients holding [totalMl] of water in all: scaled in proportion when they already hold some,
+ * otherwise spread evenly per 100 g. Null when it can't change (negative, or no weight at all).
+ */
+fun List<Ingredient>.withWaterTotal(totalMl: Float): List<Ingredient>? {
+    if (totalMl < 0f) return null
+    val totalGrams = sumOf { it.grams.toDouble() }.toFloat()
+    if (totalGrams <= 0f) return null
+    val currentWater = sumOf { it.waterMl.toDouble() }.toFloat()
+    return if (currentWater > 0f) {
+        val factor = totalMl / currentWater
+        map { it.copy(waterMlPer100g = it.waterMlPer100g * factor) }
+    } else {
+        val per100 = totalMl / totalGrams * 100f
+        map { it.copy(waterMlPer100g = per100) }
+    }
+}
+
+/**
+ * This dish as [servings] of it (the Amount stepper): every ingredient's weight scaled by the change, so the
+ * grams stay the single source of truth. Null when nothing changes.
+ */
+fun DetectedFood.withServings(servings: Int): DetectedFood? {
+    val n = servings.coerceIn(1, 50)
+    val current = this.servings.coerceAtLeast(1)
+    if (n == current) return null
+    val factor = n.toFloat() / current
+    return copy(servings = n, ingredients = ingredients.map { it.withGrams(it.grams * factor) })
+}

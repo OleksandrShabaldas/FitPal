@@ -65,6 +65,10 @@ class SettingsViewModel @Inject constructor(
     // ---- Your drinks (the caffeine planner's list) ----
     val caffeineDrinks: StateFlow<List<com.fitpal.app.domain.CaffeinePreset>> = settingsRepository.caffeineDrinks
 
+    /** The two rows of meal tags (Settings → Logging & meal times → Situation tags, 2.18). */
+    val tagSettings: StateFlow<com.fitpal.app.domain.model.TagSettings> = settingsRepository.tagSettings
+    fun setTagSettings(value: com.fitpal.app.domain.model.TagSettings) = settingsRepository.setTagSettings(value)
+
     /** Adds a drink, or replaces the one with the same name. */
     fun addCaffeineDrink(drink: com.fitpal.app.domain.CaffeinePreset) =
         settingsRepository.setCaffeineDrinks(caffeineDrinks.value.filterNot { it.label.equals(drink.label, ignoreCase = true) } + drink)

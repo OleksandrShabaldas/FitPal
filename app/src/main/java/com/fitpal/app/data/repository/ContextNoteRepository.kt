@@ -42,6 +42,10 @@ class ContextNoteRepository @Inject constructor(
         )
     }
 
+    /** Answers given after [sinceMillis] within the last [days] days, newest first (the coach memory's pending ones). */
+    suspend fun answersSince(sinceMillis: Long, days: Long = 60, limit: Int = 40): List<ContextNoteEntity> =
+        contextNoteDao.getAnswersSince(sinceMillis, java.time.LocalDate.now().minusDays(days).toString(), limit)
+
     /** The answer to an overview's end-of-overview question, if the user gave one. */
     suspend fun getFollowUp(period: String, periodKey: String): ContextNoteEntity? =
         contextNoteDao.getFollowUp(period, periodKey)

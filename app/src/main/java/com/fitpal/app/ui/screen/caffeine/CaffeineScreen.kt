@@ -276,6 +276,7 @@ fun CaffeineScreen(
 
 /**
  * The body curve from the morning to the next morning: the band where caffeine is easy on sleep,
+ * the "peak focus" columns where it's doing its job ([Caffeine.peakWindows], the 17 Nov review, #1),
  * the bedtime line, each drink as a dot where it was had (tap one for its name), "now", and a gold
  * dashed line for a drink being planned.
  */
@@ -307,6 +308,11 @@ private fun CaffeineCurve(
     val bedStyle = MaterialTheme.typography.labelSmall.copy(color = FastingColor)
     val nowStyle = MaterialTheme.typography.labelSmall.copy(color = Cream, fontWeight = FontWeight.Bold)
     val visibleDoses = view.doses.filter { it.atMillis in start..end }
+    // Peak focus: from the curve that's drawn on top — the one with the planned drink while planning.
+    val windows = remember(all, start, end, hl) { Caffeine.peakWindows(all, start, end, hl) }
+    val peakStyle = MaterialTheme.typography.labelSmall.copy(color = CaffeineColor, fontWeight = FontWeight.SemiBold)
+    val spanStyle = MaterialTheme.typography.labelSmall.copy(color = Cream)
+    val h24 = com.fitpal.app.domain.ClockFormat.use24h
     val dotAt: (CaffeineDose) -> Long = { it.atMillis + 36 * 60_000L } // where absorption makes it visible
     val color = CaffeineColor
     val fillTop = CaffeineColor.copy(alpha = 0.30f)
@@ -322,7 +328,8 @@ private fun CaffeineCurve(
         }
     ) {
         val left = 24.dp.toPx()
-        val topPad = 14.dp.toPx()
+        // Room above the plot for the windows' two-line labels, only when there are any.
+        val topPad = (if (windows.isEmpty()) 14.dp else 32.dp).toPx()
         val labelH = 16.dp.toPx()
         val w = size.width - left
         val h = size.height - topPad - labelH
@@ -344,12 +351,45 @@ private fun CaffeineCurve(
             drawText(l, topLeft = Offset(left - l.size.width - 4.dp.toPx(), yy - l.size.height / 2f))
         }
 
-        // Bedtime.
+        // Peak focus: a soft column behind the curve for each window, labelled above the plot.
+        val taken = mutableListOf<androidx.compose.ui.geometry.Rect>()
+        var bedLabel: androidx.compose.ui.text.TextLayoutResult? = null
+        var bedLeft = 0f
         if (bedMillis in start..end) {
+            bedLabel = measurer.measure("bed ${clock(bedMillis)}", bedStyle)
+            bedLeft = (x(bedMillis) + 3.dp.toPx()).coerceAtMost(size.width - bedLabel.size.width)
+            taken += androidx.compose.ui.geometry.Rect(bedLeft, 0f, bedLeft + bedLabel.size.width, bedLabel.size.height.toFloat())
+        }
+        windows.forEach { w ->
+            val x0 = x(w.startMillis.coerceAtLeast(start))
+            val x1 = x(w.endMillis.coerceAtMost(end))
+            if (x1 - x0 < 1f) return@forEach
+            drawRoundRect(
+                brush = Brush.verticalGradient(
+                    listOf(CaffeineColor.copy(alpha = 0.26f), CaffeineColor.copy(alpha = 0.04f)),
+                    startY = topPad, endY = y(0f)
+                ),
+                topLeft = Offset(x0, topPad), size = androidx.compose.ui.geometry.Size(x1 - x0, y(0f) - topPad),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(4.dp.toPx())
+            )
+            // "peak focus" over "8:50–11:50", centred on the column; dropped where it would hit another label.
+            val l1 = measurer.measure("peak focus", peakStyle)
+            val l2 = measurer.measure(windowSpan(w.startMillis, w.endMillis, h24), spanStyle)
+            val wide = maxOf(l1.size.width, l2.size.width).toFloat()
+            val lx = ((x0 + x1) / 2f - wide / 2f).coerceIn(left, size.width - wide)
+            val box = androidx.compose.ui.geometry.Rect(lx, 0f, lx + wide, (l1.size.height + l2.size.height).toFloat())
+            if (taken.none { it.overlaps(box) }) {
+                drawText(l1, topLeft = Offset(lx + (wide - l1.size.width) / 2f, 0f))
+                drawText(l2, topLeft = Offset(lx + (wide - l2.size.width) / 2f, l1.size.height.toFloat()))
+                taken += box
+            }
+        }
+
+        // Bedtime.
+        if (bedLabel != null) {
             val bx = x(bedMillis)
             drawLine(FastingColor.copy(alpha = 0.8f), Offset(bx, topPad), Offset(bx, y(0f)), 1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(3f, 5f)))
-            val b = measurer.measure("bed ${clock(bedMillis)}", bedStyle)
-            drawText(b, topLeft = Offset((bx + 3.dp.toPx()).coerceAtMost(size.width - b.size.width), 0f))
+            drawText(bedLabel, topLeft = Offset(bedLeft, 0f))
         }
 
         // The curve: what's happened solid, the projection dashed.
@@ -392,7 +432,10 @@ private fun CaffeineCurve(
         // Time labels at their true positions: 6 AM, noon, 6 PM, midnight, 6 AM.
         val labelY = size.height - labelH + 2.dp.toPx()
         var lastRight = -1f
-        listOf(6L to "6 AM", 12L to "noon", 18L to "6 PM", 24L to "midnight", 30L to "6 AM").forEach { (hours, text) ->
+        // Hour labels follow the 24-hour clock setting (they were always "6 AM / noon / …").
+        val hourLabels = if (h24) listOf(6L to "06:00", 12L to "12:00", 18L to "18:00", 24L to "00:00", 30L to "06:00")
+            else listOf(6L to "6 AM", 12L to "noon", 18L to "6 PM", 24L to "midnight", 30L to "6 AM")
+        hourLabels.forEach { (hours, text) ->
             val t = dayStart + hours * HOUR
             if (t < start || t > end) return@forEach
             val l = measurer.measure(text, axis)
@@ -590,6 +633,17 @@ private val GENERIC_DRINK_WORDS = setOf(
     "espresso", "double", "latte", "cappuccino", "coffee", "cold", "black", "green", "white", "matcha",
     "cola", "caffeine", "tea", "iced", "flat", "americano", "mocha", "energy", "instant", "filter"
 )
+
+/** "08:50–11:50", or "8:50–11:50 AM" (one AM/PM when both ends share it) on the 12-hour clock. */
+private fun windowSpan(fromMillis: Long, toMillis: Long, h24: Boolean): String {
+    fun minute(ms: Long) = Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()).toLocalTime().let { it.hour * 60 + it.minute }
+    val a = minute(fromMillis)
+    val b = minute(toMillis)
+    if (h24) return "${com.fitpal.app.domain.ClockFormat.minuteOfDay(a, true)}–${com.fitpal.app.domain.ClockFormat.minuteOfDay(b, true)}"
+    val sa = com.fitpal.app.domain.ClockFormat.minuteOfDay(a, false)
+    val sb = com.fitpal.app.domain.ClockFormat.minuteOfDay(b, false)
+    return if (sa.takeLast(2) == sb.takeLast(2)) "${sa.dropLast(3)}–$sb" else "$sa–$sb"
+}
 
 private fun clock(epochMillis: Long): String {
     val t = Instant.ofEpochMilli(epochMillis).atZone(ZoneId.systemDefault()).toLocalTime()

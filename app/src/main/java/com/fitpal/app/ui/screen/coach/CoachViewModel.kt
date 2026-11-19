@@ -1,5 +1,7 @@
 package com.fitpal.app.ui.screen.coach
 
+import com.fitpal.app.domain.OverviewRule
+import com.fitpal.app.domain.SkippedReviews
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fitpal.app.data.local.entity.PlannedMealEntity
@@ -44,7 +46,11 @@ data class CoachUiState(
     val todayQuestion: CoachQuestion? = null,
     val todayReady: Boolean = false,
     val reviewRows: List<ReviewRow> = emptyList(),
-    val earlier: List<PastReview> = emptyList()
+    val earlier: List<PastReview> = emptyList(),
+    /** Finished weeks and months with food but no overview, newest first (the 17 Nov review, #3). */
+    val skipped: List<SkippedReviews.Skipped> = emptyList(),
+    /** How many lines the coach memory holds (#2). */
+    val memoryCount: Int = 0
 )
 
 /**
@@ -63,7 +69,8 @@ class CoachViewModel @Inject constructor(
     private val weights: WeightRepository,
     private val steps: StepRepository,
     private val exercise: ExerciseRepository,
-    private val pipeline: FoodAnalysisPipeline
+    private val pipeline: FoodAnalysisPipeline,
+    private val coachMemory: com.fitpal.app.data.repository.CoachMemoryRepository
 ) : ViewModel() {
 
     private val _ui = MutableStateFlow(CoachUiState())
@@ -106,10 +113,33 @@ class CoachViewModel @Inject constructor(
                     todayQuestion = question,
                     todayReady = readyFor("daily", todayKey, daily?.generatedAt),
                     reviewRows = rows,
-                    earlier = runCatching { reviews.recent(30) }.getOrDefault(emptyList())
+                    earlier = runCatching { reviews.recent(30) }.getOrDefault(emptyList()),
+                    skipped = runCatching { skippedPeriods(today) }.getOrDefault(emptyList()),
+                    memoryCount = runCatching { coachMemory.current().size }.getOrDefault(0)
                 )
             }
         }
+    }
+
+    /** Weeks and months that ended with food logged but no overview, minus the ones removed with ×. */
+    private suspend fun skippedPeriods(today: LocalDate): List<SkippedReviews.Skipped> {
+        val since = today.minusMonths(SkippedReviews.LOOKBACK_MONTHS).minusDays(7)
+        val logged = meals.getLoggedFoodsInRange(since.toString(), today.minusDays(1).toString())
+            .filter { OverviewRule.counts(it.mealType, it.name) }
+            .mapNotNull { runCatching { LocalDate.parse(it.date) }.getOrNull() }
+            .toSet()
+        return SkippedReviews.find(today, logged, reviews.writtenWeekAndMonthIds(), settings.dismissedReviews.value)
+    }
+
+    /** × on a skipped week or month: it goes from the list for good (Undo brings it back). */
+    fun dismissSkipped(item: SkippedReviews.Skipped) {
+        settings.setDismissedReviews(settings.dismissedReviews.value + item.id)
+        _ui.update { s -> s.copy(skipped = s.skipped.filterNot { it.id == item.id }) }
+    }
+
+    fun undoDismissSkipped(item: SkippedReviews.Skipped) {
+        settings.setDismissedReviews(settings.dismissedReviews.value - item.id)
+        refresh()
     }
 
     /** Opening a review clears its "ready" dot. */

@@ -74,8 +74,23 @@ class FitPalActivity : ComponentActivity() {
                         settingsRepository.recordFastingGrace(date, min)
                     }
                 }
+                // The user's meal tags for every meal panel, and adding one from "+ New" (2.18, #4).
+                val tagSettings by settingsRepository.tagSettings.collectAsStateWithLifecycle()
+                val mealTags = remember(tagSettings) {
+                    com.fitpal.app.ui.component.MealTagLists(tagSettings) { name, feeling ->
+                        val now = settingsRepository.tagSettings.value
+                        if (now.canAdd(name)) {
+                            val item = com.fitpal.app.domain.model.TagItem(name.trim())
+                            settingsRepository.setTagSettings(
+                                if (feeling) now.copy(feelings = (now.feelings + item).take(com.fitpal.app.domain.model.TagSettings.MAX_PER_ROW))
+                                else now.copy(situation = (now.situation + item).take(com.fitpal.app.domain.model.TagSettings.MAX_PER_ROW))
+                            )
+                        }
+                    }
+                }
                 CompositionLocalProvider(
                     LocalAiModelSlots provides listOf(model1, model2, model3),
+                    com.fitpal.app.ui.component.LocalMealTags provides mealTags,
                     LocalFastingSchedule provides fastingSchedule,
                     LocalFastingBackdate provides fastingBackdate
                 ) {

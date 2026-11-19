@@ -47,6 +47,9 @@ class AiReviewRepository @Inject constructor(
     suspend fun recent(limit: Int): List<PastReview> =
         aiReviewDao.recent(limit).map { PastReview(it.period, it.periodKey, it.review, it.generatedAt) }
 
+    /** Every written week and month overview, as `SkippedReviews.Skipped.id`s ("weekly|2026-11-03"). */
+    suspend fun writtenWeekAndMonthIds(): Set<String> = aiReviewDao.writtenWeekAndMonthIds().toSet()
+
     suspend fun delete(period: String, periodKey: String) {
         aiReviewDao.delete(period, periodKey)
     }

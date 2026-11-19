@@ -32,6 +32,18 @@ interface ContextNoteDao {
     """)
     suspend fun getRecentAnswers(sinceDate: String, limit: Int): List<ContextNoteEntity>
 
+    /**
+     * Every answer the user gave (to a check-in or the coach's question, not "skipped") after [sinceMillis]
+     * and on/after [minDate], newest first — what the coach memory hasn't taken in yet (2.18).
+     */
+    @Query("""
+        SELECT * FROM context_notes
+        WHERE timestamp > :sinceMillis AND date >= :minDate AND answer != 'skipped'
+        ORDER BY timestamp DESC
+        LIMIT :limit
+    """)
+    suspend fun getAnswersSince(sinceMillis: Long, minDate: String, limit: Int): List<ContextNoteEntity>
+
     /** Housekeeping: drop notes older than the given cutoff (epoch millis). */
     @Query("DELETE FROM context_notes WHERE timestamp < :cutoffMillis")
     suspend fun deleteOlderThan(cutoffMillis: Long)
